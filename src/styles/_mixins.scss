@@ -1,0 +1,20 @@
+@mixin focus-ring {
+  outline: none;
+
+  &:focus-visible {
+    box-shadow: 0 0 0 4px rgba(102, 97, 245, 0.16);
+  }
+}
+
+@mixin card-surface {
+  background: #ffffff;
+  border: 1px solid #e7eaf4;
+  border-radius: 18px;
+  box-shadow: 0 10px 32px rgba(34, 43, 88, 0.045);
+}
+
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

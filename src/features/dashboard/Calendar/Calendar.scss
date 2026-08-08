@@ -1,0 +1,173 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.dashboard-calendar {
+  min-height: 430px;
+
+  &__header-actions { display: flex; align-items: center; gap: 7px; }
+  &__today,
+  &__add {
+    @include focus-ring;
+    min-height: 34px;
+    border-radius: 10px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  &__today { padding: 0 12px; border: 1px solid #e4e7f0; color: $color-text-secondary; background: #fff; }
+  &__add { padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 0; color: #fff; background: $gradient-primary; box-shadow: 0 9px 22px rgba(102, 97, 245, .18); }
+  &__add svg { width: 14px; height: 14px; }
+
+  &__summary {
+    margin-bottom: 14px;
+    min-height: 54px;
+    padding: 9px 10px;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+    border: 1px solid #edf0f6;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fbfbff, #f8f9fd);
+  }
+  &__summary > div:not(&__filters) { display: flex; align-items: center; gap: 8px; }
+  &__summary strong { color: $color-text; font-family: $font-family-display; font-size: 17px; line-height: 1; letter-spacing: -.04em; }
+  &__summary small { max-width: 82px; color: $color-text-muted; font-size: 8px; line-height: 1.25; }
+  &__summary-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; color: $color-primary; background: rgba(102, 97, 245, .09); }
+  &__summary-icon svg { width: 17px; height: 17px; }
+
+  &__filters { min-width: 0; display: flex; justify-content: flex-end; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+  &__filters::-webkit-scrollbar { display: none; }
+  &__filters button { min-height: 28px; padding: 0 8px; flex: 0 0 auto; border: 1px solid transparent; border-radius: 8px; color: $color-text-muted; background: transparent; cursor: pointer; font: inherit; font-size: 8px; font-weight: 650; transition: color $transition-fast, background $transition-fast, border-color $transition-fast, transform $transition-fast; }
+  &__filters button:hover { color: $color-text; background: #fff; }
+  &__filters button.is-active { color: $color-primary; border-color: rgba(102, 97, 245, .14); background: #fff; box-shadow: 0 5px 14px rgba(39, 45, 86, .05); }
+  &__filters button:active { transform: scale(.97); }
+
+  &__layout { display: grid; grid-template-columns: minmax(300px, 1.42fr) minmax(220px, .8fr); gap: 14px; }
+  &__month,
+  &__agenda { min-width: 0; border: 1px solid #edf0f6; border-radius: 16px; background: #fff; }
+  &__month { padding: 14px; }
+  &__agenda { padding: 14px; display: flex; flex-direction: column; min-height: 328px; background: linear-gradient(145deg, #fff, #fbfbfe); }
+
+  &__month-head { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  &__month-head > div:first-child { display: grid; gap: 2px; }
+  &__month-head span { color: $color-text-muted; font-size: 8px; font-weight: 720; letter-spacing: .08em; }
+  &__month-head strong { color: $color-text; font-family: $font-family-display; font-size: 16px; font-weight: 790; letter-spacing: -.035em; }
+  &__controls { display: flex; gap: 5px; }
+  &__controls button { @include focus-ring; width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid #e6e9f2; border-radius: 9px; color: $color-text-secondary; background: #fff; cursor: pointer; transition: color $transition-fast, border-color $transition-fast, transform $transition-fast; }
+  &__controls button:hover { color: $color-primary; border-color: rgba(102, 97, 245, .22); transform: translateY(-1px); }
+  &__controls svg { width: 14px; height: 14px; }
+
+  &__weekdays,
+  &__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  &__weekdays { margin-bottom: 4px; }
+  &__weekdays span { padding: 4px 0; color: $color-text-muted; font-size: 8px; font-weight: 700; text-align: center; }
+  &__day { @include focus-ring; position: relative; aspect-ratio: 1 / .82; min-height: 35px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 9px; color: $color-text-secondary; background: transparent; cursor: pointer; font: inherit; font-size: 10px; transition: color $transition-fast, background $transition-fast, border-color $transition-fast, transform $transition-fast, box-shadow $transition-fast; }
+  &__day:hover { color: $color-text; border-color: #e8eaf3; background: #fafbfe; transform: translateY(-1px); }
+  &__day.is-outside { color: #c9cede; }
+  &__day.is-today:not(.is-selected) { color: $color-primary; border-color: rgba(102, 97, 245, .18); background: rgba(102, 97, 245, .04); font-weight: 760; }
+  &__day.is-selected { color: #fff; border-color: transparent; background: $gradient-primary; box-shadow: 0 7px 16px rgba(102, 97, 245, .22); font-weight: 780; }
+  &__event-dots { position: absolute; left: 50%; bottom: 4px; display: flex; gap: 2px; transform: translateX(-50%); }
+  &__event-dots b { width: 3px; height: 3px; border-radius: 50%; background: #8d65fb; }
+  &__event-dots b.is-cyan { background: #28b9d1; } &__event-dots b.is-green { background: #20bc83; } &__event-dots b.is-orange { background: #f2a422; } &__event-dots b.is-red { background: #ef5b74; }
+  &__day.is-selected &__event-dots b { background: rgba(255,255,255,.9); }
+
+  &__selected-date { padding-bottom: 12px; display: grid; grid-template-columns: auto 1fr; column-gap: 9px; border-bottom: 1px solid #edf0f6; }
+  &__selected-date > span { grid-row: 1 / span 2; align-self: center; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: #fff; background: $gradient-primary; font-size: 9px; font-weight: 800; box-shadow: 0 8px 18px rgba(102, 97, 245, .18); }
+  &__selected-date strong { color: $color-text; font-family: $font-family-display; font-size: 20px; font-weight: 820; line-height: 1; letter-spacing: -.05em; }
+  &__selected-date small { color: $color-text-muted; font-size: 9px; font-weight: 650; }
+
+  &__day-events { margin-top: 12px; display: grid; gap: 7px; }
+  &__day-events > header { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  &__day-events > header > div { display: grid; gap: 1px; }
+  &__day-events > header strong { color: $color-text; font-size: 10px; }
+  &__day-events > header span { color: $color-text-muted; font-size: 7.5px; }
+  &__day-events > header b { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 8px; color: $color-primary; background: #f0efff; font-size: 8px; }
+
+  &__event { padding: 9px; display: grid; grid-template-columns: 5px minmax(0, 1fr) 25px; gap: 8px; align-items: center; border: 1px solid #eef0f6; border-radius: 11px; background: #fff; transition: transform $transition-fast, border-color $transition-fast, box-shadow $transition-fast; }
+  &__event:hover { transform: translateX(2px); border-color: rgba(102,97,245,.12); box-shadow: 0 7px 16px rgba(36,43,76,.04); }
+  &__event > i { width: 5px; height: 100%; min-height: 38px; border-radius: 999px; background: $color-primary; }
+  &__event > i.is-cyan { background: $color-cyan; } &__event > i.is-green { background: $color-success; } &__event > i.is-orange { background: $color-warning; } &__event > i.is-red { background: $color-danger; }
+  &__event > div { min-width: 0; display: grid; gap: 2px; }
+  &__event small { color: $color-text-muted; font-size: 6.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  &__event strong { overflow: hidden; color: $color-text; font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+  &__event span { overflow: hidden; color: $color-text-muted; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+  &__event > button { width: 25px; height: 25px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #a5acbe; background: #f7f8fb; cursor: pointer; opacity: 0; transition: opacity $transition-fast, color $transition-fast, background $transition-fast; }
+  &__event:hover > button, &__event > button:focus-visible { opacity: 1; }
+  &__event > button:hover { color: $color-danger; background: rgba(243,79,112,.07); }
+  &__event > button svg { width: 13px; height: 13px; }
+
+  &__empty { width: 100%; min-height: 72px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #dfe3ef; border-radius: 12px; color: $color-text-muted; background: linear-gradient(145deg,#fff,#fbfbfe); cursor: pointer; text-align: left; }
+  &__empty svg { width: 16px; height: 16px; color: $color-primary; }
+  &__empty span { display: grid; gap: 2px; }
+  &__empty strong { color: $color-text-secondary; font-size: 9px; }
+  &__empty small { color: $color-primary; font-size: 7.5px; }
+
+  &__upcoming { margin-top: auto; padding-top: 13px; display: grid; gap: 5px; border-top: 1px solid #edf0f6; }
+  &__upcoming > header { margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  &__upcoming > header span { color: $color-text-muted; font-size: 7px; font-weight: 760; text-transform: uppercase; letter-spacing: .08em; }
+  &__upcoming > header small { color: #b0b6c7; font-size: 6.5px; }
+  &__upcoming > button { padding: 5px 4px; display: grid; grid-template-columns: 6px minmax(0,1fr); gap: 7px; align-items: center; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; transition: background $transition-fast, transform $transition-fast; }
+  &__upcoming > button:hover { background: #f8f9fc; transform: translateX(2px); }
+  &__upcoming > button > i { width: 6px; height: 6px; border-radius: 50%; background: $color-primary; }
+  &__upcoming > button > i.is-cyan { background: $color-cyan; } &__upcoming > button > i.is-green { background: $color-success; } &__upcoming > button > i.is-orange { background: $color-warning; } &__upcoming > button > i.is-red { background: $color-danger; }
+  &__upcoming > button > span { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  &__upcoming strong { overflow: hidden; color: $color-text-secondary; font-size: 7.5px; text-overflow: ellipsis; white-space: nowrap; }
+  &__upcoming small { color: $color-text-muted; font-size: 6.5px; white-space: nowrap; }
+
+  &__inline-error { margin-top: 9px; padding: 8px 10px; border-radius: 9px; color: #c94a64; background: #fff1f3; font-size: 8px; }
+}
+
+.calendar-composer {
+  position: fixed; inset: 0; z-index: 1800; display: grid; place-items: center; padding: 22px;
+  &__backdrop { position: absolute; inset: 0; border: 0; background: rgba(24, 29, 55, .48); cursor: default; animation: calendar-backdrop-in 220ms ease-out both; }
+  &__dialog { position: relative; width: min(540px, 100%); max-height: min(720px, calc(100dvh - 32px)); overflow: auto; padding: 22px; display: grid; gap: 15px; border: 1px solid rgba(255,255,255,.92); border-radius: 22px; background: #fff; box-shadow: 0 35px 90px rgba(25,31,67,.24); animation: calendar-dialog-in 320ms cubic-bezier(.16,1,.3,1) both; }
+  header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+  header > div { display: grid; gap: 4px; }
+  header span { color: $color-primary; font-size: 8px; font-weight: 800; letter-spacing: .1em; }
+  header h2 { margin: 0; color: $color-text; font-family: $font-family-display; font-size: 21px; letter-spacing: -.04em; }
+  header p { max-width: 390px; margin: 0; color: $color-text-muted; font-size: 10px; line-height: 1.5; }
+  &__close { width: 34px; height: 34px; flex: 0 0 auto; border: 0; border-radius: 10px; color: $color-text-muted; background: #f5f6fa; cursor: pointer; font-size: 20px; }
+  &__field { display: grid; gap: 7px; }
+  &__field > span { color: $color-text-secondary; font-size: 9px; font-weight: 700; }
+  &__field > span small { color: $color-text-muted; font-weight: 500; }
+  input, textarea { width: 100%; border: 1px solid #e2e5ef; border-radius: 11px; outline: none; color: $color-text; background: #fafbfe; font: inherit; font-size: 10px; transition: border-color $transition-fast, box-shadow $transition-fast, background $transition-fast; }
+  input { height: 43px; padding: 0 12px; }
+  textarea { padding: 11px 12px; resize: vertical; line-height: 1.45; }
+  input:focus, textarea:focus { border-color: rgba(102,97,245,.4); box-shadow: 0 0 0 4px rgba(102,97,245,.08); background: #fff; }
+  &__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  &__types { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  &__types button { min-height: 38px; padding: 0 10px; display: flex; align-items: center; gap: 7px; border: 1px solid #e7e9f1; border-radius: 10px; color: $color-text-secondary; background: #fff; cursor: pointer; font: inherit; font-size: 8.5px; font-weight: 650; text-align: left; transition: transform $transition-fast, border-color $transition-fast, background $transition-fast, color $transition-fast; }
+  &__types button i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: $color-primary; }
+  &__types button.is-cyan i { background: $color-cyan; } &__types button.is-green i { background: $color-success; } &__types button.is-orange i { background: $color-warning; } &__types button.is-red i { background: $color-danger; }
+  &__types button:hover { transform: translateY(-1px); border-color: rgba(102,97,245,.18); }
+  &__types button.is-active { color: $color-primary; border-color: rgba(102,97,245,.22); background: rgba(102,97,245,.055); }
+  footer { display: grid; grid-template-columns: .7fr 1.3fr; gap: 8px; margin-top: 2px; }
+  footer button { min-height: 43px; border-radius: 11px; cursor: pointer; font: inherit; font-size: 9px; font-weight: 740; }
+  footer button:first-child { border: 1px solid #e1e4ee; color: $color-text-secondary; background: #fff; }
+  footer button.is-primary { border: 0; color: #fff; background: $gradient-primary; box-shadow: 0 10px 24px rgba(102,97,245,.18); }
+  footer button:disabled { opacity: .45; cursor: not-allowed; }
+}
+
+@keyframes calendar-dialog-in { from { opacity:0; transform: translate3d(0,14px,0) scale(.98); } to { opacity:1; transform:none; } }
+@keyframes calendar-backdrop-in { from { opacity:0; } to { opacity:1; } }
+
+@media (max-width: 840px) {
+  .dashboard-calendar__summary { grid-template-columns: 1fr 1fr; }
+  .dashboard-calendar__filters { grid-column: 1 / -1; justify-content: flex-start; }
+  .dashboard-calendar__layout { grid-template-columns: 1fr; }
+  .dashboard-calendar__agenda { min-height: 280px; }
+}
+@media (max-width: 520px) {
+  .dashboard-calendar__add span { display: none; }
+  .dashboard-calendar__add { width: 34px; padding: 0; justify-content: center; }
+  .dashboard-calendar__summary { gap: 10px; }
+  .dashboard-calendar__day { min-height: 32px; font-size: 9px; }
+  .calendar-composer { padding: 10px; }
+  .calendar-composer__dialog { padding: 17px; border-radius: 18px; }
+  .calendar-composer__grid, .calendar-composer__types { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-calendar *, .calendar-composer * { animation-duration: .01ms; transition-duration: .01ms; }
+}

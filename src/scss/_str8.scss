@@ -1,0 +1,140 @@
+.str8 {
+  width: 100%;
+  padding: 72px 0 70px;
+  background: #ffffff;
+}
+
+.str8__container {
+  width: min(1240px, calc(100% - 96px));
+  margin: 0 auto;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .str8__container {
+    width: calc(100% - 28px);
+  }
+}
+
+.str8__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 9px 22px;
+  border-radius: 999px;
+
+  font-size: 13px;
+  font-weight: 800;
+
+  color: rgba(88, 120, 255, 0.95);
+  background: rgba(210, 226, 255, 0.55);
+  border: 1px solid rgba(88, 120, 255, 0.10);
+}
+
+.str8__title {
+  margin-top: 22px;
+
+  font-size: 64px;
+  font-weight: 900;
+  line-height: 1.05;
+
+  background: linear-gradient(90deg, #2d7cff 0%, #7a00d9 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.str8__subtitle {
+  margin-top: 18px;
+
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(17, 24, 39, 0.55);
+}
+
+.str8__grid {
+  margin-top: 52px;
+
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px;
+
+  justify-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .str8__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.str8__card {
+  height: 108px;
+  border-radius: 18px;
+
+  background: #fff;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+}
+
+.str8__icon {
+  width: 46px;
+  height: 46px;
+
+  border-radius: 14px;
+  background: linear-gradient(180deg, #7a00d9 0%, #ff2f8e 100%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 16px 28px rgba(168, 85, 247, 0.18);
+}
+
+.str8__icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+  filter: brightness(0) invert(1); 
+}
+
+.str8__label {
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(17, 24, 39, 0.95);
+}
+
+.str8__note {
+  margin-top: 52px;
+  text-align: center;
+}
+
+.str8__noteTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: rgba(17, 24, 39, 0.55);
+}
+
+.str8__noteText {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: rgba(17, 24, 39, 0.55);
+}
+
+.str8__noteAccent {
+  font-weight: 900;
+  background: linear-gradient(90deg, #7a00d9 0%, #ff2f8e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

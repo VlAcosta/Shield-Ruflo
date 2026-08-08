@@ -1,0 +1,39 @@
+@import "./tokens";
+@import "./mixins";
+@import "./motion";
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  background: white
+}
+
+h1,h2,h3,h4,h5,h6,
+p,span {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+@import "./portal/portal";
+@import "./portal/dashboard";
+@import "./portal/pages";

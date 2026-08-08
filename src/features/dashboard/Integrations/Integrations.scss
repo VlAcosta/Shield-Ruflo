@@ -1,0 +1,39 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.dashboard-integrations {
+  min-height: 260px;
+  &__settings { @include focus-ring; min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e4e7f0; border-radius: 9px; color: $color-text-secondary; background: #fff; cursor: pointer; font: inherit; font-size: 8px; font-weight: 700; }
+  &__settings svg { width: 13px; height: 13px; color: $color-primary; }
+  &__health { margin-bottom: 11px; padding: 11px 12px; display: grid; grid-template-columns: minmax(0,1fr) 98px auto; gap: 12px; align-items: center; border: 1px solid #edf0f6; border-radius: 14px; background: linear-gradient(135deg,#fbfbff,#f7f9fd); }
+  &__health > div:first-child { min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; align-items: baseline; }
+  &__health > div:first-child > span { grid-column: 1 / -1; color: $color-text-muted; font-size: 6.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  &__health strong { color: $color-text; font-family: $font-family-display; font-size: 17px; letter-spacing: -.04em; }
+  &__health small { color: $color-text-muted; font-size: 7px; }
+  &__health-bar { height: 6px; overflow: hidden; border-radius: 999px; background: #e9ecf4; }
+  &__health-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#1dbc84,#6ed8b2); transform-origin: left; animation: integration-health-in 700ms cubic-bezier(.16,1,.3,1) both; }
+  &__live { display: inline-flex; align-items: center; gap: 5px; color: $color-success; font-size: 6.5px; font-weight: 700; white-space: nowrap; }
+  &__live.is-warning { color: $color-warning; }
+  &__live.is-warning i { background: $color-warning; }
+  &__live i { width: 6px; height: 6px; border-radius: 50%; background: $color-success; box-shadow: 0 0 0 4px rgba(22,191,131,.08); }
+  &__list { display: grid; gap: 6px; }
+  &__item { width:100%; min-height: 50px; padding: 7px 9px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto 22px; align-items: center; gap: 9px; border: 1px solid #edf0f6; border-radius: 12px; color: $color-text; background: #fff; text-decoration: none; text-align:left; cursor:pointer; transition: transform 220ms cubic-bezier(.16,1,.3,1), border-color $transition-fast, box-shadow $transition-base; }
+  &__item:hover { transform: translateX(3px); border-color: rgba(102,97,245,.15); box-shadow: 0 8px 20px rgba(35,42,75,.045); }
+  &__mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #fff; background: linear-gradient(135deg,#7568ff,#a94aed); box-shadow: 0 7px 16px rgba(102,97,245,.14); font-size: 8px; font-weight: 850; }
+  &__mark.is-amber { background: linear-gradient(135deg,#ffbf37,#ff8f4a); } &__mark.is-green,&__mark.is-emerald { background: linear-gradient(135deg,#25c789,#12a76d); } &__mark.is-blue { background: linear-gradient(135deg,#4389f5,#625ef4); } &__mark.is-cyan { background: linear-gradient(135deg,#1bb8d5,#3f8ff1); } &__mark.is-pink { background: linear-gradient(135deg,#f13a88,#a944eb); }
+  &__copy { min-width: 0; display: grid; gap: 2px; }
+  &__copy strong { overflow: hidden; font-size: 8.5px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+  &__copy small { color: $color-text-muted; font-size: 6.5px; }
+  &__state { min-height: 24px; padding: 0 7px; display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; font-size: 6.5px; font-weight: 720; white-space: nowrap; }
+  &__state i { width: 5px; height: 5px; border-radius: 50%; }
+  &__state.is-ready { color: $color-success; background: rgba(22,191,131,.07); } &__state.is-ready i { background: $color-success; }
+  &__state.is-pending { color: $color-warning; background: rgba(245,162,10,.08); } &__state.is-pending i { background: $color-warning; }
+  &__arrow { color: #a4aabc; } &__arrow svg { width: 14px; height: 14px; }
+  &__more { margin-top: 8px; border: 0; color: $color-primary; background: transparent; cursor: pointer; font: inherit; font-size: 7px; font-weight: 700; }
+  &__empty-action { width: 100%; padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; text-align: inherit; }
+  &__empty-action > span { display: block; margin-top: 8px; color: $color-primary; font-size: 7px; font-weight: 720; text-align: center; }
+}
+@keyframes integration-health-in { from { transform: scaleX(.2); opacity:.4; } to { transform: scaleX(1); opacity:1; } }
+@media (max-width: 760px) { .dashboard-integrations__health { grid-template-columns: 1fr auto; } .dashboard-integrations__health-bar { grid-column: 1 / -1; grid-row: 2; } }
+@media (max-width: 500px) { .dashboard-integrations__item { grid-template-columns: 34px minmax(0,1fr) auto; } .dashboard-integrations__arrow { display:none; } .dashboard-integrations__state { padding:0 5px; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-integrations * { animation-duration:.01ms; transition-duration:.01ms; } }

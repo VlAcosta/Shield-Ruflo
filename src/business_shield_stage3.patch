@@ -1,0 +1,1777 @@
+diff -ruN business_shield_refactor_stage2/STAGE3_NOTES.md business_shield_refactor_stage3/STAGE3_NOTES.md
+--- business_shield_refactor_stage2/STAGE3_NOTES.md	1970-01-01 00:00:00.000000000 +0000
++++ business_shield_refactor_stage3/STAGE3_NOTES.md	2026-08-07 22:41:39.997326895 +0000
+@@ -0,0 +1,13 @@
++# Stage 3 — Dashboard visual pass
++
++This stage focuses on the upper half of the dashboard without changing the already established architecture.
++
++## Updated
++- HeaderAnalytick: premium typography, richer card treatment, proper period dropdown for reviews.
++- ReviewsChart: interactive SVG chart, keyboard navigation, tooltips, period switching, legend and two series.
++- TasksChart: interactive bars, period switching, project tooltips, completion/overdue summaries.
++- PeriodMenu: reusable lightweight period selector for dashboard widgets.
++- Typography: Manrope is used for display/metric values while Onest remains the UI text face.
++
++## PIN
++Keyboard/NumPad PIN input was already implemented in Stage 2 and remains unchanged.
+diff -ruN business_shield_refactor_stage2/components/ui/PeriodMenu/PeriodMenu.jsx business_shield_refactor_stage3/components/ui/PeriodMenu/PeriodMenu.jsx
+--- business_shield_refactor_stage2/components/ui/PeriodMenu/PeriodMenu.jsx	1970-01-01 00:00:00.000000000 +0000
++++ business_shield_refactor_stage3/components/ui/PeriodMenu/PeriodMenu.jsx	2026-08-07 22:40:39.783234621 +0000
+@@ -0,0 +1,98 @@
++import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
++import './PeriodMenu.scss';
++
++function ChevronIcon() {
++  return (
++    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
++      <path d="M4.5 6.25L8 9.75L11.5 6.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
++    </svg>
++  );
++}
++
++function PeriodMenu({
++  value,
++  options,
++  onChange,
++  ariaLabel = 'Выбрать период',
++  variant = 'default',
++  align = 'right',
++  className = '',
++}) {
++  const [open, setOpen] = useState(false);
++  const rootRef = useRef(null);
++
++  const selected = useMemo(
++    () => options.find((option) => option.value === value) || options[0],
++    [options, value]
++  );
++
++  useEffect(() => {
++    if (!open) return undefined;
++
++    const handlePointerDown = (event) => {
++      if (!rootRef.current?.contains(event.target)) setOpen(false);
++    };
++
++    const handleKeyDown = (event) => {
++      if (event.key === 'Escape') setOpen(false);
++    };
++
++    document.addEventListener('pointerdown', handlePointerDown);
++    window.addEventListener('keydown', handleKeyDown);
++
++    return () => {
++      document.removeEventListener('pointerdown', handlePointerDown);
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [open]);
++
++  const handleSelect = useCallback((nextValue) => {
++    onChange(nextValue);
++    setOpen(false);
++  }, [onChange]);
++
++  return (
++    <div
++      ref={rootRef}
++      className={`period-menu period-menu--${variant} period-menu--${align} ${open ? 'is-open' : ''} ${className}`.trim()}
++    >
++      <button
++        className="period-menu__trigger"
++        type="button"
++        aria-label={ariaLabel}
++        aria-haspopup="listbox"
++        aria-expanded={open}
++        onClick={() => setOpen((current) => !current)}
++      >
++        <span>{selected?.label}</span>
++        <ChevronIcon />
++      </button>
++
++      {open ? (
++        <div className="period-menu__popover" role="listbox" aria-label={ariaLabel}>
++          {options.map((option) => {
++            const active = option.value === value;
++            return (
++              <button
++                className={`period-menu__option ${active ? 'is-active' : ''}`}
++                type="button"
++                role="option"
++                aria-selected={active}
++                key={option.value}
++                onClick={() => handleSelect(option.value)}
++              >
++                <span>
++                  <strong>{option.label}</strong>
++                  {option.caption ? <small>{option.caption}</small> : null}
++                </span>
++                <i aria-hidden="true" />
++              </button>
++            );
++          })}
++        </div>
++      ) : null}
++    </div>
++  );
++}
++
++export default memo(PeriodMenu);
+diff -ruN business_shield_refactor_stage2/components/ui/PeriodMenu/PeriodMenu.scss business_shield_refactor_stage3/components/ui/PeriodMenu/PeriodMenu.scss
+--- business_shield_refactor_stage2/components/ui/PeriodMenu/PeriodMenu.scss	1970-01-01 00:00:00.000000000 +0000
++++ business_shield_refactor_stage3/components/ui/PeriodMenu/PeriodMenu.scss	2026-08-07 22:40:39.784024714 +0000
+@@ -0,0 +1,176 @@
++@use '../../../styles/tokens' as *;
++@use '../../../styles/mixins' as *;
++
++.period-menu {
++  position: relative;
++  display: inline-flex;
++  min-width: 0;
++
++  &__trigger {
++    @include focus-ring;
++    height: 31px;
++    padding: 0 9px 0 10px;
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    gap: 6px;
++    border: 1px solid rgba(224, 228, 241, .92);
++    border-radius: 10px;
++    color: $color-text-secondary;
++    background: rgba(248, 249, 253, .82);
++    cursor: pointer;
++    font-size: 10.5px;
++    font-weight: 620;
++    letter-spacing: -.018em;
++    white-space: nowrap;
++    transition:
++      color $transition-fast,
++      border-color $transition-fast,
++      background $transition-fast,
++      box-shadow $transition-fast,
++      transform $transition-fast;
++
++    svg {
++      width: 13px;
++      height: 13px;
++      transition: transform $transition-spring;
++    }
++
++    &:hover {
++      color: $color-text;
++      border-color: #d8ddee;
++      background: #fff;
++      box-shadow: 0 7px 18px rgba(34, 43, 88, .055);
++    }
++
++    &:active {
++      transform: translateY(1px);
++    }
++  }
++
++  &.is-open &__trigger {
++    color: $color-primary;
++    border-color: rgba(102, 97, 245, .27);
++    background: #fff;
++    box-shadow: 0 9px 24px rgba(58, 53, 154, .085);
++
++    svg { transform: rotate(180deg); }
++  }
++
++  &__popover {
++    position: absolute;
++    top: calc(100% + 7px);
++    z-index: 80;
++    width: 180px;
++    padding: 6px;
++    border: 1px solid rgba(222, 226, 239, .88);
++    border-radius: 14px;
++    background: rgba(255, 255, 255, .96);
++    box-shadow: 0 20px 50px rgba(34, 43, 88, .14);
++    backdrop-filter: blur(18px);
++    animation: period-menu-enter 190ms cubic-bezier(.16, 1, .3, 1) both;
++  }
++
++  &--right &__popover { right: 0; }
++  &--left &__popover { left: 0; }
++
++  &__option {
++    width: 100%;
++    min-height: 41px;
++    padding: 7px 8px 7px 10px;
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 10px;
++    border: 0;
++    border-radius: 9px;
++    color: $color-text-secondary;
++    background: transparent;
++    cursor: pointer;
++    text-align: left;
++    transition: color $transition-fast, background $transition-fast;
++
++    > span {
++      min-width: 0;
++      display: flex;
++      flex-direction: column;
++      gap: 2px;
++    }
++
++    strong {
++      color: inherit;
++      font-size: 10.5px;
++      font-weight: 650;
++      line-height: 1.1;
++      letter-spacing: -.018em;
++    }
++
++    small {
++      color: $color-text-muted;
++      font-size: 8.5px;
++      font-weight: 500;
++      line-height: 1.2;
++    }
++
++    i {
++      width: 7px;
++      height: 7px;
++      flex: 0 0 auto;
++      border-radius: 50%;
++      background: transparent;
++      box-shadow: inset 0 0 0 1px $color-border-strong;
++    }
++
++    &:hover {
++      color: $color-text;
++      background: $color-surface-soft;
++    }
++
++    &.is-active {
++      color: $color-primary;
++      background: rgba(102, 97, 245, .07);
++
++      i {
++        background: $color-primary;
++        box-shadow: 0 0 0 3px rgba(102, 97, 245, .09);
++      }
++    }
++  }
++
++  &--quiet &__trigger {
++    height: auto;
++    padding: 2px 0;
++    border: 0;
++    border-radius: 6px;
++    color: $color-text-muted;
++    background: transparent;
++    box-shadow: none;
++    font-size: 10px;
++    font-weight: 540;
++
++    &:hover {
++      color: $color-primary;
++      background: transparent;
++      box-shadow: none;
++    }
++  }
++
++  &--quiet.is-open &__trigger {
++    background: transparent;
++    box-shadow: none;
++  }
++}
++
++@keyframes period-menu-enter {
++  from { opacity: 0; transform: translateY(-5px) scale(.985); }
++  to { opacity: 1; transform: translateY(0) scale(1); }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .period-menu__popover,
++  .period-menu__trigger,
++  .period-menu__trigger svg {
++    animation: none;
++    transition: none;
++  }
++}
+diff -ruN business_shield_refactor_stage2/components/ui/PeriodMenu/index.js business_shield_refactor_stage3/components/ui/PeriodMenu/index.js
+--- business_shield_refactor_stage2/components/ui/PeriodMenu/index.js	1970-01-01 00:00:00.000000000 +0000
++++ business_shield_refactor_stage3/components/ui/PeriodMenu/index.js	2026-08-07 22:40:39.785464744 +0000
+@@ -0,0 +1 @@
++export { default } from './PeriodMenu';
+diff -ruN business_shield_refactor_stage2/features/dashboard/HeaderAnalytick/HeaderAnalytick.jsx business_shield_refactor_stage3/features/dashboard/HeaderAnalytick/HeaderAnalytick.jsx
+--- business_shield_refactor_stage2/features/dashboard/HeaderAnalytick/HeaderAnalytick.jsx	2026-08-07 22:30:56.107221803 +0000
++++ business_shield_refactor_stage3/features/dashboard/HeaderAnalytick/HeaderAnalytick.jsx	2026-08-07 22:40:39.786383197 +0000
+@@ -1,4 +1,5 @@
+ import React, { memo, useCallback, useMemo, useState } from 'react';
++import PeriodMenu from '../../../components/ui/PeriodMenu';
+ import tasksImg from './assets/tasks.svg';
+ import ratingImg from './assets/rating.svg';
+ import reviewImg from './assets/review.svg';
+@@ -7,15 +8,13 @@
+ import inActiveImg from './assets/inActive.svg';
+ import './HeaderAnalytick.scss';
+ 
+-const PERIODS = ['day', 'week', 'month', 'year', 'all'];
+-
+-const PERIOD_LABELS = Object.freeze({
+-  day: 'за сегодня',
+-  week: 'за неделю',
+-  month: 'за месяц',
+-  year: 'за год',
+-  all: 'за всё время',
+-});
++const REVIEW_PERIODS = Object.freeze([
++  { value: 'day', label: 'за сегодня', caption: 'Текущие сутки' },
++  { value: 'week', label: 'за неделю', caption: 'Последние 7 дней' },
++  { value: 'month', label: 'за месяц', caption: 'Текущий месяц' },
++  { value: 'year', label: 'за год', caption: 'Последние 12 месяцев' },
++  { value: 'all', label: 'за всё время', caption: 'Вся история' },
++]);
+ 
+ const REVIEW_DATA = Object.freeze({
+   day: 999,
+@@ -26,6 +25,7 @@
+ });
+ 
+ const SUBSCRIPTION_DATE = new Date(2026, 1, 17);
++const numberFormatter = new Intl.NumberFormat('ru-RU');
+ 
+ function formatDate(date) {
+   return new Intl.DateTimeFormat('ru-RU', {
+@@ -35,84 +35,77 @@
+   }).format(date);
+ }
+ 
+-const staticItems = Object.freeze([
+-  { id: 'tasks', label: 'Задачи', value: '99', icon: tasksImg, tone: 'violet' },
+-  { id: 'rating', label: 'Рейтинг', value: '4.98', icon: ratingImg, tone: 'yellow' },
+-]);
++function MetricCard({ id, label, value, icon, tone, children, valueClassName = '' }) {
++  return (
++    <article className={`header-analytics__card header-analytics__card--${tone}`} data-metric={id}>
++      <div className="header-analytics__top">
++        <span className="header-analytics__label">{label}</span>
++        <span className={`header-analytics__icon header-analytics__icon--${tone}`}>
++          <img src={icon} alt="" aria-hidden="true" />
++        </span>
++      </div>
++
++      {value !== undefined ? (
++        <strong className={`header-analytics__value ${valueClassName}`.trim()}>{value}</strong>
++      ) : null}
++
++      {children}
++    </article>
++  );
++}
+ 
+ function HeaderAnalytick() {
+   const [selectedPeriod, setSelectedPeriod] = useState('day');
+ 
+-  const currentReviews = useMemo(() => REVIEW_DATA[selectedPeriod], [selectedPeriod]);
++  const currentReviews = useMemo(
++    () => numberFormatter.format(REVIEW_DATA[selectedPeriod]),
++    [selectedPeriod]
++  );
+ 
+-  const handlePeriodChange = useCallback(() => {
+-    setSelectedPeriod((current) => {
+-      const currentIndex = PERIODS.indexOf(current);
+-      return PERIODS[(currentIndex + 1) % PERIODS.length];
+-    });
++  const handlePeriodChange = useCallback((nextPeriod) => {
++    setSelectedPeriod(nextPeriod);
+   }, []);
+ 
+   return (
+     <section className="header-analytics" aria-label="Ключевые показатели">
+-      {staticItems.map((item) => (
+-        <article className={`header-analytics__card header-analytics__card--${item.tone}`} key={item.id}>
+-          <div className="header-analytics__top">
+-            <span className="header-analytics__label">{item.label}</span>
+-            <span className={`header-analytics__icon header-analytics__icon--${item.tone}`}>
+-              <img src={item.icon} alt="" aria-hidden="true" />
+-            </span>
+-          </div>
+-          <strong className="header-analytics__value">{item.value}</strong>
+-        </article>
+-      ))}
+-
+-      <article className="header-analytics__card header-analytics__card--reviews">
+-        <div className="header-analytics__top">
+-          <span className="header-analytics__label">Новые отзывы</span>
+-          <span className="header-analytics__icon header-analytics__icon--purple">
+-            <img src={reviewImg} alt="" aria-hidden="true" />
+-          </span>
+-        </div>
+-        <strong className="header-analytics__value" key={selectedPeriod}>{currentReviews}</strong>
+-        <button className="header-analytics__period" type="button" onClick={handlePeriodChange}>
+-          {PERIOD_LABELS[selectedPeriod]}
+-        </button>
+-      </article>
+-
+-      <article className="header-analytics__card header-analytics__card--status">
+-        <div className="header-analytics__top">
+-          <span className="header-analytics__label">Бизнес Щит</span>
+-          <span className="header-analytics__icon header-analytics__icon--green">
+-            <img src={inActiveImg} alt="" aria-hidden="true" />
+-          </span>
+-        </div>
++      <MetricCard id="tasks" label="Задачи" value="99" icon={tasksImg} tone="violet" />
++      <MetricCard id="rating" label="Рейтинг" value="4.98" icon={ratingImg} tone="yellow" />
++
++      <MetricCard id="reviews" label="Новые отзывы" icon={reviewImg} tone="purple">
++        <strong
++          className={`header-analytics__value header-analytics__value--reviews ${currentReviews.length > 7 ? 'is-compact' : ''}`}
++          key={selectedPeriod}
++        >
++          {currentReviews}
++        </strong>
++        <PeriodMenu
++          className="header-analytics__period"
++          value={selectedPeriod}
++          options={REVIEW_PERIODS}
++          onChange={handlePeriodChange}
++          variant="quiet"
++          align="left"
++          ariaLabel="Период новых отзывов"
++        />
++      </MetricCard>
++
++      <MetricCard id="shield" label="Бизнес Щит" icon={inActiveImg} tone="green">
+         <strong className="header-analytics__status">
+-          <span className="header-analytics__status-dot" />
++          <span className="header-analytics__status-dot" aria-hidden="true" />
+           работает
+         </strong>
+-      </article>
++      </MetricCard>
+ 
+-      <article className="header-analytics__card header-analytics__card--notifications">
+-        <div className="header-analytics__top">
+-          <span className="header-analytics__label">Уведомления</span>
+-          <span className="header-analytics__icon header-analytics__icon--red">
+-            <img src={notificationImg} alt="" aria-hidden="true" />
+-          </span>
+-        </div>
+-        <strong className="header-analytics__value">+100</strong>
+-      </article>
+-
+-      <article className="header-analytics__card header-analytics__card--subscription">
+-        <div className="header-analytics__top">
+-          <span className="header-analytics__label">Подписка до</span>
+-          <span className="header-analytics__icon header-analytics__icon--blue">
+-            <img src={subscriptionImg} alt="" aria-hidden="true" />
+-          </span>
+-        </div>
+-        <strong className="header-analytics__value header-analytics__value--date">
+-          {formatDate(SUBSCRIPTION_DATE)}
+-        </strong>
+-      </article>
++      <MetricCard id="notifications" label="Уведомления" value="+100" icon={notificationImg} tone="red" />
++
++      <MetricCard
++        id="subscription"
++        label="Подписка до"
++        value={formatDate(SUBSCRIPTION_DATE)}
++        valueClassName="header-analytics__value--date"
++        icon={subscriptionImg}
++        tone="blue"
++      />
+     </section>
+   );
+ }
+diff -ruN business_shield_refactor_stage2/features/dashboard/HeaderAnalytick/HeaderAnalytick.scss business_shield_refactor_stage3/features/dashboard/HeaderAnalytick/HeaderAnalytick.scss
+--- business_shield_refactor_stage2/features/dashboard/HeaderAnalytick/HeaderAnalytick.scss	2026-08-07 22:30:56.107354170 +0000
++++ business_shield_refactor_stage3/features/dashboard/HeaderAnalytick/HeaderAnalytick.scss	2026-08-07 22:40:39.787162716 +0000
+@@ -9,199 +9,200 @@
+ 
+   &__card {
+     --metric-accent: #6661f5;
++    --metric-soft: rgba(102, 97, 245, .09);
+     @include card-surface;
+     position: relative;
+     isolation: isolate;
+     min-width: 0;
+-    min-height: 112px;
++    min-height: 116px;
+     padding: 16px 16px 15px;
+     display: flex;
+     flex-direction: column;
+     justify-content: space-between;
+-    overflow: hidden;
++    overflow: visible;
+     background:
+-      linear-gradient(140deg, rgba(255, 255, 255, .98), rgba(255, 255, 255, .92)),
+-      #fff;
+-    transition: transform $transition-spring, box-shadow $transition-base, border-color $transition-base;
++      radial-gradient(circle at 96% -10%, var(--metric-soft), transparent 38%),
++      linear-gradient(145deg, rgba(255, 255, 255, .995), rgba(255, 255, 255, .955));
++    transition:
++      border-color $transition-base,
++      box-shadow $transition-base,
++      transform $transition-spring;
+     animation: header-kpi-enter 720ms cubic-bezier(.16, 1, .3, 1) both;
+ 
+     &::before {
+       content: '';
+       position: absolute;
+-      inset: 0 auto auto 0;
+-      width: 74%;
++      inset: 0 12px auto;
+       height: 1px;
+-      opacity: .08;
+-      background: linear-gradient(90deg, var(--metric-accent), transparent);
+-      transition: width $transition-spring, opacity $transition-base;
+-    }
+-
+-    &::after {
+-      content: '';
+-      position: absolute;
+-      z-index: -1;
+-      top: -42px;
+-      right: -38px;
+-      width: 110px;
+-      height: 110px;
+-      border-radius: 50%;
+       opacity: 0;
+-      background: radial-gradient(circle, color-mix(in srgb, var(--metric-accent) 13%, transparent), transparent 70%);
++      background: linear-gradient(90deg, transparent, var(--metric-accent), transparent);
++      transform: scaleX(.62);
+       transition: opacity $transition-base, transform $transition-spring;
+-      transform: scale(.78);
+     }
+ 
+     @for $i from 1 through 6 {
+-      &:nth-child(#{$i}) { animation-delay: #{($i - 1) * 64}ms; }
++      &:nth-child(#{$i}) { animation-delay: #{($i - 1) * 62}ms; }
+     }
+ 
+     &:hover {
+-      transform: translateY(-3px);
+-      border-color: #dde2ef;
+-      box-shadow: 0 20px 44px rgba(34, 43, 88, .075);
++      border-color: color-mix(in srgb, var(--metric-accent) 15%, $color-border);
++      box-shadow: 0 18px 46px rgba(34, 43, 88, .072);
++      transform: translateY(-2px);
+ 
+       &::before {
+-        width: 100%;
+-        opacity: .34;
+-      }
+-
+-      &::after {
+-        opacity: 1;
+-        transform: scale(1);
++        opacity: .23;
++        transform: scaleX(1);
+       }
+ 
+       .header-analytics__icon {
+-        transform: translateY(-1px) rotate(-2deg);
++        transform: translate3d(0, -2px, 0) rotate(-2deg);
++        box-shadow: 0 8px 18px color-mix(in srgb, var(--metric-accent) 13%, transparent);
+       }
+     }
+ 
+-    &--reviews {
+-      justify-content: flex-start;
+-      --metric-accent: #a442ef;
++    &--violet {
++      --metric-accent: #6762f5;
++      --metric-soft: rgba(103, 98, 245, .09);
++    }
++
++    &--yellow {
++      --metric-accent: #eea21a;
++      --metric-soft: rgba(238, 162, 26, .09);
+     }
+ 
+-    &--violet { --metric-accent: #6661f5; }
+-    &--yellow { --metric-accent: #f3a60d; }
+-    &--status { --metric-accent: #16bf83; }
+-    &--notifications { --metric-accent: #f34f70; }
+-    &--subscription { --metric-accent: #6c7df5; }
++    &--purple {
++      --metric-accent: #a141ed;
++      --metric-soft: rgba(161, 65, 237, .08);
++    }
++
++    &--green {
++      --metric-accent: #18b981;
++      --metric-soft: rgba(24, 185, 129, .09);
++    }
++
++    &--red {
++      --metric-accent: #ef5674;
++      --metric-soft: rgba(239, 86, 116, .08);
++    }
++
++    &--blue {
++      --metric-accent: #6d7df4;
++      --metric-soft: rgba(109, 125, 244, .09);
++    }
+   }
+ 
+   &__top {
+     display: flex;
+     align-items: flex-start;
+     justify-content: space-between;
+-    gap: 8px;
++    gap: 10px;
+   }
+ 
+   &__label {
++    padding-top: 2px;
+     color: $color-text-muted;
+-    font-size: 11.5px;
+-    font-weight: 520;
++    font-size: 11px;
++    font-weight: 510;
+     line-height: 1.2;
+-    letter-spacing: -.015em;
++    letter-spacing: -.012em;
+   }
+ 
+   &__icon {
+-    width: 31px;
+-    height: 31px;
++    width: 32px;
++    height: 32px;
+     flex: 0 0 auto;
+     display: grid;
+     place-items: center;
+-    border: 1px solid rgba(255, 255, 255, .7);
++    border: 1px solid rgba(255, 255, 255, .78);
+     border-radius: 11px;
+-    transition: transform $transition-spring;
++    background: var(--metric-soft);
++    transition: transform $transition-spring, box-shadow $transition-base;
+ 
+     img {
+       width: 15px;
+       height: 15px;
+       object-fit: contain;
+     }
+-
+-    &--violet { background: #f0efff; }
+-    &--yellow { background: #fff7e6; }
+-    &--purple { background: #fbf0ff; }
+-    &--green { background: #eafbf4; }
+-    &--red { background: #fff0f3; }
+-    &--blue { background: #eef2ff; }
+   }
+ 
+   &__value {
+-    margin-top: 10px;
++    margin-top: 11px;
+     color: $color-text;
+     font-family: $font-family-display;
+-    font-size: clamp(22px, 1.55vw, 28px);
+-    font-weight: 760;
++    font-size: clamp(22px, 1.52vw, 28px);
++    font-weight: 790;
+     line-height: .98;
+-    letter-spacing: -.055em;
++    letter-spacing: -.058em;
++    font-feature-settings: 'tnum' 1, 'ss01' 1;
+     font-variant-numeric: tabular-nums lining-nums;
+ 
+-    &--date {
+-      font-size: clamp(13px, .92vw, 16px);
+-      font-weight: 690;
+-      letter-spacing: -.025em;
++    &--reviews {
++      margin-top: 10px;
++      animation: header-kpi-number 340ms cubic-bezier(.16, 1, .3, 1) both;
+     }
+-  }
+ 
+-  &__card--reviews &__value {
+-    animation: header-kpi-number 320ms cubic-bezier(.16, 1, .3, 1) both;
++    &--reviews.is-compact {
++      font-size: clamp(18px, 1.25vw, 23px);
++      letter-spacing: -.045em;
++    }
++
++    &--date {
++      font-size: clamp(13px, .91vw, 16px);
++      font-weight: 710;
++      letter-spacing: -.026em;
++    }
+   }
+ 
+   &__period {
+-    @include focus-ring;
+     width: fit-content;
+-    margin: 4px 0 0;
+-    padding: 0;
+-    border: 0;
+-    color: $color-text-muted;
+-    background: transparent;
+-    cursor: pointer;
+-    font-size: 10px;
+-    font-weight: 500;
+-    line-height: 1.2;
+-    letter-spacing: -.01em;
+-    transition: color $transition-fast, transform $transition-fast;
+-
+-    &:hover {
+-      color: $color-primary;
+-      transform: translateX(2px);
+-    }
++    margin-top: 3px;
+   }
+ 
+   &__status {
+-    margin-top: 10px;
++    margin-top: 11px;
+     display: inline-flex;
+     align-items: center;
+     gap: 7px;
+     color: $color-success;
+     font-size: 14px;
+-    font-weight: 720;
+-    letter-spacing: -.025em;
++    font-weight: 730;
++    line-height: 1;
++    letter-spacing: -.026em;
+   }
+ 
+   &__status-dot {
++    position: relative;
+     width: 9px;
+     height: 9px;
++    flex: 0 0 auto;
+     border-radius: 50%;
+     background: $color-success;
+-    box-shadow: 0 0 0 0 rgba(22, 191, 131, .3);
+-    animation: header-status-pulse 2.5s ease-in-out infinite;
++    box-shadow: 0 0 0 3px rgba(22, 191, 131, .10);
++
++    &::after {
++      content: '';
++      position: absolute;
++      inset: -4px;
++      border: 1px solid rgba(22, 191, 131, .22);
++      border-radius: inherit;
++      animation: header-status-ring 2.8s cubic-bezier(.2, .8, .2, 1) infinite;
++    }
+   }
+ }
+ 
+ @keyframes header-kpi-enter {
+-  from { opacity: 0; transform: translateY(-12px) scale(.988); }
+-  to { opacity: 1; transform: translateY(0) scale(1); }
++  from { opacity: 0; transform: translate3d(0, -12px, 0) scale(.988); }
++  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+ }
+ 
+ @keyframes header-kpi-number {
+-  from { opacity: 0; transform: translateY(7px); }
+-  to { opacity: 1; transform: translateY(0); }
++  from { opacity: 0; transform: translate3d(0, 8px, 0); filter: blur(2px); }
++  to { opacity: 1; transform: translate3d(0, 0, 0); filter: blur(0); }
+ }
+ 
+-@keyframes header-status-pulse {
+-  0%, 65%, 100% { box-shadow: 0 0 0 0 rgba(22, 191, 131, .18); }
+-  78% { box-shadow: 0 0 0 6px rgba(22, 191, 131, 0); }
++@keyframes header-status-ring {
++  0%, 55% { opacity: .72; transform: scale(.72); }
++  76%, 100% { opacity: 0; transform: scale(1.55); }
+ }
+ 
+ @media (max-width: 1200px) {
+@@ -218,8 +219,8 @@
+ 
+ @media (prefers-reduced-motion: reduce) {
+   .header-analytics__card,
+-  .header-analytics__status-dot,
+-  .header-analytics__card--reviews .header-analytics__value {
++  .header-analytics__status-dot::after,
++  .header-analytics__value--reviews {
+     animation: none;
+   }
+ }
+diff -ruN business_shield_refactor_stage2/features/dashboard/ReviewsChart/ReviewsChart.jsx business_shield_refactor_stage3/features/dashboard/ReviewsChart/ReviewsChart.jsx
+--- business_shield_refactor_stage2/features/dashboard/ReviewsChart/ReviewsChart.jsx	2026-08-07 22:09:45.929238765 +0000
++++ business_shield_refactor_stage3/features/dashboard/ReviewsChart/ReviewsChart.jsx	2026-08-07 22:41:00.905903113 +0000
+@@ -1,8 +1,40 @@
+-import React, { memo } from 'react';
++import React, { memo, useCallback, useMemo, useState } from 'react';
+ import DashboardCard from '../../../components/ui/DashboardCard';
++import PeriodMenu from '../../../components/ui/PeriodMenu';
+ import './ReviewsChart.scss';
+ 
+-const MONTHS = ['ОКТ', 'НОЯ', 'ДЕК', 'ЯНВ', 'ФЕВ'];
++const PERIOD_OPTIONS = Object.freeze([
++  { value: 'fiveMonths', label: '5 месяцев', caption: 'Октябрь — февраль' },
++  { value: 'quarter', label: 'Квартал', caption: 'Последние 3 месяца' },
++  { value: 'year', label: 'Год', caption: 'Последние 12 месяцев' },
++]);
++
++const SERIES = Object.freeze({
++  fiveMonths: {
++    labels: ['ОКТ', 'НОЯ', 'ДЕК', 'ЯНВ', 'ФЕВ'],
++    received: [418, 463, 551, 718, 999],
++    answered: [305, 348, 426, 557, 791],
++    growth: 2.46,
++  },
++  quarter: {
++    labels: ['ДЕК', 'ЯНВ', 'ФЕВ'],
++    received: [551, 718, 999],
++    answered: [426, 557, 791],
++    growth: 5.84,
++  },
++  year: {
++    labels: ['МАР', 'МАЙ', 'ИЮЛ', 'СЕН', 'НОЯ', 'ФЕВ'],
++    received: [291, 344, 386, 402, 463, 999],
++    answered: [208, 247, 283, 298, 348, 791],
++    growth: 18.4,
++  },
++});
++
++const VIEWBOX_WIDTH = 700;
++const VIEWBOX_HEIGHT = 132;
++const CHART_TOP = 12;
++const CHART_BOTTOM = 116;
++const numberFormatter = new Intl.NumberFormat('ru-RU');
+ 
+ function CalendarIcon() {
+   return (
+@@ -21,24 +53,172 @@
+   );
+ }
+ 
++function buildPoints(values, maxValue) {
++  const step = values.length > 1 ? VIEWBOX_WIDTH / (values.length - 1) : VIEWBOX_WIDTH;
++  const height = CHART_BOTTOM - CHART_TOP;
++
++  return values.map((value, index) => ({
++    x: index * step,
++    y: CHART_BOTTOM - (value / maxValue) * height,
++    value,
++  }));
++}
++
++function buildSmoothPath(points) {
++  if (!points.length) return '';
++  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
++
++  return points.reduce((path, point, index) => {
++    if (index === 0) return `M ${point.x} ${point.y}`;
++
++    const previous = points[index - 1];
++    const controlOffset = (point.x - previous.x) * 0.42;
++    return `${path} C ${previous.x + controlOffset} ${previous.y}, ${point.x - controlOffset} ${point.y}, ${point.x} ${point.y}`;
++  }, '');
++}
++
+ function ReviewsChart() {
++  const [period, setPeriod] = useState('fiveMonths');
++  const [activeIndex, setActiveIndex] = useState(null);
++
++  const data = SERIES[period];
++  const latestIndex = data.labels.length - 1;
++  const displayIndex = activeIndex ?? latestIndex;
++
++  const chart = useMemo(() => {
++    const maxValue = Math.max(...data.received, ...data.answered) * 1.08;
++    const receivedPoints = buildPoints(data.received, maxValue);
++    const answeredPoints = buildPoints(data.answered, maxValue);
++    const receivedPath = buildSmoothPath(receivedPoints);
++    const answeredPath = buildSmoothPath(answeredPoints);
++    const areaPath = `${receivedPath} L ${VIEWBOX_WIDTH} ${CHART_BOTTOM} L 0 ${CHART_BOTTOM} Z`;
++
++    return { receivedPoints, answeredPoints, receivedPath, answeredPath, areaPath };
++  }, [data]);
++
++  const handleMouseMove = useCallback((event) => {
++    const bounds = event.currentTarget.getBoundingClientRect();
++    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
++    const nextIndex = Math.round(ratio * (data.labels.length - 1));
++    setActiveIndex(nextIndex);
++  }, [data.labels.length]);
++
++  const handleKeyDown = useCallback((event) => {
++    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
++    event.preventDefault();
++
++    setActiveIndex((current) => {
++      const start = current ?? latestIndex;
++      const direction = event.key === 'ArrowRight' ? 1 : -1;
++      return Math.max(0, Math.min(latestIndex, start + direction));
++    });
++  }, [latestIndex]);
++
++  const receivedPoint = chart.receivedPoints[displayIndex];
++  const answeredPoint = chart.answeredPoints[displayIndex];
++
+   return (
+     <DashboardCard className="reviews-chart" motion="left">
+       <div className="reviews-chart__meta">
+-        <div className="reviews-chart__period"><CalendarIcon /><span>Месяц</span></div>
+-        <span className="reviews-chart__chart-icon"><ChartIcon /></span>
++        <div className="reviews-chart__period-label"><CalendarIcon /><span>Динамика отзывов</span></div>
++        <div className="reviews-chart__meta-actions">
++          <PeriodMenu
++            value={period}
++            options={PERIOD_OPTIONS}
++            onChange={(nextPeriod) => {
++              setPeriod(nextPeriod);
++              setActiveIndex(null);
++            }}
++            ariaLabel="Период графика отзывов"
++          />
++          <span className="reviews-chart__chart-icon"><ChartIcon /></span>
++        </div>
+       </div>
+ 
+-      <div className="reviews-chart__value">+ 999</div>
+-      <div className="reviews-chart__growth"><strong>↑ +2.46%</strong><span>рост отзывов</span></div>
++      <div className="reviews-chart__summary">
++        <div>
++          <strong className="reviews-chart__value">+ {numberFormatter.format(data.received[latestIndex])}</strong>
++          <div className="reviews-chart__growth">
++            <strong>↑ +{data.growth}%</strong>
++            <span>рост за период</span>
++          </div>
++        </div>
++
++        <div className="reviews-chart__legend" aria-label="Легенда графика">
++          <span><i className="is-received" />Новые отзывы</span>
++          <span><i className="is-answered" />Ответы</span>
++        </div>
++      </div>
+ 
+-      <div className="reviews-chart__visual" aria-label="Рост отзывов с октября по февраль">
+-        <svg viewBox="0 0 700 155" preserveAspectRatio="none" role="img">
+-          <path className="reviews-chart__line reviews-chart__line--primary" d="M8 129 C132 125 230 120 332 111 C455 99 563 77 692 24" />
+-          <path className="reviews-chart__line reviews-chart__line--secondary" d="M8 132 C147 130 252 127 360 123 C486 116 585 105 692 88" />
++      <div
++        className="reviews-chart__visual"
++        role="img"
++        tabIndex="0"
++        aria-label={`Динамика отзывов. ${data.labels[displayIndex]}: ${data.received[displayIndex]} новых отзывов, ${data.answered[displayIndex]} ответов`}
++        onMouseMove={handleMouseMove}
++        onMouseLeave={() => setActiveIndex(null)}
++        onFocus={() => setActiveIndex((current) => current ?? latestIndex)}
++        onBlur={() => setActiveIndex(null)}
++        onKeyDown={handleKeyDown}
++      >
++        <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
++          <defs>
++            <linearGradient id="reviewsAreaStage3" x1="0" y1="0" x2="0" y2="1">
++              <stop offset="0%" stopColor="#6b63f6" stopOpacity=".16" />
++              <stop offset="100%" stopColor="#6b63f6" stopOpacity="0" />
++            </linearGradient>
++          </defs>
++
++          {[0.25, 0.5, 0.75].map((ratio) => (
++            <line
++              className="reviews-chart__grid-line"
++              key={ratio}
++              x1="0"
++              x2={VIEWBOX_WIDTH}
++              y1={CHART_TOP + (CHART_BOTTOM - CHART_TOP) * ratio}
++              y2={CHART_TOP + (CHART_BOTTOM - CHART_TOP) * ratio}
++            />
++          ))}
++
++          <path className="reviews-chart__area" d={chart.areaPath} />
++          <path className="reviews-chart__line reviews-chart__line--primary" d={chart.receivedPath} />
++          <path className="reviews-chart__line reviews-chart__line--secondary" d={chart.answeredPath} />
++
++          {chart.receivedPoints.map((point, index) => (
++            <g key={`${period}-${index}`}>
++              {index === displayIndex ? (
++                <line className="reviews-chart__cursor" x1={point.x} x2={point.x} y1={CHART_TOP} y2={CHART_BOTTOM} />
++              ) : null}
++              <circle
++                className={`reviews-chart__point reviews-chart__point--primary ${index === displayIndex ? 'is-active' : ''}`}
++                cx={point.x}
++                cy={point.y}
++                r={index === displayIndex ? 4.2 : 2.3}
++              />
++              <circle
++                className={`reviews-chart__point reviews-chart__point--secondary ${index === displayIndex ? 'is-active' : ''}`}
++                cx={chart.answeredPoints[index].x}
++                cy={chart.answeredPoints[index].y}
++                r={index === displayIndex ? 3.6 : 2}
++              />
++            </g>
++          ))}
+         </svg>
+-        <div className="reviews-chart__months">
+-          {MONTHS.map((month) => <span key={month}>{month}</span>)}
++
++        <div
++          className={`reviews-chart__tooltip ${activeIndex === null ? 'is-passive' : ''} ${displayIndex === 0 ? 'is-start' : displayIndex === latestIndex ? 'is-end' : ''}`}
++          style={{ '--tooltip-x': `${(receivedPoint.x / VIEWBOX_WIDTH) * 100}%` }}
++          aria-hidden="true"
++        >
++          <strong>{data.labels[displayIndex]}</strong>
++          <span><i className="is-received" />{numberFormatter.format(receivedPoint.value)} отзывов</span>
++          <span><i className="is-answered" />{numberFormatter.format(answeredPoint.value)} ответов</span>
++        </div>
++
++        <div className="reviews-chart__months" style={{ '--months': data.labels.length }}>
++          {data.labels.map((label, index) => (
++            <span className={index === displayIndex ? 'is-active' : ''} key={label}>{label}</span>
++          ))}
+         </div>
+       </div>
+     </DashboardCard>
+diff -ruN business_shield_refactor_stage2/features/dashboard/ReviewsChart/ReviewsChart.scss business_shield_refactor_stage3/features/dashboard/ReviewsChart/ReviewsChart.scss
+--- business_shield_refactor_stage2/features/dashboard/ReviewsChart/ReviewsChart.scss	2026-08-07 22:09:45.930677692 +0000
++++ business_shield_refactor_stage3/features/dashboard/ReviewsChart/ReviewsChart.scss	2026-08-07 22:41:00.906038965 +0000
+@@ -1,82 +1,279 @@
+ @use '../../../styles/tokens' as *;
++@use '../../../styles/mixins' as *;
+ 
+ .reviews-chart {
+-  min-height: 198px;
++  min-height: 238px;
++  overflow: visible;
+ 
+-  .dashboard-card__body { padding-top: 14px; height: 100%; }
++  .dashboard-card__body {
++    height: 100%;
++    padding-top: 15px;
++  }
+ 
+   &__meta {
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
++    gap: 12px;
+     color: $color-text-muted;
+   }
+ 
+-  &__period,
++  &__period-label,
+   &__chart-icon {
+     display: inline-flex;
+     align-items: center;
+     gap: 7px;
+     font-size: 10px;
++    font-weight: 560;
++  }
++
++  &__period-label svg,
++  &__chart-icon svg {
++    width: 13px;
++    height: 13px;
++  }
++
++  &__meta-actions {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++  }
++
++  &__chart-icon {
++    width: 28px;
++    height: 28px;
++    justify-content: center;
++    border-radius: 9px;
++    color: #8792ad;
++    background: $color-surface-soft;
+   }
+ 
+-  &__period svg,
+-  &__chart-icon svg { width: 13px; height: 13px; }
++  &__summary {
++    margin-top: 9px;
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 16px;
++  }
+ 
+   &__value {
+-    margin-top: 12px;
++    display: block;
+     color: $color-text;
+-    font-size: 23px;
+-    font-weight: 800;
+-    letter-spacing: -.03em;
++    font-family: $font-family-display;
++    font-size: 25px;
++    font-weight: 790;
++    line-height: .98;
++    letter-spacing: -.056em;
++    font-variant-numeric: tabular-nums lining-nums;
+   }
+ 
+   &__growth {
+-    margin-top: 2px;
++    margin-top: 5px;
+     display: flex;
+-    gap: 5px;
++    gap: 6px;
+     align-items: baseline;
+     font-size: 9px;
+ 
+-    strong { color: $color-success; font-weight: 800; }
++    strong { color: $color-success; font-weight: 760; }
+     span { color: $color-text-muted; }
+   }
+ 
++  &__legend {
++    padding-top: 3px;
++    display: flex;
++    align-items: center;
++    gap: 13px;
++    color: $color-text-muted;
++    font-size: 8.5px;
++    font-weight: 540;
++
++    span {
++      display: inline-flex;
++      align-items: center;
++      gap: 5px;
++      white-space: nowrap;
++    }
++
++    i {
++      width: 7px;
++      height: 7px;
++      border-radius: 50%;
++    }
++  }
++
++  .is-received { background: #6861f5; }
++  .is-answered { background: #12b9d2; }
++
+   &__visual {
++    @include focus-ring;
+     position: relative;
+-    height: 112px;
+-    margin-top: 1px;
++    height: 135px;
++    margin-top: 3px;
++    outline: none;
++    cursor: crosshair;
++
++    svg {
++      width: 100%;
++      height: 108px;
++      overflow: visible;
++    }
++  }
++
++  &__grid-line {
++    stroke: #edf0f7;
++    stroke-width: 1;
++    stroke-dasharray: 4 6;
++  }
+ 
+-    svg { width: 100%; height: 86px; overflow: visible; }
++  &__area {
++    fill: url(#reviewsAreaStage3);
++    opacity: .82;
++    animation: reviews-area-in 740ms .18s cubic-bezier(.16, 1, .3, 1) both;
+   }
+ 
+   &__line {
+     fill: none;
+-    stroke-width: 2.2;
++    stroke-width: 2.35;
+     stroke-linecap: round;
+-    stroke-dasharray: 900;
+-    stroke-dashoffset: 900;
+-    animation: reviews-line-draw 1.25s .24s cubic-bezier(.16, 1, .3, 1) forwards;
++    stroke-linejoin: round;
++    stroke-dasharray: 1200;
++    stroke-dashoffset: 1200;
++    animation: reviews-line-draw 1.15s .22s cubic-bezier(.16, 1, .3, 1) forwards;
++
++    &--primary {
++      stroke: #6861f5;
++      filter: drop-shadow(0 5px 7px rgba(104, 97, 245, .10));
++    }
++
++    &--secondary {
++      stroke: #12b9d2;
++      animation-delay: .31s;
++    }
++  }
++
++  &__cursor {
++    stroke: rgba(102, 97, 245, .19);
++    stroke-width: 1;
++    stroke-dasharray: 3 4;
++    animation: reviews-cursor-enter 180ms ease both;
++  }
++
++  &__point {
++    stroke: #fff;
++    stroke-width: 1.8;
++    opacity: .32;
++    transition: r $transition-fast, opacity $transition-fast, filter $transition-fast;
++
++    &--primary { fill: #6861f5; }
++    &--secondary { fill: #12b9d2; }
++
++    &.is-active {
++      opacity: 1;
++      filter: drop-shadow(0 4px 6px rgba(65, 61, 152, .19));
++    }
++  }
+ 
+-    &--primary { stroke: #655ff4; }
+-    &--secondary { stroke: #13b8d1; animation-delay: .34s; }
++  &__tooltip {
++    position: absolute;
++    z-index: 5;
++    top: 2px;
++    left: var(--tooltip-x);
++    min-width: 126px;
++    padding: 8px 9px;
++    display: flex;
++    flex-direction: column;
++    gap: 4px;
++    border: 1px solid rgba(222, 226, 239, .86);
++    border-radius: 11px;
++    color: $color-text-secondary;
++    background: rgba(255, 255, 255, .94);
++    box-shadow: 0 12px 30px rgba(34, 43, 88, .105);
++    backdrop-filter: blur(12px);
++    pointer-events: none;
++    transform: translate(-50%, -12px);
++    transition: opacity $transition-fast, transform $transition-fast;
++
++    &.is-start { transform: translate(0, -12px); }
++    &.is-end { transform: translate(-100%, -12px); }
++
++    &.is-passive {
++      opacity: 0;
++      transform: translate(-50%, -6px);
++
++      &.is-start { transform: translate(0, -6px); }
++      &.is-end { transform: translate(-100%, -6px); }
++    }
++
++    strong {
++      color: $color-text;
++      font-size: 9px;
++      font-weight: 720;
++    }
++
++    span {
++      display: flex;
++      align-items: center;
++      gap: 5px;
++      font-size: 8px;
++      font-weight: 540;
++      white-space: nowrap;
++    }
++
++    i {
++      width: 6px;
++      height: 6px;
++      border-radius: 50%;
++    }
+   }
+ 
+   &__months {
+     position: absolute;
+     inset: auto 0 1px;
+     display: grid;
+-    grid-template-columns: repeat(5, 1fr);
++    grid-template-columns: repeat(var(--months, 5), 1fr);
+     color: $color-text-muted;
+     font-size: 8px;
++    font-weight: 520;
+     text-align: center;
++
++    span {
++      transition: color $transition-fast, font-weight $transition-fast;
++    }
++
++    span.is-active {
++      color: $color-text-secondary;
++      font-weight: 690;
++    }
+   }
+ 
+-  &:hover .reviews-chart__line--primary { filter: drop-shadow(0 4px 6px rgba(101, 95, 244, .18)); }
++  &:hover {
++    .reviews-chart__area { opacity: 1; }
++  }
+ }
+ 
++
+ @keyframes reviews-line-draw { to { stroke-dashoffset: 0; } }
++@keyframes reviews-area-in {
++  from { opacity: 0; transform: translateY(7px); }
++  to { opacity: .82; transform: translateY(0); }
++}
++@keyframes reviews-cursor-enter {
++  from { opacity: 0; }
++  to { opacity: 1; }
++}
++
++@media (max-width: 680px) {
++  .reviews-chart {
++    &__legend { display: none; }
++    &__meta-actions { gap: 5px; }
++  }
++}
+ 
+ @media (prefers-reduced-motion: reduce) {
+-  .reviews-chart__line { animation: none; stroke-dashoffset: 0; }
++  .reviews-chart__line,
++  .reviews-chart__area,
++  .reviews-chart__cursor {
++    animation: none;
++    stroke-dashoffset: 0;
++  }
+ }
+diff -ruN business_shield_refactor_stage2/features/dashboard/TasksChart/TasksChart.jsx business_shield_refactor_stage3/features/dashboard/TasksChart/TasksChart.jsx
+--- business_shield_refactor_stage2/features/dashboard/TasksChart/TasksChart.jsx	2026-08-07 22:09:45.932626537 +0000
++++ business_shield_refactor_stage3/features/dashboard/TasksChart/TasksChart.jsx	2026-08-07 22:41:00.906144802 +0000
+@@ -1,42 +1,135 @@
+-import React, { memo } from 'react';
++import React, { memo, useCallback, useMemo, useState } from 'react';
+ import DashboardCard from '../../../components/ui/DashboardCard';
++import PeriodMenu from '../../../components/ui/PeriodMenu';
+ import './TasksChart.scss';
+ 
+-const TASKS = [
+-  { label: 'Проект 1', value: 35, tone: 'blue' },
+-  { label: 'Проект 2', value: 77, tone: 'purple' },
+-  { label: 'Проект 3', value: 26, tone: 'blue' },
+-  { label: 'Проект 4', value: 95, tone: 'purple' },
+-  { label: 'Проект 5', value: 51, tone: 'blue' },
+-  { label: 'Проект 6', value: 66, tone: 'purple' },
+-  { label: 'Проект 7', value: 30, tone: 'blue' },
+-  { label: 'Проект 8', value: 108, tone: 'purple' },
+-];
++const PERIOD_OPTIONS = Object.freeze([
++  { value: 'week', label: 'Неделя', caption: 'Текущие 7 дней' },
++  { value: 'month', label: 'Месяц', caption: 'Текущий месяц' },
++  { value: 'quarter', label: 'Квартал', caption: 'Последние 3 месяца' },
++]);
++
++const TASKS_BY_PERIOD = Object.freeze({
++  week: [
++    { id: 1, label: 'Проект 1', total: 14, completed: 10, overdue: 1, tone: 'indigo' },
++    { id: 2, label: 'Проект 2', total: 27, completed: 19, overdue: 2, tone: 'violet' },
++    { id: 3, label: 'Проект 3', total: 11, completed: 8, overdue: 0, tone: 'indigo' },
++    { id: 4, label: 'Проект 4', total: 32, completed: 25, overdue: 1, tone: 'purple' },
++    { id: 5, label: 'Проект 5', total: 19, completed: 14, overdue: 3, tone: 'indigo' },
++    { id: 6, label: 'Проект 6', total: 24, completed: 18, overdue: 1, tone: 'violet' },
++    { id: 7, label: 'Проект 7', total: 13, completed: 11, overdue: 0, tone: 'indigo' },
++    { id: 8, label: 'Проект 8', total: 36, completed: 29, overdue: 2, tone: 'purple' },
++  ],
++  month: [
++    { id: 1, label: 'Проект 1', total: 48, completed: 37, overdue: 3, tone: 'indigo' },
++    { id: 2, label: 'Проект 2', total: 72, completed: 58, overdue: 5, tone: 'violet' },
++    { id: 3, label: 'Проект 3', total: 39, completed: 30, overdue: 2, tone: 'indigo' },
++    { id: 4, label: 'Проект 4', total: 89, completed: 71, overdue: 4, tone: 'purple' },
++    { id: 5, label: 'Проект 5', total: 63, completed: 48, overdue: 6, tone: 'indigo' },
++    { id: 6, label: 'Проект 6', total: 70, completed: 57, overdue: 3, tone: 'violet' },
++    { id: 7, label: 'Проект 7', total: 44, completed: 36, overdue: 1, tone: 'indigo' },
++    { id: 8, label: 'Проект 8', total: 96, completed: 79, overdue: 5, tone: 'purple' },
++  ],
++  quarter: [
++    { id: 1, label: 'Проект 1', total: 118, completed: 91, overdue: 7, tone: 'indigo' },
++    { id: 2, label: 'Проект 2', total: 194, completed: 153, overdue: 12, tone: 'violet' },
++    { id: 3, label: 'Проект 3', total: 102, completed: 81, overdue: 5, tone: 'indigo' },
++    { id: 4, label: 'Проект 4', total: 226, completed: 182, overdue: 9, tone: 'purple' },
++    { id: 5, label: 'Проект 5', total: 161, completed: 123, overdue: 15, tone: 'indigo' },
++    { id: 6, label: 'Проект 6', total: 184, completed: 149, overdue: 8, tone: 'violet' },
++    { id: 7, label: 'Проект 7', total: 127, completed: 106, overdue: 4, tone: 'indigo' },
++    { id: 8, label: 'Проект 8', total: 249, completed: 203, overdue: 11, tone: 'purple' },
++  ],
++});
+ 
+ function ChartIcon() {
+-  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17V13M12 17V8M17 17V5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>;
++  return (
++    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
++      <path d="M7 17V13M12 17V8M17 17V5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
++    </svg>
++  );
+ }
+ 
+ function TasksChart() {
++  const [period, setPeriod] = useState('week');
++  const [activeId, setActiveId] = useState(4);
++  const tasks = TASKS_BY_PERIOD[period];
++
++  const summary = useMemo(() => tasks.reduce((acc, task) => ({
++    total: acc.total + task.total,
++    completed: acc.completed + task.completed,
++    overdue: acc.overdue + task.overdue,
++  }), { total: 0, completed: 0, overdue: 0 }), [tasks]);
++
++  const maxTotal = useMemo(() => Math.max(...tasks.map((task) => task.total)), [tasks]);
++
++  const handlePeriodChange = useCallback((nextPeriod) => {
++    setPeriod(nextPeriod);
++    setActiveId(4);
++  }, []);
++
+   return (
+     <DashboardCard
+       title="Задачи"
+-      action={<span className="tasks-chart__head-icon"><ChartIcon /></span>}
++      action={(
++        <div className="tasks-chart__header-actions">
++          <PeriodMenu
++            value={period}
++            options={PERIOD_OPTIONS}
++            onChange={handlePeriodChange}
++            ariaLabel="Период статистики задач"
++          />
++          <span className="tasks-chart__head-icon"><ChartIcon /></span>
++        </div>
++      )}
+       className="tasks-chart"
+       motion="right"
+     >
++      <div className="tasks-chart__summary">
++        <span><strong>{summary.total}</strong> задач</span>
++        <span><i className="is-completed" />{summary.completed} выполнено</span>
++        <span><i className="is-overdue" />{summary.overdue} просрочено</span>
++      </div>
++
+       <div className="tasks-chart__bars" aria-label="Распределение задач по проектам">
+-        {TASKS.map((task, index) => (
+-          <div className="tasks-chart__item" key={task.label}>
+-            <div className="tasks-chart__track">
++        {tasks.map((task, index) => {
++          const height = Math.max(18, (task.total / maxTotal) * 100);
++          const completion = Math.round((task.completed / task.total) * 100);
++          const active = activeId === task.id;
++
++          return (
++            <button
++              className={`tasks-chart__item ${active ? 'is-active' : ''}`}
++              type="button"
++              key={`${period}-${task.id}`}
++              aria-label={`${task.label}: ${task.total} задач, ${task.completed} выполнено, ${task.overdue} просрочено`}
++              onMouseEnter={() => setActiveId(task.id)}
++              onFocus={() => setActiveId(task.id)}
++              onClick={() => setActiveId(task.id)}
++            >
+               <span
+-                className={`tasks-chart__bar tasks-chart__bar--${task.tone}`}
+-                style={{ '--task-height': `${task.value}px`, '--task-delay': `${180 + index * 55}ms` }}
+-              />
+-            </div>
+-            <span className="tasks-chart__label">{task.label}</span>
+-          </div>
+-        ))}
++                className="tasks-chart__track"
++                style={{
++                  '--task-height': `${height}%`,
++                  '--task-completion': `${completion}%`,
++                  '--task-delay': `${170 + index * 48}ms`,
++                }}
++              >
++                <span className={`tasks-chart__bar tasks-chart__bar--${task.tone}`}>
++                  <span className="tasks-chart__completed" />
++                </span>
++
++                <span className="tasks-chart__tooltip" aria-hidden="true">
++                  <strong>{task.total}</strong>
++                  <span>{task.completed} готово</span>
++                  {task.overdue ? <em>{task.overdue} просрочено</em> : <em className="is-clear">без просрочек</em>}
++                </span>
++              </span>
++
++              <span className="tasks-chart__label">{task.label}</span>
++            </button>
++          );
++        })}
+       </div>
+     </DashboardCard>
+   );
+diff -ruN business_shield_refactor_stage2/features/dashboard/TasksChart/TasksChart.scss business_shield_refactor_stage3/features/dashboard/TasksChart/TasksChart.scss
+--- business_shield_refactor_stage2/features/dashboard/TasksChart/TasksChart.scss	2026-08-07 22:09:45.933203424 +0000
++++ business_shield_refactor_stage3/features/dashboard/TasksChart/TasksChart.scss	2026-08-07 22:40:39.790685123 +0000
+@@ -1,69 +1,233 @@
+ @use '../../../styles/tokens' as *;
+ 
+ .tasks-chart {
+-  min-height: 198px;
++  min-height: 238px;
++  overflow: visible;
++
++  &__header-actions {
++    display: flex;
++    align-items: center;
++    gap: 7px;
++  }
+ 
+   &__head-icon {
+-    color: $color-text-muted;
++    width: 28px;
++    height: 28px;
++    display: grid;
++    place-items: center;
++    border-radius: 9px;
++    color: #8792ad;
++    background: $color-surface-soft;
++
+     svg { width: 13px; height: 13px; }
+   }
+ 
+   .dashboard-card__body {
+     height: calc(100% - 50px);
++    padding-top: 8px;
+     display: flex;
+-    align-items: flex-end;
++    flex-direction: column;
++  }
++
++  &__summary {
++    min-height: 23px;
++    display: flex;
++    align-items: center;
++    gap: 13px;
++    color: $color-text-muted;
++    font-size: 8.5px;
++    font-weight: 530;
++
++    span {
++      display: inline-flex;
++      align-items: center;
++      gap: 5px;
++      white-space: nowrap;
++    }
++
++    strong {
++      color: $color-text;
++      font-family: $font-family-display;
++      font-size: 11px;
++      font-weight: 740;
++      letter-spacing: -.03em;
++    }
++
++    i {
++      width: 6px;
++      height: 6px;
++      border-radius: 50%;
++    }
++
++    .is-completed { background: $color-success; }
++    .is-overdue { background: $color-danger; }
+   }
+ 
+   &__bars {
+     width: 100%;
++    flex: 1;
+     display: grid;
+     grid-template-columns: repeat(8, minmax(0, 1fr));
+-    gap: 8px;
++    gap: 6px;
+     align-items: end;
+   }
+ 
+-  &__item { min-width: 0; text-align: center; }
++  &__item {
++    min-width: 0;
++    padding: 0;
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    border: 0;
++    color: inherit;
++    background: transparent;
++    cursor: pointer;
++    text-align: center;
++    outline: none;
++  }
+ 
+   &__track {
+-    height: 112px;
++    position: relative;
++    width: 100%;
++    height: 126px;
+     display: flex;
+     justify-content: center;
+     align-items: flex-end;
+   }
+ 
++  &__track::before {
++    content: '';
++    position: absolute;
++    inset: 0 27% 0;
++    border-radius: 7px;
++    opacity: 0;
++    background: linear-gradient(180deg, rgba(102, 97, 245, .035), rgba(102, 97, 245, 0));
++    transition: opacity $transition-fast;
++  }
++
+   &__bar {
+-    width: 14px;
+-    max-height: 108px;
++    position: relative;
++    width: 16px;
++    max-height: 112px;
+     height: var(--task-height);
+-    border-radius: 4px 4px 1px 1px;
++    overflow: hidden;
++    border-radius: 6px 6px 2px 2px;
+     transform-origin: bottom;
+-    animation: task-bar-grow 720ms var(--task-delay) cubic-bezier(.16, 1, .3, 1) both;
+-    transition: width $transition-base, filter $transition-base, transform $transition-base;
+-
+-    &--blue { background: #6662f4; }
+-    &--purple { background: #a342ef; }
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22);
++    animation: task-bar-grow 760ms var(--task-delay) cubic-bezier(.16, 1, .3, 1) both;
++    transition:
++      width $transition-spring,
++      filter $transition-base,
++      transform $transition-spring,
++      box-shadow $transition-base;
++
++    &--indigo { background: linear-gradient(180deg, #6b67f6 0%, #5c63e9 100%); }
++    &--violet { background: linear-gradient(180deg, #a542ef 0%, #8352ef 100%); }
++    &--purple { background: linear-gradient(180deg, #a33ff0 0%, #704ef2 100%); }
++  }
++
++  &__completed {
++    position: absolute;
++    inset: auto 0 0;
++    height: var(--task-completion);
++    border-radius: inherit;
++    background: linear-gradient(180deg, rgba(255, 255, 255, .03), rgba(255, 255, 255, .18));
+   }
+ 
+   &__label {
+     display: block;
+     margin-top: 6px;
+     color: $color-text-muted;
+-    font-size: 7px;
++    font-size: 7.5px;
++    font-weight: 520;
+     white-space: nowrap;
++    transition: color $transition-fast, font-weight $transition-fast;
+   }
+ 
+-  &__item:hover &__bar {
+-    width: 18px;
+-    filter: saturate(1.08);
+-    transform: translateY(-2px);
++  &__tooltip {
++    position: absolute;
++    z-index: 10;
++    left: 50%;
++    bottom: calc(var(--task-height) + 5px);
++    min-width: 78px;
++    padding: 7px 8px;
++    display: flex;
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 2px;
++    border: 1px solid rgba(220, 224, 238, .88);
++    border-radius: 10px;
++    opacity: 0;
++    color: $color-text-secondary;
++    background: rgba(255, 255, 255, .95);
++    box-shadow: 0 12px 26px rgba(34, 43, 88, .11);
++    backdrop-filter: blur(12px);
++    pointer-events: none;
++    transform: translate(-50%, 4px) scale(.97);
++    transition: opacity $transition-fast, transform $transition-spring;
++
++    strong {
++      color: $color-text;
++      font-family: $font-family-display;
++      font-size: 13px;
++      font-weight: 760;
++      line-height: 1;
++    }
++
++    span,
++    em {
++      font-size: 7.5px;
++      font-style: normal;
++      font-weight: 540;
++      white-space: nowrap;
++    }
++
++    em { color: $color-danger; }
++    em.is-clear { color: $color-success; }
++  }
++
++  &__item:hover,
++  &__item:focus-visible,
++  &__item.is-active {
++    .tasks-chart__track::before { opacity: 1; }
++
++    .tasks-chart__bar {
++      width: 20px;
++      filter: saturate(1.08);
++      transform: translateY(-2px);
++      box-shadow: 0 9px 18px rgba(92, 82, 202, .16), inset 0 1px 0 rgba(255, 255, 255, .3);
++    }
++
++    .tasks-chart__label {
++      color: $color-text-secondary;
++      font-weight: 650;
++    }
++  }
++
++  &__item:hover &__tooltip,
++  &__item:focus-visible &__tooltip {
++    opacity: 1;
++    transform: translate(-50%, 0) scale(1);
+   }
+ }
+ 
+ @keyframes task-bar-grow {
+-  from { transform: scaleY(0); opacity: .35; }
+-  to { transform: scaleY(1); opacity: 1; }
++  from { transform: scaleY(0); opacity: .2; filter: saturate(.72); }
++  to { transform: scaleY(1); opacity: 1; filter: saturate(1); }
++}
++
++@media (max-width: 760px) {
++  .tasks-chart {
++    &__summary span:nth-child(n + 2) { display: none; }
++    &__bars { gap: 3px; }
++    &__bar { width: 13px; }
++  }
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
+-  .tasks-chart__bar { animation: none; }
++  .tasks-chart__bar,
++  .tasks-chart__tooltip {
++    animation: none;
++    transition: none;
++  }
+ }
+diff -ruN business_shield_refactor_stage2/styles/_tokens.scss business_shield_refactor_stage3/styles/_tokens.scss
+--- business_shield_refactor_stage2/styles/_tokens.scss	2026-08-07 22:30:19.037262815 +0000
++++ business_shield_refactor_stage3/styles/_tokens.scss	2026-08-07 22:40:40.213044101 +0000
+@@ -1,5 +1,5 @@
+ $font-family-base: "Onest", "Manrope", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+-$font-family-display: "Onest", "Manrope", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++$font-family-display: "Manrope", "Onest", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+ 
+ $color-page: #eef1fb;
+ $color-surface: #ffffff;
+diff -ruN business_shield_refactor_stage2/styles/dashboard.scss business_shield_refactor_stage3/styles/dashboard.scss
+--- business_shield_refactor_stage2/styles/dashboard.scss	2026-08-07 22:30:19.038562644 +0000
++++ business_shield_refactor_stage3/styles/dashboard.scss	2026-08-07 22:40:40.213156858 +0000
+@@ -1,5 +1,5 @@
+ @use './tokens' as *;
+-@import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;450;500;550;600;650;700;750;800&display=swap');
++@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Onest:wght@400;450;500;550;600;650;700;750;800&display=swap');
+ 
+ .dashboard-page {
+   display: flex;

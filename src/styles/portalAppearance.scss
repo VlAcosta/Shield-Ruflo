@@ -1,0 +1,686 @@
+/* Stage A26 — global portal appearance layer.
+   This file intentionally contains only runtime theme overrides. Feature styles
+   remain local; the account-scoped appearance preference changes the shell and
+   surfaces without duplicating component logic. */
+
+body.portal-dark-active {
+  --portal-dark-bg: #090d18;
+  --portal-dark-shell: #0d1322;
+  --portal-dark-card: #12192b;
+  --portal-dark-card-2: #171f34;
+  --portal-dark-card-3: #1c263d;
+  --portal-dark-line: rgba(136, 149, 188, .16);
+  --portal-dark-line-strong: rgba(139, 124, 255, .3);
+  --portal-dark-text: #f3f5ff;
+  --portal-dark-secondary: #c0c9df;
+  --portal-dark-muted: #8290ad;
+  --portal-dark-violet: #9284ff;
+  --portal-dark-green: #43d5a0;
+  --portal-dark-danger: #ff718d;
+  --portal-dark-shadow: 0 22px 58px rgba(0, 0, 0, .23);
+}
+
+body.portal-dark-active .portal .portal__page {
+  color: var(--portal-dark-text);
+  background:
+    radial-gradient(circle at 72% -20%, rgba(116, 91, 255, .07), transparent 32%),
+    linear-gradient(180deg, #090e1a 0%, #0b1020 100%);
+}
+
+body.portal-dark-active .portal .portal__page :is(input, textarea, select) {
+  color: var(--portal-dark-text);
+  border-color: var(--portal-dark-line);
+  background-color: #11192a;
+}
+body.portal-dark-active .portal .portal__page :is(input, textarea)::placeholder { color: #64718e; }
+body.portal-dark-active .portal .portal__page select { color-scheme: dark; }
+
+/* Shared loading / error / toast surfaces. */
+body.portal-dark-active .portal .portal__page :is(
+  .tasks-error,.reports-error,.subscriptions-error,.notifications-error,.support-chat-error,
+  .profile-error,.reviews-intel-state,.rep-state,.automation-state
+) {
+  color: var(--portal-dark-text);
+  border-color: var(--portal-dark-line);
+  background: var(--portal-dark-card);
+  box-shadow: var(--portal-dark-shadow);
+}
+body.portal-dark-active .portal .portal__page :is(
+  .tasks-toast,.reports-toast,.subscriptions-toast,.notifications-toast,.profile-toast
+) {
+  color: var(--portal-dark-secondary);
+  border-color: var(--portal-dark-line);
+  background: #171f34;
+  box-shadow: 0 18px 48px rgba(0,0,0,.28);
+  backdrop-filter: none;
+}
+body.portal-dark-active .portal .portal__page :is(
+  .tasks-skeleton span,.reports-skeleton span,.subscriptions-skeleton span,
+  .notifications-skeleton span,.profile-skeleton span,.support-chat-skeleton span
+) {
+  border-color: var(--portal-dark-line);
+  background: linear-gradient(100deg,#121a2b 20%,#202a42 40%,#121a2b 60%);
+  background-size: 220% 100%;
+}
+body.portal-dark-active .portal .portal__page :is(.profile-skeleton span,.notifications-skeleton span)::after { background: transparent; }
+
+/* Reviews Intelligence */
+body.portal-dark-active .portal .portal__page .reviews-intel-page { color: var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .reviews-intel-hero {
+  border-color: rgba(142,126,255,.2);
+  background:
+    radial-gradient(circle at 78% 20%, rgba(161,79,239,.18), transparent 32%),
+    radial-gradient(circle at 20% -20%, rgba(104,111,255,.12), transparent 36%),
+    linear-gradient(135deg,#12192c,#171a35 58%,#21183b);
+  box-shadow: 0 24px 64px rgba(0,0,0,.24);
+}
+body.portal-dark-active .portal .portal__page .reviews-intel-hero__copy > p { color: #99a5c1; }
+body.portal-dark-active .portal .portal__page .reviews-intel-hero h1 { color: var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(
+  .reviews-intel-metrics > article,.reviews-intel-controlbar,.reviews-intel__queue,
+  .reviews-intel__inspector,.reviews-intel__sidecar,.reviews-intel-card,
+  .reviews-copilot,.reviews-inspector__history,.reviews-legal-dialog,
+  .reviews-settings-layer > section,.reviews-intel-notice
+) {
+  color: var(--portal-dark-text);
+  border-color: var(--portal-dark-line);
+  background: linear-gradient(145deg,#141c30,#111827);
+  box-shadow: 0 16px 42px rgba(0,0,0,.16);
+}
+body.portal-dark-active .portal .portal__page :is(.reviews-intel-search,.reviews-intel-controlbar__queues,.reviews-intel-settingsBtn) {
+  border-color: var(--portal-dark-line);
+  background: #171f34;
+  color: #b7c0d6;
+}
+body.portal-dark-active .portal .portal__page :is(.reviews-intel-card,.reviews-inspector__history) p,
+body.portal-dark-active .portal .portal__page :is(.reviews-intel-card,.reviews-inspector__history) small { color: var(--portal-dark-muted); }
+
+/* Reputation Intelligence uses its own variables, so overriding them keeps most
+   component styling semantic without a second stylesheet. */
+body.portal-dark-active .portal .portal__page .rep-page {
+  --ink: var(--portal-dark-text);
+  --muted: var(--portal-dark-muted);
+  --line: var(--portal-dark-line);
+}
+body.portal-dark-active .portal .portal__page .rep-hero {
+  background: linear-gradient(130deg,#121a2c,#171a34 54%,#20223e);
+  box-shadow: 0 24px 68px rgba(0,0,0,.22);
+}
+body.portal-dark-active .portal .portal__page .rep-hero p { color:#9da8c3; }
+body.portal-dark-active .portal .portal__page .rep-periods { background:#101827; }
+body.portal-dark-active .portal .portal__page .rep-periods button { color:#8793af; }
+body.portal-dark-active .portal .portal__page .rep-periods button.is-active { color:#c1b8ff;background:#1d2740;box-shadow:none; }
+body.portal-dark-active .portal .portal__page :is(.rep-kpis article,.rep-card,.rep-platforms article,.rep-insight) {
+  border-color: var(--portal-dark-line);
+  background:#121a2b;
+  box-shadow:0 14px 36px rgba(0,0,0,.15);
+}
+body.portal-dark-active .portal .portal__page :is(.rep-kpis span,.rep-kpis small,.rep-card > header small,.rep-insight p,.rep-platforms dl > div,.rep-recommendations p,.rep-empty span) { color:var(--portal-dark-muted); }
+body.portal-dark-active .portal .portal__page .rep-platforms dd { color:#dce2f2; }
+body.portal-dark-active .portal .portal__page :is(.rep-platforms__bar,.rep-reason__track) { background:#242e45; }
+body.portal-dark-active .portal .portal__page .rep-trend__grid { stroke:#273149; }
+body.portal-dark-active .portal .portal__page .rep-trend__point { fill:#121a2b; }
+body.portal-dark-active .portal .portal__page .rep-recommendations article { border-color:#252e44; }
+body.portal-dark-active .portal .portal__page .rep-empty { border-color:#303b55; }
+
+/* Automation Engine */
+body.portal-dark-active .portal .portal__page .automation-page { --ink:var(--portal-dark-text);--muted:var(--portal-dark-muted);--line:var(--portal-dark-line); }
+body.portal-dark-active .portal .portal__page :is(.automation-kpis article,.automation-rules,.automation-log) {
+  border-color:var(--portal-dark-line);background:#121a2b;box-shadow:0 15px 38px rgba(0,0,0,.16);
+}
+body.portal-dark-active .portal .portal__page :is(.automation-kpis article span,.automation-kpis article small,.automation-rule__title p,.automation-log p,.automation-log small,.automation-empty span) { color:var(--portal-dark-muted); }
+body.portal-dark-active .portal .portal__page :is(.automation-rule,.automation-log article) { border-color:#252e44; }
+body.portal-dark-active .portal .portal__page .automation-rule__rail { background:#252f47; }
+body.portal-dark-active .portal .portal__page .automation-rule__flow span { color:#a8b3cd;background:#1c2539; }
+body.portal-dark-active .portal .portal__page .automation-rule__actions > button { color:#aab5ce;background:#1a2338; }
+body.portal-dark-active .portal .portal__page .automation-switch span { background:#303b55; }
+body.portal-dark-active .portal .portal__page .automation-modal__dialog { color:var(--portal-dark-text);background:#111827;box-shadow:0 34px 100px rgba(0,0,0,.46); }
+body.portal-dark-active .portal .portal__page .automation-modal__dialog > footer { border-color:var(--portal-dark-line); }
+body.portal-dark-active .portal .portal__page :is(.automation-chips button,.automation-actions-grid button,.automation-modal__dialog > footer button) { color:#aab5ce;border-color:var(--portal-dark-line);background:#171f34; }
+body.portal-dark-active .portal .portal__page .automation-actions-grid button.is-active,
+body.portal-dark-active .portal .portal__page .automation-chips button.is-active { color:#c2b9ff;border-color:#6f62dc;background:#221f45; }
+
+/* Tasks */
+body.portal-dark-active .portal .portal__page .tasks-workspace { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .tasks-workspace__toolbar { border-color:var(--portal-dark-line);background:#111827;box-shadow:0 10px 30px rgba(0,0,0,.13);backdrop-filter:none; }
+body.portal-dark-active .portal .portal__page .tasks-workspace__search { color:var(--portal-dark-text);background:#171f34; }
+body.portal-dark-active .portal .portal__page .tasks-workspace__search:focus-within { border-color:rgba(139,124,255,.32);background:#1a2338; }
+body.portal-dark-active .portal .portal__page .tasks-workspace__select select { color:#b4bfd7;border-color:var(--portal-dark-line);background:#171f34; }
+body.portal-dark-active .portal .portal__page :is(.tasks-workspace__summary,.task-board,.task-list,.task-details,.task-create-modal__dialog) { color:var(--portal-dark-text);border-color:var(--portal-dark-line);background:#121a2b; }
+body.portal-dark-active .portal .portal__page :is(.task-board__column,.task-list__item,.task-card,.task-details__section) { border-color:var(--portal-dark-line);background:#161f33; }
+
+/* Reports */
+body.portal-dark-active .portal .portal__page .reports-workspace { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .reports-command { border-color:rgba(139,124,255,.2);background:linear-gradient(135deg,#141b30,#191a37 52%,#292044);box-shadow:0 22px 58px rgba(0,0,0,.2); }
+body.portal-dark-active .portal .portal__page .reports-workspace__navigation { border-color:var(--portal-dark-line);background:#111827; }
+body.portal-dark-active .portal .portal__page .reports-workspace__tabs { background:#0e1525; }
+body.portal-dark-active .portal .portal__page .reports-workspace__tabs button { color:#8d98b4; }
+body.portal-dark-active .portal .portal__page .reports-workspace__tabs button.is-active { color:#f0f3ff;background:#1d2740;box-shadow:none; }
+body.portal-dark-active .portal .portal__page :is(.report-list,.report-builder,.report-schedule,.report-detail) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(.report-list__table,.report-builder__panel,.report-schedule__panel,.report-detail__card,[class*="report-"][class*="__card"]) { border-color:var(--portal-dark-line);background:#121a2b; }
+
+/* Subscriptions / billing */
+body.portal-dark-active .portal .portal__page .subscriptions-workspace { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(.current-plan,.package-store,.payment-history,.plan-limits,.subscription-cart) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(
+  .current-plan__card,.package-store__card,.payment-history__card,.plan-limits__card,.subscription-cart__card,
+  .subscriptions-workspace__read-only
+) { border-color:var(--portal-dark-line);background:#121a2b;box-shadow:0 15px 38px rgba(0,0,0,.15); }
+
+/* Notifications */
+body.portal-dark-active .portal .portal__page .notifications-workspace { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(.notification-tabs,.notification-settings,.notification-feed) { border-color:var(--portal-dark-line);background:#121a2b; }
+body.portal-dark-active .portal .portal__page :is(.notification-feed__item,.notification-settings__row) { border-color:#252f46; }
+
+/* Account / Company / Security / Team */
+body.portal-dark-active .portal .portal__page .profile-tabs { border-color:var(--portal-dark-line);background:#111827;box-shadow:0 12px 32px rgba(0,0,0,.13); }
+body.portal-dark-active .portal .portal__page .profile-tabs__item { color:#8f9bb7; }
+body.portal-dark-active .portal .portal__page .profile-tabs__item:hover { color:#eef2ff;background:#182136; }
+body.portal-dark-active .portal .portal__page .profile-tabs__item.is-active { color:#fff;background:linear-gradient(135deg,#7366f7,#a943ec); }
+body.portal-dark-active .portal .portal__page :is(.account-center__card,.company-profile,.security-profile,.users-profile) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(
+  .account-center__card,.company-profile__registry,.company-profile__grid > section,
+  .security-profile > section,.security-profile__session,
+  .users-profile__access-policies,.users-profile__security-log,.users-profile__security-mini-log
+) { border-color:var(--portal-dark-line);background:#121a2b;box-shadow:0 13px 34px rgba(0,0,0,.13); }
+body.portal-dark-active .portal .portal__page .account-center__cardHead { border-color:#263048; }
+body.portal-dark-active .portal .portal__page :is(.company-profile,.security-profile,.users-profile) :is(p,small,label) { color:var(--portal-dark-muted); }
+body.portal-dark-active .portal .portal__page .users-profile__security-view { background:linear-gradient(180deg,#0d1423,#0b111f); }
+body.portal-dark-active .portal .portal__page .users-profile__access-policies > header,
+body.portal-dark-active .portal .portal__page .users-profile__security-log > header { border-color:#273149; }
+body.portal-dark-active .portal .portal__page .users-profile__access-policies > div > button { color:var(--portal-dark-text);border-color:#252e44;background:#121a2b; }
+body.portal-dark-active .portal .portal__page .users-profile__access-policies > div > button:hover { background:#182136; }
+
+/* Support chat */
+body.portal-dark-active .portal .portal__page .support-chat { color:var(--portal-dark-text);border-color:var(--portal-dark-line);background:#101827;box-shadow:0 24px 62px rgba(0,0,0,.2); }
+body.portal-dark-active .portal .portal__page .support-chat__channels { border-color:#263149;background:radial-gradient(circle at 20% 0%,rgba(115,101,246,.1),transparent 27%),#0e1525; }
+body.portal-dark-active .portal .portal__page .support-chat__channelsHead :is(h2) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .support-chat__channelsHead :is(span,p) { color:var(--portal-dark-muted); }
+body.portal-dark-active .portal .portal__page .support-chat__channel { color:var(--portal-dark-text);border-color:#263149;background:#141d31; }
+body.portal-dark-active .portal .portal__page .support-chat__channel.is-active { background:linear-gradient(115deg,#182136,color-mix(in srgb,var(--channel-color) 9%,#182136)); }
+body.portal-dark-active .portal .portal__page :is(.support-chat__header,.support-chat__composer,.support-chat__pinned,.support-chat__quickButton) { border-color:var(--portal-dark-line);background:#121a2b; }
+body.portal-dark-active .portal .portal__page .support-chat__conversation { background:#0f1626; }
+body.portal-dark-active .portal .portal__page .support-chat__messageContent { color:#dce2f2;background:#182136; }
+body.portal-dark-active .portal .portal__page .support-chat__message.is-client .support-chat__messageContent { color:#f4f2ff;background:#292454; }
+
+/* Portal FAQ */
+body.portal-dark-active .portal .portal__page .support-faq { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .support-faq__hero { border-color:var(--portal-dark-line);background:radial-gradient(circle at 83% 18%,rgba(164,66,239,.13),transparent 27%),radial-gradient(circle at 8% 100%,rgba(102,97,245,.09),transparent 31%),linear-gradient(135deg,#121a2b,#171a34);box-shadow:0 24px 64px rgba(0,0,0,.18); }
+body.portal-dark-active .portal .portal__page .support-faq__hero h2 { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .support-faq__hero p { color:#98a4c0; }
+body.portal-dark-active .portal .portal__page .support-faq__search { border-color:var(--portal-dark-line);background:#111827; }
+body.portal-dark-active .portal .portal__page :is(.support-faq__aside,.support-faq__question,.support-faq__popularCard,.support-faq__cta) { color:var(--portal-dark-text);border-color:var(--portal-dark-line);background:#121a2b; }
+body.portal-dark-active .portal .portal__page .support-faq__question.is-open { border-color:rgba(139,124,255,.3);background:#171f34; }
+body.portal-dark-active .portal .portal__page .support-faq__answer { color:#98a4c0; }
+
+/* Access-denied and generic cards rendered directly in the portal. */
+body.portal-dark-active .portal .portal__page :is(.access-denied,.card) { border-color:var(--portal-dark-line);background-color:#121a2b;color:var(--portal-dark-text); }
+
+/* Modal surfaces opened by portal features. */
+body.portal-dark-active :is(.account-contact-modal,.task-create-modal,.invite-user-modal,.role-editor-modal) [role="dialog"],
+body.portal-dark-active :is(.account-contact-modal__dialog,.task-create-modal__dialog,.invite-user-modal__dialog,.role-editor-modal__dialog) {
+  color:var(--portal-dark-text);border-color:var(--portal-dark-line);background:#111827;box-shadow:0 30px 90px rgba(0,0,0,.42);
+}
+
+body.portal-dark-active .portal .portal__page,
+body.portal-dark-active .portal__sidebar,
+body.portal-dark-active .portal__topbar,
+body.portal-dark-active .portal .portal__page :is(button,input,textarea,select) {
+  transition: background-color 220ms ease, border-color 220ms ease, color 180ms ease, box-shadow 220ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.portal-dark-active .portal .portal__page,
+  body.portal-dark-active .portal__sidebar,
+  body.portal-dark-active .portal__topbar,
+  body.portal-dark-active .portal .portal__page :is(button,input,textarea,select) { transition:none; }
+}
+
+/* ===== Stage A27.2: full dark-theme contrast pass ===== */
+body.portal-dark-active {
+  color-scheme: dark;
+  --portal-dark-card-soft: #151e31;
+  --portal-dark-control: #182238;
+  --portal-dark-control-hover: #1d2942;
+  --portal-dark-control-border: rgba(139, 151, 190, .18);
+}
+
+/* Keep the entire portal shell consistently dark. */
+body.portal-dark-active .portal__contentWrap,
+body.portal-dark-active .portal .portal__page,
+body.portal-dark-active .portal .portal__page--relative {
+  background-color: #090e1a;
+}
+
+/* Dashboard: remove remaining light islands from charts / cards. */
+body.portal-dark-active .dashboard-page.is-dark :is(
+  .tasks-chart__summary-stats > div,
+  .tasks-chart__tooltip,
+  .dashboard-rating__health,
+  .dashboard-rating__tooltip,
+  .dashboard-processes__item,
+  .dashboard-checklist__toolbar,
+  .dashboard-checklist__table,
+  .dashboard-calendar__month,
+  .dashboard-calendar__agenda,
+  .dashboard-calendar__event,
+  .dashboard-calendar__upcoming
+) {
+  color: var(--portal-dark-secondary);
+  border-color: var(--portal-dark-control-border);
+  background: var(--portal-dark-card-soft);
+  box-shadow: none;
+}
+body.portal-dark-active .dashboard-page.is-dark .tasks-chart__summary-stats > div strong,
+body.portal-dark-active .dashboard-page.is-dark .dashboard-rating__health strong,
+body.portal-dark-active .dashboard-page.is-dark .dashboard-processes__top > strong,
+body.portal-dark-active .dashboard-page.is-dark .dashboard-checklist__task,
+body.portal-dark-active .dashboard-page.is-dark .dashboard-calendar__event strong {
+  color: var(--portal-dark-text);
+}
+body.portal-dark-active .dashboard-page.is-dark .dashboard-rating__health > div,
+body.portal-dark-active .dashboard-page.is-dark .dashboard-rating__health [class*="track"] { background:#2a3550; }
+body.portal-dark-active .dashboard-page.is-dark .dashboard-rating__gauge::before,
+body.portal-dark-active .dashboard-page.is-dark .dashboard-processes__ring::before { background:#111827; }
+body.portal-dark-active .dashboard-page.is-dark .dashboard-processes__item [class*="badge"],
+body.portal-dark-active .dashboard-page.is-dark .dashboard-processes__item [class*="status"] {
+  color:#b9c4dc;
+  background:#202a42;
+}
+body.portal-dark-active .dashboard-page.is-dark .dashboard-checklist__row--head { background:#0f1726; }
+body.portal-dark-active .dashboard-page.is-dark .dashboard-checklist__row:not(.dashboard-checklist__row--head) { background:#131b2d; }
+body.portal-dark-active .dashboard-page.is-dark .dashboard-checklist__row:not(.dashboard-checklist__row--head):hover { background:#182238; }
+
+/* Reviews Intelligence: hero policy, review body, sidecar and AI workspace. */
+body.portal-dark-active .portal .portal__page .reviews-intel-hero__mode {
+  border-color:rgba(145,129,255,.2);
+  background:rgba(22,30,50,.88);
+}
+body.portal-dark-active .portal .portal__page .reviews-intel-hero__mode span,
+body.portal-dark-active .portal .portal__page .reviews-intel-hero__mode small { color:#8996b4; }
+body.portal-dark-active .portal .portal__page .reviews-intel-hero__mode strong { color:#c3bbff;background:rgba(140,124,255,.13); }
+body.portal-dark-active .portal .portal__page :is(
+  .reviews-inspector__review,
+  .reviews-inspector__review-main,
+  .reviews-inspector__body,
+  .reviews-inspector__author,
+  .reviews-intel-sidecar__card,
+  .reviews-sidecar__card,
+  .reviews-intel__sidecar > section,
+  .reviews-copilot__composer,
+  .reviews-copilot textarea,
+  .reviews-inspector__workflow,
+  .reviews-inspector__action
+) {
+  border-color:var(--portal-dark-control-border);
+  background:#131c2f;
+  color:var(--portal-dark-secondary);
+}
+body.portal-dark-active .portal .portal__page :is(
+  .reviews-inspector__review,
+  .reviews-inspector__review-main,
+  .reviews-inspector__body,
+  .reviews-inspector__author,
+  .reviews-intel-sidecar__card,
+  .reviews-sidecar__card,
+  .reviews-intel__sidecar > section
+) :is(h2,h3,h4,strong,b) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(
+  .reviews-inspector__review,
+  .reviews-inspector__review-main,
+  .reviews-inspector__body,
+  .reviews-intel-sidecar__card,
+  .reviews-sidecar__card,
+  .reviews-intel__sidecar > section
+) :is(p,small,span:not([class*="badge"]):not([class*="pill"])) { color:#8794b0; }
+body.portal-dark-active .portal .portal__page .reviews-copilot textarea {
+  color:#edf1ff;
+  background:#0f1727;
+}
+body.portal-dark-active .portal .portal__page .reviews-copilot textarea::placeholder { color:#687591; }
+body.portal-dark-active .portal .portal__page :is(.reviews-inspector__tag,.reviews-intel-tag) { color:#bdb4ff;background:rgba(140,124,255,.12); }
+
+/* Integrations: dark controls, status chips and provider actions. */
+body.portal-dark-active .portal .portal__page .integration-hub :is(button,input,select) { border-color:var(--portal-dark-control-border); }
+body.portal-dark-active .portal .portal__page :is(
+  .integration-provider-card__action,
+  .integration-provider-card__sync,
+  .integration-inspector__action,
+  .integration-inspector__diagnostics button,
+  .integration-hub__filters button
+) {
+  color:#c3cbe0;
+  background:var(--portal-dark-control);
+}
+body.portal-dark-active .portal .portal__page :is(
+  .integration-provider-card__action,
+  .integration-provider-card__sync,
+  .integration-inspector__action,
+  .integration-inspector__diagnostics button,
+  .integration-hub__filters button
+):hover:not(:disabled) { color:#f1f3ff;background:var(--portal-dark-control-hover); }
+body.portal-dark-active .portal .portal__page [class*="integration-"][class*="status"],
+body.portal-dark-active .portal .portal__page [class*="integration-"][class*="badge"] {
+  border-color:rgba(139,151,190,.16);
+}
+
+/* Subscriptions: all commerce surfaces become native dark instead of white sheets. */
+body.portal-dark-active .portal .portal__page :is(
+  .package-store,
+  .package-card,
+  .subscription-cart,
+  .payment-history,
+  .plan-limits
+) {
+  color:var(--portal-dark-text);
+  border-color:var(--portal-dark-line);
+  background:#121a2b;
+  box-shadow:0 15px 38px rgba(0,0,0,.15);
+}
+body.portal-dark-active .portal .portal__page .package-card {
+  background:radial-gradient(circle at 98% -18%,var(--package-soft),transparent 40%),#151e31;
+}
+body.portal-dark-active .portal .portal__page :is(.package-store,.package-card,.subscription-cart,.payment-history,.plan-limits) :is(h2,h3,h4,strong) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page :is(.package-store,.package-card,.subscription-cart,.payment-history,.plan-limits) :is(p,small,span,label) { color:#8794b0; }
+body.portal-dark-active .portal .portal__page .package-card__counter,
+body.portal-dark-active .portal .portal__page .package-card__counter input,
+body.portal-dark-active .portal .portal__page .subscription-cart__promo-field,
+body.portal-dark-active .portal .portal__page .subscription-cart__item {
+  border-color:var(--portal-dark-control-border);
+  background:#182238;
+  color:var(--portal-dark-text);
+}
+body.portal-dark-active .portal .portal__page .package-card__counter button { color:#96a2bd;background:#111827; }
+body.portal-dark-active .portal .portal__page .subscription-cart__summary { border-color:rgba(139,151,190,.13); }
+body.portal-dark-active .portal .portal__page .payment-history__table-head { color:#6f7d9b;background:#0f1726; }
+body.portal-dark-active .portal .portal__page .payment-history__row { border-color:rgba(139,151,190,.09); }
+body.portal-dark-active .portal .portal__page .payment-history__row:hover { background:#182238; }
+body.portal-dark-active .portal .portal__page .plan-limits .ui-progress { background:#28334c; }
+
+/* Reports command center / report list / builder. Keep the actual paper preview white. */
+body.portal-dark-active .portal .portal__page .reports-command__overview,
+body.portal-dark-active .portal .portal__page .reports-command__metrics article {
+  border-color:var(--portal-dark-control-border);
+  background:#151e31;
+  box-shadow:none;
+}
+body.portal-dark-active .portal .portal__page .reports-command__ring { background:conic-gradient(#8d7cff var(--reports-progress),#2b3650 0); }
+body.portal-dark-active .portal .portal__page .reports-command__ring::after { background:#111827;box-shadow:inset 0 0 0 1px #263149; }
+body.portal-dark-active .portal .portal__page .reports-command__overview :is(strong),
+body.portal-dark-active .portal .portal__page .reports-command__metrics article strong { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .reports-command__overview :is(span,small),
+body.portal-dark-active .portal .portal__page .reports-command__metrics article :is(span,small) { color:#7f8ca9; }
+body.portal-dark-active .portal .portal__page .reports-command__actions button:not(.is-primary) { color:#bbc4da;border-color:var(--portal-dark-control-border);background:#182238; }
+body.portal-dark-active .portal .portal__page .reports-command__actions button:not(.is-primary):hover { background:#1d2942; }
+body.portal-dark-active .portal .portal__page :is(.report-list__toolbar,.report-list__surface,.report-builder__controls,.report-builder__preview) {
+  color:var(--portal-dark-text);
+  border-color:var(--portal-dark-line);
+  background:#121a2b;
+  box-shadow:0 15px 38px rgba(0,0,0,.14);
+}
+body.portal-dark-active .portal .portal__page .report-list__search,
+body.portal-dark-active .portal .portal__page .report-list__filter-wrap,
+body.portal-dark-active .portal .portal__page .report-builder__dates label,
+body.portal-dark-active .portal .portal__page .report-builder__block,
+body.portal-dark-active .portal .portal__page .report-builder__periods {
+  border-color:var(--portal-dark-control-border);
+  background:#151e31;
+}
+body.portal-dark-active .portal .portal__page .report-builder__periods button { color:#8996b4; }
+body.portal-dark-active .portal .portal__page .report-builder__periods button:hover { color:#eef2ff;background:#1b263d; }
+body.portal-dark-active .portal .portal__page .report-builder__periods button.is-active { color:#c8c0ff;background:#222c47;box-shadow:none; }
+body.portal-dark-active .portal .portal__page .report-builder__block.is-enabled { background:color-mix(in srgb,var(--builder-tone) 8%,#151e31); }
+body.portal-dark-active .portal .portal__page .report-builder__check { border-color:#3a4662;background:#111827; }
+body.portal-dark-active .portal .portal__page .report-list__head { color:#6f7c99;background:#0f1726;border-color:rgba(139,151,190,.09); }
+body.portal-dark-active .portal .portal__page .report-list__row { border-color:rgba(139,151,190,.09);background:#131b2d; }
+body.portal-dark-active .portal .portal__page .report-list__row:hover { background:#182238; }
+body.portal-dark-active .portal .portal__page .report-list__copy strong { color:#eef2ff; }
+body.portal-dark-active .portal .portal__page .report-list__cell,
+body.portal-dark-active .portal .portal__page .report-list__copy span { color:#8592af; }
+body.portal-dark-active .portal .portal__page .report-builder__preview { background:radial-gradient(circle at 90% -15%,rgba(102,97,245,.08),transparent 28%),#101827; }
+body.portal-dark-active .portal .portal__page .report-builder__preview-head strong { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .report-builder__preview-head span { color:#7f8ca9; }
+/* The report paper intentionally remains light: it previews the exported document. */
+body.portal-dark-active .portal .portal__page .report-builder__sheet { color:#1f2554;background:#fff;border-color:#dfe3ed; }
+body.portal-dark-active .portal .portal__page .report-builder__sheet :is(.report-builder__preview-block) { background:#fafbfe;border-color:#eceef5; }
+body.portal-dark-active .portal .portal__page .report-builder__sheet :is(strong) { color:#1f2554; }
+
+/* Tasks: dark Kanban cards and detail surfaces. */
+body.portal-dark-active .portal .portal__page .tasks-workspace__view { border-color:var(--portal-dark-control-border);background:#111827; }
+body.portal-dark-active .portal .portal__page .tasks-workspace__view button.is-active { color:#c3bbff;background:#222c47;box-shadow:none; }
+body.portal-dark-active .portal .portal__page .task-board__column { border-color:var(--portal-dark-line);background:#121a2b; }
+body.portal-dark-active .portal .portal__page .task-board__card {
+  color:var(--portal-dark-text);
+  border-color:var(--portal-dark-control-border);
+  background:#182238;
+  box-shadow:0 8px 22px rgba(0,0,0,.12);
+}
+body.portal-dark-active .portal .portal__page .task-board__card:hover { border-color:rgba(145,129,255,.3);background:#1d2942;box-shadow:0 14px 30px rgba(0,0,0,.18); }
+body.portal-dark-active .portal .portal__page .task-board__card :is(h3,strong) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .task-board__card :is(p,small,span:not([class*="priority"]):not([class*="tag"])) { color:#8996b4; }
+body.portal-dark-active .portal .portal__page .task-board__add { color:#7785a3;border-color:#2b3650;background:#141d30; }
+body.portal-dark-active .portal .portal__page .task-board__add:hover { color:#c1b8ff;border-color:rgba(145,129,255,.25);background:#1b263d; }
+body.portal-dark-active :is(.task-create-modal__dialog,.task-details) { color:var(--portal-dark-text);border-color:var(--portal-dark-line);background:#121a2b; }
+body.portal-dark-active :is(.task-create-modal__dialog,.task-details) :is(input,textarea,select,.task-details__check,.task-details__comment-form,.task-details__actions) { border-color:var(--portal-dark-control-border);background:#151e31;color:var(--portal-dark-text); }
+
+/* Account / company / team security: remove the remaining white contact and form surfaces. */
+body.portal-dark-active .portal .portal__page :is(.account-center__contact,.account-center__currentDevice,.account-center__preference,.account-center__securityMetric) {
+  border-color:var(--portal-dark-control-border);
+  background:#151e31;
+  color:var(--portal-dark-secondary);
+}
+body.portal-dark-active .portal .portal__page .account-center__contact > button,
+body.portal-dark-active .portal .portal__page .account-center__textAction {
+  color:#bdb4ff;
+  border-color:var(--portal-dark-control-border);
+  background:#1a2440;
+}
+body.portal-dark-active .portal .portal__page .account-center__contact > button:hover,
+body.portal-dark-active .portal .portal__page .account-center__textAction:hover { background:#202b47; }
+body.portal-dark-active .portal .portal__page .account-center__fields input,
+body.portal-dark-active .portal .portal__page .company-profile__field input {
+  color:#eef2ff;
+  border-color:#27334d;
+  background:#111827;
+}
+body.portal-dark-active .portal .portal__page .account-center__fields input:focus,
+body.portal-dark-active .portal .portal__page .company-profile__field input:focus { background:#151e31;border-color:rgba(145,129,255,.38); }
+body.portal-dark-active .portal .portal__page .company-profile {
+  color:var(--portal-dark-text);
+  border-color:var(--portal-dark-line);
+  background:#121a2b;
+  box-shadow:0 18px 44px rgba(0,0,0,.16);
+}
+body.portal-dark-active .portal .portal__page .company-profile :is(h2,strong,dd) { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .company-profile :is(p,span,dt) { color:#8592ae; }
+body.portal-dark-active .portal .portal__page .company-profile footer { border-color:rgba(139,151,190,.12); }
+body.portal-dark-active .portal .portal__page .company-profile__registry { border-color:rgba(68,213,160,.18);background:linear-gradient(135deg,rgba(68,213,160,.09),rgba(19,183,211,.045)); }
+body.portal-dark-active .portal .portal__page :is(
+  .users-profile__role-card,.users-profile__matrix,.users-profile__activity-feed,
+  .users-profile__device-center,.users-profile__device-list article,.users-profile__inspector-tabs
+) { border-color:var(--portal-dark-control-border);background:#151e31;color:var(--portal-dark-secondary); }
+body.portal-dark-active .portal .portal__page .users-profile__matrix-head { color:#75829f;background:#0f1726; }
+body.portal-dark-active .portal .portal__page .users-profile__matrix-row { border-color:rgba(139,151,190,.09); }
+body.portal-dark-active .portal .portal__page .users-profile__activity-feed article { border-color:rgba(139,151,190,.09); }
+body.portal-dark-active .portal .portal__page .users-profile__inspector-tabs button.is-active { color:#c3bbff;background:#222c47;box-shadow:none; }
+body.portal-dark-active .portal .portal__page .users-profile__device-list article.is-current { background:linear-gradient(145deg,rgba(126,108,255,.08),#151e31); }
+
+/* Support chat: no white message strips / composer in dark mode. */
+body.portal-dark-active .portal .portal__page .support-chat__header { background:#121a2b; }
+body.portal-dark-active .portal .portal__page .support-chat__pinned { color:#a8b4cc;border-color:var(--portal-dark-control-border);background:#151e31; }
+body.portal-dark-active .portal .portal__page .support-chat__pinned button { color:#8d99b5;background:#1d2740; }
+body.portal-dark-active .portal .portal__page .support-chat__day { color:#66738f; }
+body.portal-dark-active .portal .portal__page .support-chat__day::before,
+body.portal-dark-active .portal .portal__page .support-chat__day::after { background:#273149; }
+body.portal-dark-active .portal .portal__page .support-chat__bubble { color:#c9d1e5;background:#182238; }
+body.portal-dark-active .portal .portal__page .support-chat__messageFiles > div,
+body.portal-dark-active .portal .portal__page .support-chat__quickActions,
+body.portal-dark-active .portal .portal__page .support-chat__quickActions button,
+body.portal-dark-active .portal .portal__page .support-chat__composer,
+body.portal-dark-active .portal .portal__page .support-chat__quickButton,
+body.portal-dark-active .portal .portal__page .support-chat__attachButton,
+body.portal-dark-active .portal .portal__page .support-chat__textareaWrap {
+  color:#aeb8cf;
+  border-color:var(--portal-dark-control-border);
+  background:#111827;
+}
+body.portal-dark-active .portal .portal__page .support-chat__textareaWrap:focus-within { background:#151e31; }
+body.portal-dark-active .portal .portal__page .support-chat__textareaWrap textarea { color:#eef2ff; }
+body.portal-dark-active .portal .portal__page .support-chat__quickActions button:hover { background:#1c2740; }
+
+/* Portal FAQ: dark sidebar, question list, open answer and feedback controls. */
+body.portal-dark-active .portal .portal__page :is(
+  .support-faq__categoryCard,.support-faq__popularCard,.support-faq__listCard,.support-faq__cta
+) {
+  color:var(--portal-dark-text);
+  border-color:var(--portal-dark-line);
+  background:#121a2b;
+  box-shadow:0 14px 36px rgba(0,0,0,.14);
+}
+body.portal-dark-active .portal .portal__page .support-faq__categories button { color:#8f9bb6; }
+body.portal-dark-active .portal .portal__page .support-faq__categories button:hover { color:#eef2ff;background:#182238; }
+body.portal-dark-active .portal .portal__page .support-faq__categories button em { color:#7784a0;background:#1b2439; }
+body.portal-dark-active .portal .portal__page .support-faq__categories button.is-active { color:#c2b9ff;border-color:rgba(145,129,255,.2);background:linear-gradient(90deg,rgba(126,108,255,.14),rgba(168,75,232,.06)); }
+body.portal-dark-active .portal .portal__page .support-faq__categories button.is-active em { color:#c2b9ff;background:rgba(126,108,255,.14); }
+body.portal-dark-active .portal .portal__page .support-faq__popularCard button,
+body.portal-dark-active .portal .portal__page .support-faq__item,
+body.portal-dark-active .portal .portal__page .support-faq__listHead { border-color:rgba(139,151,190,.1); }
+body.portal-dark-active .portal .portal__page .support-faq__question { color:#eef2ff;background:#121a2b; }
+body.portal-dark-active .portal .portal__page .support-faq__question:hover { background:#182238; }
+body.portal-dark-active .portal .portal__page .support-faq__item.is-open .support-faq__question { color:#fff;background:#1a2440; }
+body.portal-dark-active .portal .portal__page .support-faq__answerWrap { background:#101827; }
+body.portal-dark-active .portal .portal__page .support-faq__answer > p { color:#9aa6c1; }
+body.portal-dark-active .portal .portal__page .support-faq__feedback button { color:#a9b4cc;border-color:#2b3650;background:#151e31; }
+body.portal-dark-active .portal .portal__page .support-faq__feedback button:hover { color:#d5d0ff;border-color:rgba(145,129,255,.25);background:#1b263d; }
+
+/* Shell review chip contrast polish. */
+body.portal-dark-active .portal__reviewsBtnCopy small { color:#72809d; }
+body.portal-dark-active .portal__reviewsCounter { color:#f3f5ff;background:#4d5875;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04); }
+body.portal-dark-active .portal__reviewsBtn:hover .portal__reviewsCounter { background:#625b8d; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.portal-dark-active .portal .portal__page :is(
+    .package-card,.task-board__card,.report-list__row,.account-center__contact
+  ) { transition:none; }
+}
+
+/* Fine-grained components that render through portals / shared UI. */
+body.portal-dark-active .period-menu__trigger {
+  color:#a7b2ca;
+  border-color:var(--portal-dark-control-border);
+  background:#182238;
+  box-shadow:none;
+}
+body.portal-dark-active .period-menu__trigger:hover,
+body.portal-dark-active .period-menu.is-open .period-menu__trigger { color:#d8d2ff;border-color:rgba(145,129,255,.3);background:#202b47;box-shadow:none; }
+body.portal-dark-active .period-menu__popover { color:#dbe1f1;border-color:var(--portal-dark-control-border);background:#121a2b;box-shadow:0 22px 56px rgba(0,0,0,.38); }
+body.portal-dark-active .period-menu__option { color:#9ba6c0; }
+body.portal-dark-active .period-menu__option small { color:#687591; }
+body.portal-dark-active .period-menu__option:hover { color:#eef2ff;background:#182238; }
+body.portal-dark-active .period-menu__option.is-active { color:#c2b9ff;background:rgba(140,124,255,.13); }
+body.portal-dark-active .period-menu__option i { box-shadow:inset 0 0 0 1px #40506e; }
+
+body.portal-dark-active .ui-badge--neutral { color:#aeb8cf;background:#242f49; }
+body.portal-dark-active .ui-badge--violet { color:#c2b9ff;background:rgba(140,124,255,.14); }
+body.portal-dark-active .ui-badge--green { color:#57dbaa;background:rgba(68,213,160,.12); }
+body.portal-dark-active .ui-badge--orange { color:#f2b756;background:rgba(242,183,86,.12); }
+body.portal-dark-active .ui-badge--red { color:#ff8299;background:rgba(255,113,141,.12); }
+
+/* Precise Reviews Intelligence surfaces. */
+body.portal-dark-active .portal .portal__page .reviews-inspector__hero {
+  color:var(--portal-dark-text);
+  border-color:var(--portal-dark-line);
+  background:linear-gradient(180deg,#151e31,#121a2b);
+}
+body.portal-dark-active .portal .portal__page .reviews-inspector__hero blockquote { color:#e8ecfa; }
+body.portal-dark-active .portal .portal__page .reviews-inspector__author > div:nth-child(2) strong,
+body.portal-dark-active .portal .portal__page .reviews-inspector__score strong { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .reviews-inspector__author > div:nth-child(2) span,
+body.portal-dark-active .portal .portal__page .reviews-inspector__chips em { color:#7f8ca9; }
+body.portal-dark-active .portal .portal__page .reviews-inspector__legalState { border-color:rgba(255,113,141,.18);background:linear-gradient(135deg,rgba(255,113,141,.08),#151e31); }
+body.portal-dark-active .portal .portal__page .reviews-inspector__legalState :is(h3) { color:#f1f3ff; }
+body.portal-dark-active .portal .portal__page .reviews-inspector__legalState :is(p,li) { color:#97a3bd; }
+body.portal-dark-active .portal .portal__page .reviews-inspector__legalState li i { color:#8f9ab3;border-color:#303b55;background:#111827; }
+body.portal-dark-active .portal .portal__page .reviews-copilot { border-color:rgba(145,129,255,.18);background:linear-gradient(145deg,#151e31,#121a2b);box-shadow:none; }
+body.portal-dark-active .portal .portal__page .reviews-copilot :is(h2,h3,strong) { color:#eef2ff; }
+body.portal-dark-active .portal .portal__page .reviews-copilot__actions > button,
+body.portal-dark-active .portal .portal__page .reviews-approval-box button,
+body.portal-dark-active .portal .portal__page .reviews-copilot__approved button { color:#aab5ce;border-color:#2b3650;background:#182238; }
+body.portal-dark-active .portal .portal__page .reviews-copilot__actions > button:hover:not(:disabled),
+body.portal-dark-active .portal .portal__page .reviews-approval-box button:hover:not(:disabled),
+body.portal-dark-active .portal .portal__page .reviews-copilot__approved button:hover:not(:disabled) { color:#eef2ff;background:#202b47; }
+body.portal-dark-active .portal .portal__page .reviews-approval-box textarea { color:#eef2ff;border-color:#2b3650;background:#111827; }
+body.portal-dark-active .portal .portal__page .reviews-inspector__history { color:var(--portal-dark-text);background:#121a2b; }
+body.portal-dark-active .portal .portal__page .reviews-inspector__sectionTitle strong,
+body.portal-dark-active .portal .portal__page .reviews-workflow-timeline strong { color:#edf1ff; }
+body.portal-dark-active .portal .portal__page .reviews-workflow-timeline span { color:#7f8ca9; }
+body.portal-dark-active .portal .portal__page .reviews-workflow-timeline > div:not(:last-child)::before { background:#2b3650; }
+body.portal-dark-active .portal .portal__page .reviews-workflow-timeline i { color:#8d99b5;border-color:#303b55;background:#151e31; }
+body.portal-dark-active .portal .portal__page .reviews-intel__sidecar { background:#0e1525;scrollbar-color:#2b3650 transparent; }
+body.portal-dark-active .portal .portal__page .reviews-sidecard { color:#dce2f2;border-color:var(--portal-dark-control-border);background:#151e31; }
+body.portal-dark-active .portal .portal__page .reviews-sidecard--sla { background:linear-gradient(145deg,#151e31,#171d34); }
+body.portal-dark-active .portal .portal__page .reviews-sidecard--sla.is-risk { background:linear-gradient(145deg,#151e31,#211d25); }
+body.portal-dark-active .portal .portal__page .reviews-sidecard--sla.is-overdue { background:linear-gradient(145deg,#151e31,#251821); }
+body.portal-dark-active .portal .portal__page .reviews-sidecard__head em { color:#8490aa;background:#202a42; }
+body.portal-dark-active .portal .portal__page .reviews-sidecard__copy strong,
+body.portal-dark-active .portal .portal__page .reviews-reason-bars b,
+body.portal-dark-active .portal .portal__page .reviews-sidecard--actions button strong { color:#eef2ff; }
+body.portal-dark-active .portal .portal__page .reviews-sidecard__copy span,
+body.portal-dark-active .portal .portal__page .reviews-sidecard > p,
+body.portal-dark-active .portal .portal__page .reviews-reason-bars em,
+body.portal-dark-active .portal .portal__page .reviews-sidecard--actions button small,
+body.portal-dark-active .portal .portal__page .reviews-platform-row span { color:#7f8ca9; }
+body.portal-dark-active .portal .portal__page .reviews-sla-orbit__track,
+body.portal-dark-active .portal .portal__page .reviews-reason-bars i { stroke:#2b3650;background:#2b3650; }
+body.portal-dark-active .portal .portal__page .reviews-sidecard--actions button { color:#dce2f2;border-color:#2b3650;background:#111827; }
+
+/* Reports typography that was still using light-theme ink. */
+body.portal-dark-active .portal .portal__page .reports-command h1,
+body.portal-dark-active .portal .portal__page .report-builder__head h2,
+body.portal-dark-active .portal .portal__page .report-builder__label,
+body.portal-dark-active .portal .portal__page .report-builder__label-row,
+body.portal-dark-active .portal .portal__page .report-builder__block-copy strong,
+body.portal-dark-active .portal .portal__page .report-list__primary strong { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .reports-command p,
+body.portal-dark-active .portal .portal__page .reports-command__status small,
+body.portal-dark-active .portal .portal__page .report-builder__head p,
+body.portal-dark-active .portal .portal__page .report-builder__block-copy small { color:#8794b0; }
+
+/* Subscription typography / controls. */
+body.portal-dark-active .portal .portal__page .package-store__head h3,
+body.portal-dark-active .portal .portal__page .package-card__copy h4,
+body.portal-dark-active .portal .portal__page .subscription-cart__title-row h4,
+body.portal-dark-active .portal .portal__page .subscription-cart__item-copy strong,
+body.portal-dark-active .portal .portal__page .payment-history__description,
+body.portal-dark-active .portal .portal__page .payment-history__amount,
+body.portal-dark-active .portal .portal__page .plan-limits__head h3,
+body.portal-dark-active .portal .portal__page .plan-limits__row strong { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .subscription-cart__right,
+body.portal-dark-active .portal .portal__page .subscription-cart__left { color:var(--portal-dark-secondary); }
+
+/* Account center typography. */
+body.portal-dark-active .portal .portal__page .account-center__contactCopy > strong,
+body.portal-dark-active .portal .portal__page .account-center__activityItem strong,
+body.portal-dark-active .portal .portal__page .account-center__cardHead h3 { color:var(--portal-dark-text); }
+body.portal-dark-active .portal .portal__page .account-center__contactCopy > span,
+body.portal-dark-active .portal .portal__page .account-center__activityItem div > span,
+body.portal-dark-active .portal .portal__page .account-center__activityItem time,
+body.portal-dark-active .portal .portal__page .account-center__cardHead p { color:#7f8ca9; }
+
+/* Support chat precise text / composer contrast. */
+body.portal-dark-active .portal .portal__page .support-chat__personName strong { color:#eef2ff; }
+body.portal-dark-active .portal .portal__page .support-chat__person p,
+body.portal-dark-active .portal .portal__page .support-chat__headerMeta small { color:#7f8ca9; }
+body.portal-dark-active .portal .portal__page .support-chat__messageFiles > div strong { color:#e6ebf8; }
+body.portal-dark-active .portal .portal__page .support-chat__messageFiles > div small { color:#7784a1; }
+body.portal-dark-active .portal .portal__page .support-chat__attachments > div { border-color:#2b3650;background:#171f34; }
+body.portal-dark-active .portal .portal__page .support-chat__attachments > div strong { color:#e7ebf8; }
+body.portal-dark-active .portal .portal__page .support-chat__attachments > div button { color:#8e9ab5;background:#202a42; }
+
+/* FAQ typography / open state. */
+body.portal-dark-active .portal .portal__page .support-faq__listHead h3,
+body.portal-dark-active .portal .portal__page .support-faq__cta h3 { color:#eef2ff; }
+body.portal-dark-active .portal .portal__page .support-faq__asideLabel,
+body.portal-dark-active .portal .portal__page .support-faq__listHead span,
+body.portal-dark-active .portal .portal__page .support-faq__listHead em,
+body.portal-dark-active .portal .portal__page .support-faq__cta p { color:#7f8ca9; }

@@ -1,0 +1,212 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.report-list {
+  display: grid;
+  gap: 14px;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  &__search {
+    flex: 1;
+    min-height: 44px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid $color-border;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, .82);
+    box-shadow: 0 7px 22px rgba(34, 43, 88, .025);
+    transition: border-color $transition-fast, box-shadow $transition-base, background $transition-fast;
+
+    &:focus-within {
+      border-color: rgba(102, 97, 245, .34);
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(102, 97, 245, .08), 0 12px 28px rgba(34, 43, 88, .045);
+    }
+
+    svg { width: 17px; height: 17px; flex: 0 0 auto; color: $color-text-muted; }
+    input { width: 100%; border: 0; outline: 0; background: transparent; color: $color-text; font: inherit; font-size: 11px; }
+    input::placeholder { color: #aab2c6; }
+  }
+
+  &__filter-wrap {
+    position: relative;
+    min-width: 154px;
+    height: 44px;
+
+    select {
+      @include focus-ring;
+      width: 100%; height: 100%;
+      padding: 0 34px 0 36px;
+      border: 1px solid $color-border;
+      border-radius: 13px;
+      appearance: none;
+      color: $color-text-secondary;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 10px;
+      font-weight: 620;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      right: 14px;
+      top: 17px;
+      width: 6px; height: 6px;
+      border-right: 1.5px solid $color-text-muted;
+      border-bottom: 1.5px solid $color-text-muted;
+      transform: rotate(45deg);
+      pointer-events: none;
+    }
+  }
+
+  &__filter-icon {
+    position: absolute;
+    z-index: 1;
+    left: 12px;
+    top: 13px;
+    pointer-events: none;
+    svg { width: 17px; height: 17px; color: $color-text-muted; }
+  }
+
+  &__surface {
+    @include card-surface;
+    overflow: hidden;
+  }
+
+  &__head,
+  &__row {
+    display: grid;
+    grid-template-columns: minmax(300px, 2.2fr) minmax(110px, .8fr) 105px 80px 120px 78px;
+    align-items: center;
+  }
+
+  &__head {
+    min-height: 43px;
+    padding: 0 17px;
+    border-bottom: 1px solid #eef0f7;
+    color: $color-text-muted;
+    background: #fbfbfe;
+    font-size: 9px;
+    font-weight: 610;
+  }
+
+  &__row {
+    min-height: 68px;
+    padding: 0 17px;
+    border-bottom: 1px solid #f0f2f8;
+    animation: report-row-enter 520ms cubic-bezier(.16, 1, .3, 1) both;
+    animation-delay: calc(var(--report-index) * 42ms + 50ms);
+    transition: background $transition-fast, box-shadow $transition-base;
+
+    &:last-child { border-bottom: 0; }
+    &:hover { position: relative; z-index: 1; background: #fafbff; box-shadow: inset 3px 0 0 rgba(102, 97, 245, .52); }
+  }
+
+  &__primary {
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  &__icon {
+    width: 34px; height: 34px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: 1px solid #eceefa;
+    border-radius: 11px;
+    color: $color-primary;
+    background: linear-gradient(145deg, #f8f7ff, #f0efff);
+    svg { width: 17px; height: 17px; }
+  }
+
+  &__copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    strong { @include truncate; color: $color-text; font-size: 11px; font-weight: 690; letter-spacing: -.018em; }
+    small { color: $color-text-muted; font-size: 8px; font-weight: 560; }
+  }
+
+  &__cell { color: $color-text-secondary; font-size: 9px; }
+  &__cell--numeric { font-variant-numeric: tabular-nums; }
+
+  &__status {
+    width: fit-content;
+    min-height: 24px;
+    padding: 0 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    font-size: 8px;
+    font-weight: 700;
+
+    > span { width: 6px; height: 6px; border-radius: 50%; }
+    &--ready { color: #12845f; background: rgba(22, 191, 131, .08); > span { background: $color-success; box-shadow: 0 0 0 3px rgba(22, 191, 131, .09); } }
+    &--processing { color: #b77909; background: rgba(245, 162, 10, .09); > span { background: $color-warning; animation: report-processing 1.2s ease-in-out infinite alternate; } }
+  }
+
+  &__actions { display: flex; justify-content: flex-end; gap: 4px; }
+  &__action {
+    @include focus-ring;
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: $color-text-muted;
+    background: transparent;
+    cursor: pointer;
+    transition: color $transition-fast, border-color $transition-fast, background $transition-fast, transform $transition-fast;
+    svg { width: 15px; height: 15px; }
+    &:hover:not(:disabled) { color: $color-primary; border-color: #e9e9fb; background: $color-primary-soft; transform: translateY(-1px); }
+    &:disabled { opacity: .34; cursor: not-allowed; }
+    &--open:hover:not(:disabled) { transform: translateX(1px); }
+  }
+
+  &__empty {
+    min-height: 260px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 7px;
+    text-align: center;
+    > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; color: $color-primary; background: $color-primary-soft; svg { width: 19px; height: 19px; } }
+    strong { font-size: 13px; }
+    p { margin: 0; color: $color-text-muted; font-size: 10px; }
+  }
+}
+
+@keyframes report-row-enter { from { opacity: 0; transform: translate3d(-8px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes report-processing { to { opacity: .45; transform: scale(.88); } }
+
+@media (max-width: 1100px) {
+  .report-list__head { display: none; }
+  .report-list__row { grid-template-columns: minmax(0, 1fr) 110px 110px 78px; gap: 8px; padding: 10px 14px; }
+  .report-list__row > .report-list__cell:nth-of-type(1), .report-list__row > .report-list__cell:nth-of-type(3) { display: none; }
+}
+
+@media (max-width: 720px) {
+  .report-list__toolbar { align-items: stretch; flex-direction: column; }
+  .report-list__filter-wrap { width: 100%; }
+  .report-list__row { grid-template-columns: minmax(0, 1fr) auto; min-height: 78px; }
+  .report-list__row > .report-list__cell { display: none; }
+  .report-list__actions { align-self: center; }
+}
+
+@media (prefers-reduced-motion: reduce) { .report-list__row, .report-list__status--processing > span { animation: none; } }

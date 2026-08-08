@@ -1,0 +1,171 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.payment-history {
+  @include card-surface;
+  padding: 18px;
+
+  &__head {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    h3 {
+      margin: 1px 0 0;
+      color: $color-text;
+      font-size: 14px;
+      font-weight: 730;
+      letter-spacing: -.025em;
+    }
+  }
+
+  &__icon {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    color: $color-primary;
+    background: $color-primary-soft;
+
+    svg { width: 17px; height: 17px; }
+  }
+
+  &__eyebrow {
+    display: block;
+    color: $color-text-muted;
+    font-size: 8px;
+    font-weight: 560;
+  }
+
+  &__table {
+    overflow-x: auto;
+  }
+
+  &__table-head,
+  &__row {
+    min-width: 720px;
+    display: grid;
+    grid-template-columns: 125px minmax(230px, 1fr) 120px 130px 36px;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__table-head {
+    min-height: 31px;
+    padding: 0 9px;
+    border-bottom: 1px solid $color-border;
+    color: $color-text-muted;
+    font-size: 8px;
+    font-weight: 560;
+  }
+
+  &__row {
+    min-height: 47px;
+    padding: 0 9px;
+    border-bottom: 1px solid rgba(231, 234, 244, .78);
+    opacity: 0;
+    animation: payment-row-enter 430ms calc(70ms + var(--payment-index) * 45ms) cubic-bezier(.16, 1, .3, 1) forwards;
+    transition: background $transition-fast;
+
+    &:last-child { border-bottom: 0; }
+    &:hover { background: rgba(247, 248, 253, .72); }
+  }
+
+  &__date {
+    color: $color-text-muted;
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__description {
+    @include truncate;
+    color: $color-text;
+    font-size: 9.5px;
+    font-weight: 610;
+  }
+
+  &__amount {
+    color: $color-text;
+    font-family: $font-family-display;
+    font-size: 10px;
+    font-weight: 720;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__status {
+    width: fit-content;
+    min-height: 24px;
+    padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 999px;
+    font-size: 8px;
+    font-weight: 650;
+
+    i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    &--paid {
+      color: $color-success;
+      background: rgba(22, 191, 131, .08);
+      i { background: $color-success; }
+    }
+
+    &--refund {
+      color: $color-danger;
+      background: rgba(243, 79, 112, .08);
+      i { background: $color-danger; }
+    }
+  }
+
+  &__download {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 9px;
+    color: $color-text-muted;
+    background: transparent;
+    cursor: pointer;
+    transition: color $transition-fast, background $transition-fast, transform $transition-fast;
+
+    svg { width: 15px; height: 15px; }
+
+    &:hover {
+      color: $color-primary;
+      background: $color-primary-soft;
+      transform: translateY(-1px);
+    }
+  }
+
+  &__empty {
+    min-height: 88px;
+    display: grid;
+    place-items: center;
+    color: $color-text-muted;
+    font-size: 9px;
+  }
+}
+
+@keyframes payment-row-enter {
+  from { opacity: 0; transform: translate3d(8px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .payment-history__row { animation: none; opacity: 1; }
+}

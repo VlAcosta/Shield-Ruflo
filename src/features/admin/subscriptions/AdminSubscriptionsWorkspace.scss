@@ -1,0 +1,260 @@
+@use '../../../styles/tokens' as *;
+
+.admin-billing {
+  --ink:#171a34;
+  --muted:#8d97ae;
+  --border:#e7eaf2;
+  --surface:#fff;
+  display:grid;
+  gap:18px;
+
+  &.is-refreshing { opacity:.78; transition:opacity 180ms ease; }
+
+  &__intro {
+    min-height:142px;
+    padding:26px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:28px;
+    overflow:hidden;
+    position:relative;
+    border:1px solid rgba(107,93,255,.11);
+    border-radius:24px;
+    background:
+      radial-gradient(circle at 78% 20%, rgba(112,92,255,.15), transparent 18rem),
+      radial-gradient(circle at 92% 100%, rgba(169,62,240,.08), transparent 16rem),
+      linear-gradient(135deg,#fff 0,#fafaff 68%,#f6f3ff 100%);
+    box-shadow:0 20px 50px rgba(31,37,79,.05);
+
+    &::after {
+      content:'';
+      position:absolute;
+      right:9%; top:-40px;
+      width:180px; height:180px;
+      border-radius:50%;
+      border:1px solid rgba(110,94,255,.08);
+      box-shadow:0 0 0 28px rgba(110,94,255,.025),0 0 0 56px rgba(110,94,255,.015);
+      animation:admin-billing-orbit 7s ease-in-out infinite alternate;
+    }
+
+    > div:first-child { position:relative; z-index:1; max-width:720px; }
+    > div:first-child > span { color:#665cff; font-size:8px; font-weight:900; letter-spacing:.18em; }
+    h2 { margin:7px 0 7px; color:#151932; font-family:$font-family-display; font-size:clamp(24px,2.5vw,36px); letter-spacing:-.045em; }
+    p { margin:0; max-width:650px; color:#7d879e; font-size:12px; line-height:1.65; }
+  }
+
+  &__pulse {
+    position:relative; z-index:1;
+    min-width:210px;
+    padding:18px 20px;
+    border:1px solid rgba(103,93,255,.12);
+    border-radius:18px;
+    background:rgba(255,255,255,.72);
+    box-shadow:0 14px 30px rgba(66,57,151,.07);
+
+    > span { display:flex; align-items:center; gap:7px; color:#848da4; font-size:8px; font-weight:850; letter-spacing:.12em; }
+    > span i { width:7px; height:7px; border-radius:50%; background:#20c98e; box-shadow:0 0 0 5px rgba(32,201,142,.08); animation:admin-billing-live 2.4s ease-out infinite; }
+    strong { display:block; margin-top:10px; color:#191d39; font:800 23px/1 $font-family-display; letter-spacing:-.04em; }
+    small { display:block; margin-top:7px; color:#17a878; font-size:9px; }
+  }
+
+  &__metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+  &__overview { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(260px,.7fr); gap:14px; }
+}
+
+.admin-billing-metric {
+  position:relative;
+  min-height:128px;
+  padding:17px 18px 15px;
+  overflow:hidden;
+  border:1px solid var(--border);
+  border-radius:19px;
+  background:#fff;
+  box-shadow:0 12px 32px rgba(25,31,67,.035);
+  animation:admin-billing-rise 520ms cubic-bezier(.16,1,.3,1) calc(var(--metric-index)*55ms) both;
+  transition:transform 300ms cubic-bezier(.16,1,.3,1),box-shadow 250ms ease,border-color 220ms ease;
+
+  &::after { content:''; position:absolute; inset:auto -25px -38px auto; width:100px; height:100px; border-radius:50%; background:var(--metric-soft,rgba(102,92,255,.08)); }
+  &:hover { transform:translateY(-2px); box-shadow:0 18px 36px rgba(32,37,76,.07); border-color:rgba(102,92,255,.18); }
+  &.is-violet { --metric:#665cff; --metric-soft:rgba(102,92,255,.09); }
+  &.is-magenta { --metric:#a33ff2; --metric-soft:rgba(163,63,242,.08); }
+  &.is-green { --metric:#18bb85; --metric-soft:rgba(24,187,133,.08); }
+  &.is-cyan { --metric:#18b8d1; --metric-soft:rgba(24,184,209,.08); }
+
+  &__head { display:flex; align-items:center; justify-content:space-between; color:#8c96ad; font-size:9px; font-weight:750; }
+  &__head i { width:8px; height:8px; border-radius:50%; background:var(--metric); box-shadow:0 0 0 5px var(--metric-soft); }
+  > strong { display:block; margin-top:13px; color:#171b36; font:800 clamp(20px,2vw,27px)/1 $font-family-display; letter-spacing:-.05em; }
+  footer { margin-top:12px; display:flex; align-items:center; gap:8px; }
+  footer b { color:var(--metric); font-size:9px; }
+  footer small { color:#a0a8bb; font-size:8px; }
+}
+
+.admin-billing-card {
+  border:1px solid var(--border);
+  border-radius:21px;
+  background:#fff;
+  box-shadow:0 14px 38px rgba(27,32,69,.035);
+}
+
+.admin-billing-chart {
+  padding:20px 22px 17px;
+  header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+  header > div:first-child > span,.admin-billing-card header > div > span { color:#6b61f2; font-size:7px; font-weight:900; letter-spacing:.15em; }
+  h2 { margin:5px 0 4px; color:#181c37; font:800 17px/1.2 $font-family-display; letter-spacing:-.025em; }
+  p { margin:0; color:#949db2; font-size:9px; }
+  &__legend { display:flex; flex-wrap:wrap; gap:10px; color:#8d96ab; font-size:8px; }
+  &__legend span { display:flex; align-items:center; gap:5px; }
+  &__legend i { width:7px; height:7px; border-radius:50%; }
+  &__legend .is-cyan { background:#16b9d3; } &__legend .is-violet { background:#665cff; } &__legend .is-magenta { background:#a33ff2; }
+  &__canvas { margin-top:14px; min-height:190px; }
+  &__canvas svg { width:100%; height:160px; overflow:visible; }
+  &__canvas > div { display:flex; justify-content:space-between; padding:0 4px; color:#a3abbc; font-size:7px; font-weight:800; }
+  &__line { stroke-dasharray:900; stroke-dashoffset:900; animation:admin-billing-draw 1.15s cubic-bezier(.16,1,.3,1) calc(var(--line-index)*120ms) forwards; }
+}
+
+.admin-billing-radar {
+  padding:20px;
+  header { display:flex; justify-content:space-between; align-items:flex-start; }
+  header b { width:36px; height:36px; display:grid; place-items:center; border-radius:12px; color:#f27a39; background:#fff3eb; font-size:14px; }
+  h2 { margin:5px 0 4px; color:#181c37; font:800 17px/1.2 $font-family-display; }
+  p { margin:0; color:#949db2; font-size:9px; }
+  &__ring { display:grid; place-items:center; padding:17px 0 14px; }
+  &__ring > div { width:126px; height:126px; display:grid; place-content:center; border-radius:50%; text-align:center; background:conic-gradient(#f19a52 var(--risk),#f3f4f8 0); position:relative; }
+  &__ring > div::after { content:''; position:absolute; inset:12px; border-radius:50%; background:#fff; }
+  &__ring strong,&__ring small { position:relative; z-index:1; }
+  &__ring strong { color:#1c203d; font:800 29px/1 $font-family-display; }
+  &__ring small { margin-top:4px; color:#9aa3b7; font-size:8px; }
+  &__stats { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  &__stats span { padding:10px; border-radius:12px; background:#f7f8fc; }
+  &__stats b { display:block; color:#222644; font-size:15px; } &__stats small { display:block; margin-top:3px; color:#9ba4b7; font-size:7px; }
+}
+
+.admin-billing-console { overflow:hidden; }
+.admin-billing-console__head { min-height:62px; padding:0 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #edf0f5; }
+.admin-billing-console__tabs { align-self:stretch; display:flex; gap:3px; }
+.admin-billing-console__tabs button { position:relative; min-width:145px; padding:0 14px; border:0; color:#939caf; background:transparent; font:700 9px $font-family-base; cursor:pointer; }
+.admin-billing-console__tabs button::after { content:''; position:absolute; left:15px; right:15px; bottom:-1px; height:2px; opacity:0; transform:scaleX(.45); background:linear-gradient(90deg,#665cff,#a33ff2); transition:220ms ease; }
+.admin-billing-console__tabs button.is-active { color:#252946; }
+.admin-billing-console__tabs button.is-active::after { opacity:1; transform:scaleX(1); }
+.admin-billing-console__tabs em { margin-left:6px; padding:2px 5px; border-radius:20px; color:#665cff; background:#f0efff; font-style:normal; font-size:7px; }
+.admin-billing-console__primary { min-height:35px; padding:0 13px; border:0; border-radius:10px; color:#fff; background:linear-gradient(115deg,#665cff,#9448f1); box-shadow:0 9px 20px rgba(102,92,255,.2); font:800 8px $font-family-base; cursor:pointer; transition:transform 200ms ease; }
+.admin-billing-console__primary:hover { transform:translateY(-1px); }
+.admin-billing-console__body { padding:15px 16px 16px; }
+
+.admin-billing-toolbar { margin-bottom:12px; display:grid; grid-template-columns:minmax(280px,1fr) 160px auto; gap:9px; align-items:center; }
+.admin-billing-toolbar label { min-height:38px; display:flex; align-items:center; gap:8px; padding:0 11px; border:1px solid #e8ebf2; border-radius:11px; background:#fafbfe; }
+.admin-billing-toolbar label span { color:#8f98ad; font-size:13px; }
+.admin-billing-toolbar input { width:100%; border:0; outline:0; color:#252945; background:transparent; font:500 9px $font-family-base; }
+.admin-billing-toolbar select,.admin-subscription-table select { min-height:38px; padding:0 10px; border:1px solid #e8ebf2; border-radius:10px; color:#505a73; background:#fff; font:650 8px $font-family-base; outline:0; }
+.admin-billing-toolbar > span { color:#9ca5b8; font-size:8px; text-align:right; }
+
+.admin-subscription-table-wrap { overflow:auto; border:1px solid #eef0f5; border-radius:14px; }
+.admin-subscription-table { width:100%; min-width:920px; border-collapse:collapse; }
+.admin-subscription-table th { height:38px; padding:0 12px; color:#9da6b8; background:#fafbfe; font-size:7px; font-weight:850; text-align:left; letter-spacing:.03em; }
+.admin-subscription-table td { height:57px; padding:0 12px; border-top:1px solid #f0f2f6; color:#626c83; font-size:8px; animation:admin-billing-row 430ms cubic-bezier(.16,1,.3,1) calc(var(--row-index)*28ms) both; }
+.admin-subscription-table tbody tr { content-visibility:auto; contain-intrinsic-size:57px; transition:background 160ms ease; }
+.admin-subscription-table tbody tr:hover { background:#fbfbff; }
+.admin-subscription-table__client { display:flex; align-items:center; gap:9px; border:0; padding:0; background:none; cursor:pointer; text-align:left; }
+.admin-subscription-table__client > span { width:31px; height:31px; display:grid; place-items:center; border-radius:10px; color:#655df2; background:#f0efff; font-size:8px; font-weight:900; }
+.admin-subscription-table__client strong { display:block; color:#252945; font-size:8.5px; } .admin-subscription-table__client small { display:block; margin-top:2px; color:#a0a8b8; font-size:7px; }
+.admin-subscription-table__arrow { width:28px; height:28px; border:0; border-radius:9px; color:#878fa3; background:#f7f8fb; cursor:pointer; font-size:16px; transition:transform 180ms ease,color 180ms ease; }
+.admin-subscription-table__arrow:hover { color:#665cff; transform:translateX(2px); }
+.admin-subscription-status { display:inline-flex; align-items:center; min-height:22px; padding:0 8px; border-radius:999px; font-size:7px; font-weight:800; }
+.admin-subscription-status.is-active { color:#15966c; background:#eafaf4; } .admin-subscription-status.is-trial { color:#665cff; background:#f0efff; } .admin-subscription-status.is-expired { color:#9a6671; background:#f8eef1; } .admin-subscription-status.is-cancelled { color:#b87137; background:#fff3e8; }
+.admin-billing-switch { width:31px; height:18px; padding:2px; border:0; border-radius:20px; background:#e6e9ef; cursor:pointer; transition:background 180ms ease; }
+.admin-billing-switch i { display:block; width:14px; height:14px; border-radius:50%; background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.12); transition:transform 210ms cubic-bezier(.16,1,.3,1); }
+.admin-billing-switch.is-on { background:linear-gradient(90deg,#665cff,#8a55f5); } .admin-billing-switch.is-on i { transform:translateX(13px); }
+
+.admin-plan-grid { padding:18px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.admin-plan-card { position:relative; padding:18px; overflow:hidden; border:1px solid #e9ebf2; border-radius:18px; background:linear-gradient(180deg,#fff,#fbfcff); animation:admin-billing-rise 520ms cubic-bezier(.16,1,.3,1) calc(var(--plan-index)*70ms) both; }
+.admin-plan-card::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--plan-accent,#665cff); }
+.admin-plan-card.is-cyan { --plan-accent:#16b9d3; } .admin-plan-card.is-violet { --plan-accent:#665cff; } .admin-plan-card.is-magenta { --plan-accent:#a33ff2; }
+.admin-plan-card.is-featured { border-color:rgba(102,92,255,.2); box-shadow:0 16px 36px rgba(92,81,218,.08); }
+.admin-plan-card header { display:flex; align-items:center; justify-content:space-between; }
+.admin-plan-card header span { color:var(--plan-accent); font-size:6.5px; font-weight:900; letter-spacing:.14em; }
+.admin-plan-card header button { border:0; color:#7e879e; background:transparent; font:700 7.5px $font-family-base; cursor:pointer; }
+.admin-plan-card h3 { margin:17px 0 4px; color:#1d213e; font:800 20px $font-family-display; }
+.admin-plan-card__price { display:flex; align-items:flex-end; gap:4px; }
+.admin-plan-card__price strong { color:#151932; font:850 29px/1 $font-family-display; letter-spacing:-.05em; } .admin-plan-card__price span { color:#9ba4b8; font-size:8px; }
+.admin-plan-card__stats { margin:16px 0; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.admin-plan-card__stats span { padding:9px; border-radius:11px; background:#f7f8fc; } .admin-plan-card__stats b { display:block; color:#353a58; font-size:10px; } .admin-plan-card__stats small { display:block; margin-top:2px; color:#a0a8ba; font-size:6.5px; }
+.admin-plan-card ul { min-height:110px; margin:0; padding:0; display:grid; gap:7px; list-style:none; }
+.admin-plan-card li { display:flex; gap:7px; color:#687288; font-size:8px; } .admin-plan-card li i { color:var(--plan-accent); font-style:normal; }
+.admin-plan-card footer { margin-top:14px; padding-top:12px; display:flex; justify-content:space-between; border-top:1px solid #eef0f5; color:#9ba4b8; font-size:7px; } .admin-plan-card footer b { color:#555e75; }
+
+.admin-renewals { padding:17px; }
+.admin-renewals__summary { margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:stretch; }
+.admin-renewals__summary > div { padding:13px 14px; border:1px solid #edf0f5; border-radius:13px; background:#fafbfe; }
+.admin-renewals__summary span { display:block; color:#9aa3b5; font-size:7px; } .admin-renewals__summary strong { display:block; margin-top:5px; color:#222641; font-size:12px; }
+.admin-renewals__summary button { padding:0 13px; border:1px solid #e4e7ef; border-radius:12px; color:#636d83; background:#fff; font:750 8px $font-family-base; cursor:pointer; }
+.admin-renewals__list { display:grid; gap:7px; }
+.admin-renewals__list article { min-height:58px; padding:0 12px; display:grid; grid-template-columns:58px minmax(220px,1fr) 90px 100px 40px; align-items:center; gap:10px; border:1px solid #edf0f5; border-radius:13px; animation:admin-billing-row 430ms cubic-bezier(.16,1,.3,1) calc(var(--renewal-index)*36ms) both; transition:border-color 180ms ease,transform 220ms ease; }
+.admin-renewals__list article:hover { border-color:rgba(102,92,255,.18); transform:translateX(2px); }
+.admin-renewals__date { text-align:center; } .admin-renewals__date span { display:block; color:#2c304f; font-size:10px; font-weight:850; } .admin-renewals__date small { color:#a2a9ba; font-size:6px; }
+.admin-renewals__list article > button:nth-child(2) { border:0; padding:0; background:none; text-align:left; cursor:pointer; }
+.admin-renewals__list article > button:nth-child(2) strong { display:block; color:#292d4a; font-size:8.5px; } .admin-renewals__list article > button:nth-child(2) small { display:block; margin-top:3px; color:#9da5b7; font-size:7px; }
+.admin-renewals__list article > strong { color:#343951; font-size:8.5px; }
+
+.admin-billing-events { padding:17px 18px; }
+.admin-billing-events > header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.admin-billing-events h2 { margin:4px 0 0; color:#20243f; font:800 15px $font-family-display; } .admin-billing-events header small { color:#a1a9ba; font-size:7px; }
+.admin-billing-events > div { display:grid; gap:5px; }
+.admin-billing-events article { min-height:50px; display:grid; grid-template-columns:9px 1fr auto; align-items:center; gap:10px; padding:0 4px; border-bottom:1px solid #f0f2f6; animation:admin-billing-row 430ms cubic-bezier(.16,1,.3,1) calc(var(--event-index)*45ms) both; }
+.admin-billing-events article:last-child { border-bottom:0; }
+.admin-billing-events article > i { width:7px; height:7px; border-radius:50%; } .admin-billing-events i.is-green { background:#18bd85; box-shadow:0 0 0 5px rgba(24,189,133,.07); } .admin-billing-events i.is-orange { background:#f5a14a; box-shadow:0 0 0 5px rgba(245,161,74,.07); } .admin-billing-events i.is-violet { background:#665cff; box-shadow:0 0 0 5px rgba(102,92,255,.07); }
+.admin-billing-events article strong { display:block; color:#3b405b; font-size:8px; } .admin-billing-events article small { display:block; margin-top:2px; color:#9ba4b6; font-size:7px; } .admin-billing-events time { color:#a3aabb; font-size:7px; }
+
+.admin-billing-modal { position:fixed; inset:0; z-index:100; padding:26px; display:grid; place-items:center; background:rgba(13,16,38,.38); animation:admin-modal-backdrop 180ms ease both; }
+.admin-billing-modal__panel { width:min(720px,100%); max-height:calc(100vh - 52px); overflow:auto; border:1px solid rgba(255,255,255,.5); border-radius:22px; background:#fff; box-shadow:0 34px 90px rgba(16,18,45,.25); animation:admin-modal-enter 360ms cubic-bezier(.16,1,.3,1) both; }
+.admin-billing-modal__panel > header { padding:20px 22px; display:flex; justify-content:space-between; border-bottom:1px solid #edf0f5; }
+.admin-billing-modal__panel header span { color:#665cff; font-size:7px; font-weight:900; letter-spacing:.15em; } .admin-billing-modal__panel header h3 { margin:5px 0 4px; color:#1b1f3a; font:800 20px $font-family-display; } .admin-billing-modal__panel header p { margin:0; color:#939caf; font-size:8px; }
+.admin-billing-modal__panel header button { width:32px; height:32px; border:0; border-radius:10px; color:#7f899f; background:#f6f7fb; cursor:pointer; font-size:18px; }
+.admin-billing-modal__grid { padding:18px 22px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.admin-billing-modal__grid label { display:grid; gap:6px; } .admin-billing-modal__grid label > span { color:#687289; font-size:7.5px; font-weight:800; }
+.admin-billing-modal__grid input,.admin-billing-modal__grid textarea { width:100%; box-sizing:border-box; border:1px solid #e6e9f1; border-radius:11px; color:#2c314d; background:#fbfcfe; font:600 9px $font-family-base; outline:0; transition:border-color 160ms ease,box-shadow 160ms ease; }
+.admin-billing-modal__grid input { min-height:39px; padding:0 11px; } .admin-billing-modal__grid textarea { padding:10px 11px; resize:vertical; }
+.admin-billing-modal__grid input:focus,.admin-billing-modal__grid textarea:focus { border-color:rgba(102,92,255,.45); box-shadow:0 0 0 3px rgba(102,92,255,.07); }
+.admin-billing-modal__grid small { color:#a3aabc; font-size:6px; } .admin-billing-modal__wide { grid-column:1/-1; }
+.admin-billing-modal__panel > footer { padding:14px 22px 20px; display:flex; justify-content:flex-end; gap:8px; }
+.admin-billing-modal__panel > footer button { min-height:38px; padding:0 15px; border:0; border-radius:11px; color:#fff; background:linear-gradient(110deg,#665cff,#9648f1); font:800 8px $font-family-base; cursor:pointer; }
+.admin-billing-modal__panel > footer button.is-secondary { color:#667086; background:#f3f5f9; }
+
+.admin-billing-skeleton { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.admin-billing-skeleton i { min-height:128px; border-radius:18px; background:linear-gradient(90deg,#f0f2f7,#f8f9fc,#f0f2f7); background-size:220% 100%; animation:admin-billing-shimmer 1.2s linear infinite; }
+.admin-billing-skeleton i:nth-child(n+5) { grid-column:span 2; min-height:260px; }
+.admin-billing-error { padding:40px; border-radius:20px; background:#fff; text-align:center; } .admin-billing-error strong { color:#252946; } .admin-billing-error p { color:#9099ad; } .admin-billing-error button { border:0; border-radius:10px; padding:10px 14px; color:#fff; background:#665cff; cursor:pointer; }
+.admin-billing-toast { position:fixed; right:22px; bottom:22px; z-index:90; padding:11px 14px; border-radius:12px; color:#fff; background:#f34f70; box-shadow:0 14px 30px rgba(243,79,112,.22); font-size:8px; }
+
+@keyframes admin-billing-rise { from { opacity:0; transform:translateY(12px) scale(.985); } to { opacity:1; transform:none; } }
+@keyframes admin-billing-row { from { opacity:0; transform:translateX(-7px); } to { opacity:1; transform:none; } }
+@keyframes admin-billing-draw { to { stroke-dashoffset:0; } }
+@keyframes admin-billing-live { 0% { box-shadow:0 0 0 0 rgba(32,201,142,.18); } 75%,100% { box-shadow:0 0 0 9px rgba(32,201,142,0); } }
+@keyframes admin-billing-orbit { from { transform:translate3d(0,0,0) scale(.95); } to { transform:translate3d(14px,12px,0) scale(1.04); } }
+@keyframes admin-billing-shimmer { to { background-position:-220% 0; } }
+@keyframes admin-modal-backdrop { from { opacity:0; } }
+@keyframes admin-modal-enter { from { opacity:0; transform:translateY(16px) scale(.98); } to { opacity:1; transform:none; } }
+
+@media (max-width:1180px) {
+  .admin-billing__metrics { grid-template-columns:repeat(2,1fr); }
+  .admin-billing__overview { grid-template-columns:1fr; }
+  .admin-plan-grid { grid-template-columns:1fr; }
+}
+@media (max-width:760px) {
+  .admin-billing__intro { align-items:flex-start; flex-direction:column; padding:22px; }
+  .admin-billing__pulse { width:100%; box-sizing:border-box; }
+  .admin-billing__metrics { grid-template-columns:1fr; }
+  .admin-billing-console__head { align-items:stretch; flex-direction:column; padding:0 12px 10px; }
+  .admin-billing-console__tabs { overflow:auto; }
+  .admin-billing-console__tabs button { min-width:125px; min-height:50px; }
+  .admin-billing-toolbar { grid-template-columns:1fr; }
+  .admin-renewals__summary { grid-template-columns:1fr; }
+  .admin-renewals__list article { grid-template-columns:52px 1fr auto; padding:10px; }
+  .admin-renewals__list article > .admin-subscription-status,.admin-renewals__list article > strong { display:none; }
+  .admin-billing-modal { padding:10px; }
+  .admin-billing-modal__grid { grid-template-columns:1fr; }
+  .admin-billing-modal__wide { grid-column:auto; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .admin-billing *, .admin-billing-modal * { animation:none !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}

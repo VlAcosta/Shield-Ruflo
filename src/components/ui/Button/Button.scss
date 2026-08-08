@@ -1,0 +1,68 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.ui-button {
+  @include focus-ring;
+  border: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform $transition-fast, box-shadow $transition-base, background $transition-fast;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+
+  &:not(:disabled):active {
+    transform: translateY(1px) scale(.985);
+  }
+
+  &--sm {
+    min-height: 32px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+
+  &--md {
+    min-height: 40px;
+    padding: 0 18px;
+    font-size: 13px;
+  }
+
+  &--primary {
+    color: #fff;
+    background: $gradient-primary;
+    box-shadow: 0 9px 20px rgba(102, 97, 245, .18);
+
+    &:not(:disabled):hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 28px rgba(102, 97, 245, .26);
+    }
+  }
+
+  &--ghost {
+    color: $color-text-secondary;
+    background: transparent;
+
+    &:not(:disabled):hover {
+      color: $color-text;
+      background: $color-surface-soft;
+    }
+  }
+
+  &--outline {
+    color: $color-primary;
+    background: #fff;
+    border: 1px solid $color-border-strong;
+
+    &:not(:disabled):hover {
+      border-color: rgba(102, 97, 245, .45);
+      background: $color-primary-soft;
+    }
+  }
+}

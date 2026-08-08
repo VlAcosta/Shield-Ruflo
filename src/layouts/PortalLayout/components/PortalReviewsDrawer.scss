@@ -1,0 +1,1209 @@
+@use '../../../styles/tokens' as *;
+
+.portal-reviews-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 720;
+  pointer-events: none;
+}
+
+.portal-reviews-layer__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(18, 24, 57, .22);
+  cursor: default;
+  pointer-events: auto;
+  animation: portal-reviews-overlay-in 180ms ease-out both;
+}
+
+.portal-reviews {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  width: min(940px, calc(100vw - 270px));
+  min-width: 700px;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+  color: $color-text;
+  background: #fbfcff;
+  border: 1px solid rgba(224, 228, 241, .92);
+  border-radius: 26px;
+  box-shadow: -18px 24px 68px rgba(28, 35, 73, .16);
+  pointer-events: auto;
+  contain: layout paint;
+  animation: portal-reviews-panel-in 340ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.portal-reviews__header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 20px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% -15%, rgba(164, 66, 239, .18), transparent 36%),
+    radial-gradient(circle at 26% -35%, rgba(102, 97, 245, .15), transparent 32%),
+    linear-gradient(180deg, #fff 0%, #fbfbff 100%);
+  border-bottom: 1px solid $color-border;
+}
+
+.portal-reviews__header::after {
+  content: '';
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  top: -152px;
+  right: 86px;
+  border: 1px solid rgba(102, 97, 245, .09);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.portal-reviews__heading {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.portal-reviews__eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 10px;
+  font-weight: 780;
+  line-height: 1;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.portal-reviews__titleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.portal-reviews__titleRow h2 {
+  margin: 0;
+  color: $color-text;
+  font-family: $font-family-display;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.portal-reviews__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(22, 191, 131, .14);
+  border-radius: 999px;
+  color: #0d9f6d;
+  background: rgba(22, 191, 131, .07);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.portal-reviews__live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $color-success;
+  box-shadow: 0 0 0 3px rgba(22, 191, 131, .1);
+}
+
+.portal-reviews__heading p {
+  max-width: 570px;
+  margin: 9px 0 0;
+  color: $color-text-secondary;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+.portal-reviews__headerActions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portal-reviews__openCenter {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(102, 97, 245, .14);
+  border-radius: 12px;
+  color: #5f59df;
+  background: rgba(102, 97, 245, .06);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.portal-reviews__openCenter span {
+  transition: transform 180ms ease;
+}
+
+.portal-reviews__openCenter:hover span {
+  transform: translateX(2px);
+}
+
+.portal-reviews__close {
+  position: relative;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid $color-border;
+  border-radius: 13px;
+  color: $color-text-secondary;
+  background: rgba(255, 255, 255, .92);
+  cursor: pointer;
+  transition: transform $transition-fast, color $transition-fast, border-color $transition-fast, background $transition-fast;
+}
+
+.portal-reviews__close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.portal-reviews__close:hover {
+  transform: rotate(4deg);
+  color: $color-text;
+  border-color: $color-border-strong;
+  background: #fff;
+}
+
+.portal-reviews__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: $color-border;
+  border-bottom: 1px solid $color-border;
+}
+
+.portal-reviews__stats > div {
+  min-width: 0;
+  padding: 13px 20px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+}
+
+.portal-reviews__stats span {
+  color: $color-text-muted;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.portal-reviews__stats strong {
+  color: $color-text;
+  font-family: $font-family-display;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+.portal-reviews__stats strong.is-danger {
+  color: $color-danger;
+}
+
+.portal-reviews__stats strong small {
+  color: $color-warning;
+  font-size: 12px;
+}
+
+.portal-reviews__tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 18px 0;
+  background: #fff;
+}
+
+.portal-reviews__tabs button {
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 11px 11px 0 0;
+  color: $color-text-secondary;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 680;
+  transition: color $transition-fast, background $transition-fast, border-color $transition-fast;
+}
+
+.portal-reviews__tabs button em {
+  min-width: 21px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: $color-text-muted;
+  background: $color-surface-soft;
+  font-size: 9px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.portal-reviews__tabs button:hover {
+  color: $color-text;
+  background: #fafaff;
+}
+
+.portal-reviews__tabs button.is-active {
+  color: $color-primary;
+  border-color: $color-border $color-border #fff;
+  background: #fff;
+}
+
+.portal-reviews__tabs button.is-active em {
+  color: $color-primary;
+  background: $color-primary-soft;
+}
+
+.portal-reviews__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #fff;
+  border-top: 1px solid $color-border;
+  border-bottom: 1px solid $color-border;
+}
+
+.portal-reviews__search {
+  height: 38px;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid $color-border;
+  border-radius: 11px;
+  color: $color-text-muted;
+  background: $color-surface-soft;
+  transition: border-color $transition-fast, background $transition-fast, box-shadow $transition-fast;
+}
+
+.portal-reviews__search:focus-within {
+  border-color: rgba(102, 97, 245, .32);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 97, 245, .06);
+}
+
+.portal-reviews__search svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.portal-reviews__search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: $color-text;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+}
+
+.portal-reviews__search input::placeholder {
+  color: $color-text-muted;
+}
+
+.portal-reviews__filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.portal-reviews__filterIcon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: $color-text-muted;
+}
+
+.portal-reviews__filterIcon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.portal-reviews__filters select {
+  height: 38px;
+  max-width: 150px;
+  border: 1px solid $color-border;
+  border-radius: 11px;
+  outline: 0;
+  color: $color-text-secondary;
+  background: #fff;
+  padding: 0 29px 0 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.portal-reviews__workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, .92fr) minmax(340px, 1.08fr);
+  overflow: hidden;
+}
+
+.portal-reviews__listPane,
+.portal-reviews__detailPane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.portal-reviews__listPane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8f9fe;
+  border-right: 1px solid $color-border;
+}
+
+.portal-reviews__listHead {
+  min-height: 39px;
+  padding: 10px 14px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: $color-text-secondary;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.portal-reviews__listHead small {
+  overflow: hidden;
+  color: $color-text-muted;
+  font-size: 9px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-reviews__list {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #d9deed transparent;
+  padding: 0 10px 12px;
+}
+
+.portal-review-card {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 7px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  color: inherit;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  content-visibility: auto;
+  contain-intrinsic-size: 112px;
+  transition: border-color $transition-fast, background $transition-fast, box-shadow $transition-fast;
+}
+
+.portal-review-card:hover {
+  border-color: #e1e5f2;
+  background: #fff;
+}
+
+.portal-review-card.is-selected {
+  border-color: rgba(102, 97, 245, .28);
+  background: linear-gradient(135deg, rgba(102, 97, 245, .055), rgba(164, 66, 239, .025)), #fff;
+  box-shadow: 0 8px 24px rgba(49, 53, 102, .055);
+}
+
+.portal-review-card__avatar,
+.portal-review-detail__avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 790;
+}
+
+.portal-review-card__avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.portal-review-card__avatar--negative,
+.portal-review-detail__avatar--negative {
+  background: linear-gradient(135deg, #fb6f89, #ef4767);
+}
+
+.portal-review-card__avatar--neutral,
+.portal-review-detail__avatar--neutral {
+  background: linear-gradient(135deg, #7f79fa, #6661f5);
+}
+
+.portal-review-card__avatar--positive,
+.portal-review-detail__avatar--positive {
+  background: linear-gradient(135deg, #38d3a0, #15af79);
+}
+
+.portal-review-card__body {
+  min-width: 0;
+  display: block;
+}
+
+.portal-review-card__top,
+.portal-review-card__rating,
+.portal-review-card__footer {
+  display: flex;
+  align-items: center;
+}
+
+.portal-review-card__top {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.portal-review-card__author {
+  min-width: 0;
+  overflow: hidden;
+  color: $color-text;
+  font-size: 11px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-review-card__platform {
+  flex: 0 0 auto;
+  color: $color-text-muted;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.portal-review-card__rating {
+  gap: 8px;
+  margin-top: 3px;
+  color: $color-text-muted;
+  font-size: 8px;
+}
+
+.portal-review-stars {
+  display: inline-flex;
+  gap: 1px;
+  color: #d8ddeb;
+}
+
+.portal-review-stars i {
+  color: currentColor;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.portal-review-stars i.is-filled {
+  color: $color-warning;
+}
+
+.portal-review-card__text {
+  margin-top: 8px;
+  display: -webkit-box;
+  overflow: hidden;
+  color: $color-text-secondary;
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.portal-review-card__footer {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 7px;
+  margin-top: 9px;
+  color: $color-text-muted;
+  font-size: 8px;
+}
+
+.portal-review-card__footer > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-review-card__footer em {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: #a66e06;
+  background: #fff8e8;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 720;
+}
+
+.portal-review-card__footer em.is-done {
+  color: #0d9f6d;
+  background: #ebfbf5;
+}
+
+.portal-reviews__loadMore {
+  width: 100%;
+  height: 38px;
+  border: 1px dashed $color-border-strong;
+  border-radius: 12px;
+  color: $color-primary;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.portal-reviews__detailPane {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #d9deed transparent;
+  background: #fff;
+}
+
+.portal-review-detail {
+  min-height: 100%;
+  padding: 22px 24px 24px;
+}
+
+.portal-review-detail__mobileBack {
+  display: none;
+}
+
+.portal-review-detail__authorRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.portal-review-detail__avatar {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  font-size: 11px;
+  border-radius: 14px;
+}
+
+.portal-review-detail__authorRow > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.portal-review-detail__authorRow strong {
+  overflow: hidden;
+  color: $color-text;
+  font-size: 13px;
+  font-weight: 790;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-review-detail__authorRow span {
+  color: $color-text-muted;
+  font-size: 9px;
+}
+
+.portal-review-detail__ratingRow {
+  margin-top: 19px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.portal-review-stars--large {
+  gap: 2px;
+}
+
+.portal-review-stars--large i {
+  font-size: 15px;
+}
+
+.portal-review-detail__ratingRow > strong {
+  color: $color-text-secondary;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.portal-review-detail blockquote {
+  position: relative;
+  margin: 16px 0 0;
+  padding: 16px 17px;
+  border: 1px solid $color-border;
+  border-radius: 15px;
+  color: $color-text;
+  background: $color-surface-soft;
+  font-size: 11px;
+  line-height: 1.62;
+}
+
+.portal-review-detail blockquote::before {
+  content: '';
+  position: absolute;
+  top: 13px;
+  bottom: 13px;
+  left: -1px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: $gradient-primary;
+}
+
+.portal-review-detail__meta {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.portal-review-detail__meta > div {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.portal-review-detail__meta span,
+.portal-review-detail__composerHead span {
+  color: $color-text-muted;
+  font-size: 8px;
+  font-weight: 720;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.portal-review-detail__meta strong {
+  overflow: hidden;
+  color: $color-text-secondary;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-review-detail__meta p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.portal-review-detail__meta em {
+  padding: 4px 6px;
+  border-radius: 7px;
+  color: $color-primary;
+  background: $color-primary-soft;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 680;
+}
+
+.portal-review-detail__divider {
+  height: 1px;
+  margin: 20px 0;
+  background: $color-border;
+}
+
+.portal-review-detail__composerHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.portal-review-detail__composerHead > div {
+  display: grid;
+  gap: 4px;
+}
+
+.portal-review-detail__composerHead small {
+  color: $color-text-muted;
+  font-size: 9px;
+}
+
+.portal-review-detail__templates {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.portal-review-detail__templates button {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid $color-border;
+  border-radius: 9px;
+  color: $color-text-secondary;
+  background: #fff;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 680;
+  transition: border-color $transition-fast, color $transition-fast, background $transition-fast;
+}
+
+.portal-review-detail__templates button:hover {
+  color: $color-primary;
+  border-color: rgba(102, 97, 245, .24);
+  background: $color-primary-soft;
+}
+
+.portal-review-detail__textarea {
+  position: relative;
+  margin-top: 10px;
+  display: block;
+}
+
+.portal-review-detail__textarea textarea {
+  width: 100%;
+  min-height: 116px;
+  resize: vertical;
+  border: 1px solid $color-border;
+  border-radius: 14px;
+  outline: 0;
+  padding: 13px 13px 26px;
+  color: $color-text;
+  background: #fbfcff;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.55;
+  transition: border-color $transition-fast, background $transition-fast, box-shadow $transition-fast;
+}
+
+.portal-review-detail__textarea textarea:focus {
+  border-color: rgba(102, 97, 245, .34);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 97, 245, .06);
+}
+
+.portal-review-detail__textarea > span {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: $color-text-muted;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.portal-review-detail__actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.portal-review-detail__send,
+.portal-review-detail__secondary,
+.portal-review-detail__iconAction {
+  min-height: 38px;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 720;
+  transition: transform $transition-fast, opacity $transition-fast, border-color $transition-fast, background $transition-fast;
+}
+
+.portal-review-detail__send {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  color: #fff;
+  background: $gradient-primary;
+  box-shadow: 0 9px 20px rgba(102, 97, 245, .16);
+}
+
+.portal-review-detail__send svg {
+  width: 14px;
+  height: 14px;
+}
+
+.portal-review-detail__send:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.portal-review-detail__send:disabled,
+.portal-review-detail__secondary:disabled,
+.portal-review-detail__iconAction:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.portal-review-detail__secondary {
+  padding: 0 11px;
+  border: 1px solid $color-border;
+  color: $color-text-secondary;
+  background: #fff;
+}
+
+.portal-review-detail__iconAction {
+  width: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid $color-border;
+  color: $color-text-secondary;
+  background: #fff;
+}
+
+.portal-review-detail__iconAction svg {
+  width: 15px;
+  height: 15px;
+}
+
+.portal-review-detail__iconAction:hover,
+.portal-review-detail__secondary:hover {
+  border-color: $color-border-strong;
+  background: $color-surface-soft;
+}
+
+.portal-review-detail__iconAction.is-success {
+  color: $color-success;
+  border-color: rgba(22, 191, 131, .16);
+  background: rgba(22, 191, 131, .05);
+}
+
+.portal-reviews__detailEmpty,
+.portal-reviews__state {
+  min-height: 180px;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  color: $color-text-muted;
+  text-align: center;
+}
+
+.portal-reviews__detailEmpty > span,
+.portal-reviews__stateIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: $color-primary;
+  background: $color-primary-soft;
+}
+
+.portal-reviews__detailEmpty svg,
+.portal-reviews__stateIcon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.portal-reviews__detailEmpty strong,
+.portal-reviews__state strong {
+  color: $color-text;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.portal-reviews__detailEmpty p,
+.portal-reviews__state span {
+  max-width: 240px;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.portal-reviews__state button {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid $color-border;
+  border-radius: 9px;
+  color: $color-primary;
+  background: #fff;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.portal-reviews-skeleton {
+  padding: 0 10px;
+  display: grid;
+  gap: 7px;
+}
+
+.portal-reviews-skeleton__item {
+  min-height: 108px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 10px;
+  border-radius: 15px;
+  background: #fff;
+}
+
+.portal-reviews-skeleton__item > i,
+.portal-reviews-skeleton__item b {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  background: #eef1f7;
+}
+
+.portal-reviews-skeleton__item > i::after,
+.portal-reviews-skeleton__item b::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .72), transparent);
+  animation: portal-review-shimmer 1.15s linear infinite;
+}
+
+.portal-reviews-skeleton__item > i {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
+.portal-reviews-skeleton__item > span {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+
+.portal-reviews-skeleton__item b {
+  height: 8px;
+  border-radius: 999px;
+}
+
+.portal-reviews-skeleton__item b:nth-child(1) { width: 46%; }
+.portal-reviews-skeleton__item b:nth-child(2) { width: 28%; }
+.portal-reviews-skeleton__item b:nth-child(3) { width: 88%; height: 22px; }
+
+@keyframes portal-reviews-panel-in {
+  from { opacity: 0; transform: translate3d(34px, 0, 0) scale(.988); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes portal-reviews-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes portal-review-shimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (max-width: 1180px) {
+  .portal-reviews {
+    width: min(870px, calc(100vw - 40px));
+    min-width: 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .portal-reviews {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    border-radius: 22px;
+  }
+
+  .portal-reviews__workspace {
+    position: relative;
+    display: block;
+  }
+
+  .portal-reviews__listPane,
+  .portal-reviews__detailPane {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    transition: transform 260ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease;
+  }
+
+  .portal-reviews__listPane {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  .portal-reviews__detailPane {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  .portal-reviews__workspace.is-detail-mobile .portal-reviews__listPane {
+    transform: translateX(-22%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .portal-reviews__workspace.is-detail-mobile .portal-reviews__detailPane {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  .portal-review-detail__mobileBack {
+    margin: -3px 0 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    padding: 0;
+    color: $color-primary;
+    background: transparent;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 720;
+  }
+
+  .portal-review-detail__mobileBack svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .portal-reviews__header {
+    padding: 18px 18px 15px;
+  }
+
+  .portal-reviews__heading p,
+  .portal-reviews__live {
+    display: none;
+  }
+
+  .portal-reviews__titleRow h2 {
+    font-size: 22px;
+  }
+
+  .portal-reviews__stats > div {
+    padding: 10px 12px;
+    display: grid;
+    gap: 3px;
+  }
+
+  .portal-reviews__stats strong {
+    font-size: 16px;
+  }
+
+  .portal-reviews__tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .portal-reviews__tabs::-webkit-scrollbar { display: none; }
+
+  .portal-reviews__tabs button {
+    flex: 0 0 auto;
+  }
+
+  .portal-reviews__toolbar {
+    padding: 10px 12px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .portal-reviews__filters {
+    width: 100%;
+  }
+
+  .portal-reviews__filterIcon {
+    display: none;
+  }
+
+  .portal-reviews__filters select {
+    min-width: 0;
+    max-width: none;
+    flex: 1;
+  }
+
+  .portal-review-detail {
+    padding: 18px;
+  }
+
+  .portal-review-detail__meta {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-review-detail__actions {
+    flex-wrap: wrap;
+  }
+
+  .portal-review-detail__send {
+    flex-basis: calc(100% - 45px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-reviews,
+  .portal-reviews-layer__overlay,
+  .portal-reviews-skeleton__item > i::after,
+  .portal-reviews-skeleton__item b::after {
+    animation: none;
+  }
+
+  .portal-reviews__listPane,
+  .portal-reviews__detailPane,
+  .portal-review-card,
+  .portal-reviews__close,
+  .portal-review-detail__send {
+    transition: none;
+  }
+}
+
+/* Stage A17 · RBAC */
+.portal-review-detail__access-note {
+  margin-top: 8px;
+  padding: 9px 11px;
+  border: 1px solid rgba(102, 97, 245, .12);
+  border-radius: 10px;
+  color: #7c849e;
+  background: rgba(102, 97, 245, .05);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.portal-review-detail__template:disabled,
+.portal-review-detail__send:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+  transform: none;
+}

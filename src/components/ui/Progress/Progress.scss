@@ -1,0 +1,20 @@
+.ui-progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eceef6;
+
+  &__bar {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    transition: width 500ms cubic-bezier(.16, 1, .3, 1);
+  }
+
+  &--violet .ui-progress__bar { background: linear-gradient(90deg, #625cf4, #9650ee); }
+  &--green .ui-progress__bar { background: #15ba80; }
+  &--orange .ui-progress__bar { background: #f3a10a; }
+  &--red .ui-progress__bar { background: #f34f70; }
+}

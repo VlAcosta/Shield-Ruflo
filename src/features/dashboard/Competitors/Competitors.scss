@@ -1,0 +1,84 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.dashboard-competitors {
+  min-height: 250px;
+  &__manage { @include focus-ring; min-height: 32px; padding: 0 11px; border: 1px solid rgba(102,97,245,.14); border-radius: 9px; color: $color-primary; background: rgba(102,97,245,.05); cursor: pointer; font: inherit; font-size: 8px; font-weight: 720; }
+  &__empty { width: 100%; min-height: 165px; padding: 18px; display: grid; grid-template-columns: 50px minmax(0,1fr); gap: 14px; align-items: center; border: 1px dashed rgba(102,97,245,.18); border-radius: 16px; color: inherit; background: linear-gradient(145deg,#fcfcff,#f8f8ff); cursor: pointer; text-align: left; transition: transform $transition-base, border-color $transition-fast, box-shadow $transition-base; }
+  &__empty:hover { transform: translateY(-2px); border-color: rgba(102,97,245,.3); box-shadow: 0 14px 28px rgba(39,45,86,.06); }
+  &__empty > span { width: 50px; height: 50px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: $gradient-primary; box-shadow: 0 10px 24px rgba(102,97,245,.18); font-size: 12px; font-weight: 850; }
+  &__empty > div { display: grid; gap: 5px; }
+  &__empty strong { color: $color-text; font-size: 12px; letter-spacing: -.02em; }
+  &__empty p { max-width: 330px; margin: 0; color: $color-text-muted; font-size: 8.5px; line-height: 1.45; }
+  &__empty b { color: $color-primary; font-size: 8px; }
+
+  &__body { display: grid; gap: 12px; }
+  &__benchmark { padding: 12px; display: grid; grid-template-columns: 1fr auto 1fr 1.05fr; gap: 10px; align-items: stretch; border: 1px solid #edf0f6; border-radius: 15px; background: linear-gradient(145deg,#fff,#fafaff); }
+  &__benchmark > div, &__benchmark > aside { padding: 7px 9px; display: grid; align-content: center; gap: 2px; border-radius: 10px; }
+  &__benchmark > div span, &__benchmark > aside span { color: $color-text-muted; font-size: 6.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  &__benchmark > div strong, &__benchmark > aside strong { color: $color-text; font-family: $font-family-display; font-size: 17px; line-height: 1; letter-spacing: -.045em; }
+  &__benchmark small { color: $color-text-muted; font-size: 6.5px; }
+  &__benchmark > i { align-self: center; color: #b4b9c9; font-size: 7px; font-style: normal; font-weight: 800; }
+  &__benchmark > aside { background: #f7f8fc; }
+  &__benchmark > aside.is-positive { background: rgba(22,191,131,.07); } &__benchmark > aside.is-positive strong { color: $color-success; }
+  &__benchmark > aside.is-negative { background: rgba(243,79,112,.06); } &__benchmark > aside.is-negative strong { color: $color-danger; }
+
+  &__list { display: grid; gap: 6px; }
+  &__list article { min-height: 48px; padding: 7px 8px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 9px; align-items: center; border: 1px solid #eef0f6; border-radius: 12px; background: #fff; animation: competitor-row-in 420ms cubic-bezier(.16,1,.3,1) both; animation-delay: calc(var(--competitor-index) * 55ms); }
+  &__platform { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: $color-primary; background: rgba(102,97,245,.08); font-size: 8px; font-weight: 850; }
+  &__list article > div { min-width: 0; display: grid; gap: 2px; }
+  &__list article > div strong { overflow: hidden; color: $color-text; font-size: 8.5px; text-overflow: ellipsis; white-space: nowrap; }
+  &__list article > div small { color: $color-text-muted; font-size: 6.5px; }
+  &__rating { display: grid; justify-items: end; gap: 2px; color: $color-text; font-size: 12px; font-weight: 800; }
+  &__rating small { color: $color-text-muted; font-size: 6px; font-weight: 600; }
+  &__insight { padding: 10px 11px; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; border-radius: 12px; background: #f7f8fc; }
+  &__insight > span { grid-row: 1 / span 2; align-self: center; padding: 5px 6px; border-radius: 7px; color: $color-primary; background: #fff; font-size: 6px; font-weight: 820; letter-spacing: .06em; }
+  &__insight strong { color: $color-text-secondary; font-size: 8px; }
+  &__insight small { color: $color-text-muted; font-size: 6.5px; }
+  &__error { margin-top: 8px; color: $color-danger; font-size: 7px; }
+}
+
+.competitor-modal {
+  position: fixed; inset: 0; z-index: 1800; display: grid; place-items: center; padding: 22px;
+  &__backdrop { position: absolute; inset: 0; border: 0; background: rgba(23,28,53,.48); }
+  &__dialog { position: relative; width: min(760px,100%); max-height: calc(100dvh - 36px); overflow: auto; border: 1px solid rgba(255,255,255,.9); border-radius: 22px; background: #fff; box-shadow: 0 35px 90px rgba(24,30,65,.25); animation: competitor-modal-in 320ms cubic-bezier(.16,1,.3,1) both; }
+  &__dialog > header { padding: 22px 22px 17px; display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid #edf0f6; }
+  &__dialog > header > div { display: grid; gap: 4px; }
+  &__dialog > header span { color: $color-primary; font-size: 7px; font-weight: 820; letter-spacing: .09em; }
+  &__dialog > header h2 { margin: 0; color: $color-text; font-family: $font-family-display; font-size: 21px; letter-spacing: -.04em; }
+  &__dialog > header p { max-width: 520px; margin: 0; color: $color-text-muted; font-size: 9px; line-height: 1.45; }
+  &__dialog > header button { width: 34px; height: 34px; border: 0; border-radius: 10px; color: $color-text-muted; background: #f5f6fa; cursor: pointer; font-size: 19px; }
+  &__body { padding: 20px 22px; display: grid; grid-template-columns: 1.35fr .8fr; gap: 20px; }
+  form { display: grid; gap: 11px; }
+  label { display: grid; gap: 5px; }
+  label > span, aside > span { color: $color-text-secondary; font-size: 7.5px; font-weight: 700; }
+  input, select { width: 100%; height: 40px; padding: 0 10px; border: 1px solid #e2e5ef; border-radius: 10px; outline: 0; color: $color-text; background: #fafbfe; font: inherit; font-size: 8.5px; }
+  input:focus, select:focus { border-color: rgba(102,97,245,.38); box-shadow: 0 0 0 3px rgba(102,97,245,.08); background: #fff; }
+  &__grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8px; }
+  &__metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; }
+  &__primary { min-height: 42px; border: 0; border-radius: 11px; color: #fff; background: $gradient-primary; cursor: pointer; font: inherit; font-size: 8.5px; font-weight: 750; }
+  &__primary:disabled { opacity: .45; cursor: not-allowed; }
+  aside { padding: 12px; display: grid; align-content: start; gap: 7px; border: 1px solid #edf0f6; border-radius: 14px; background: #fafbfe; }
+  aside article { padding: 7px; display: grid; grid-template-columns: 30px minmax(0,1fr) 24px; gap: 7px; align-items: center; border-radius: 10px; background: #fff; }
+  aside article > i { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: $color-primary; background: rgba(102,97,245,.08); font-size: 7px; font-style: normal; font-weight: 850; }
+  aside article > div { min-width: 0; display: grid; gap: 2px; }
+  aside article strong { overflow: hidden; color: $color-text; font-size: 7.5px; text-overflow: ellipsis; white-space: nowrap; }
+  aside article small { color: $color-text-muted; font-size: 6px; }
+  aside article button { width: 24px; height: 24px; border: 0; border-radius: 7px; color: #a4aabb; background: #f6f7fa; cursor: pointer; }
+  aside > p { margin: 4px 0 0; color: $color-text-muted; font-size: 7.5px; line-height: 1.45; }
+  &__dialog > footer { padding: 14px 22px 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px; border-top: 1px solid #edf0f6; }
+  &__dialog > footer span { max-width: 520px; color: $color-text-muted; font-size: 7px; }
+  &__dialog > footer button { min-height: 36px; padding: 0 15px; border: 0; border-radius: 10px; color: #fff; background: $gradient-primary; cursor: pointer; font: inherit; font-size: 8px; font-weight: 700; }
+}
+
+@keyframes competitor-row-in { from { opacity:0; transform: translateY(7px); } to { opacity:1; transform:none; } }
+@keyframes competitor-modal-in { from { opacity:0; transform: translateY(12px) scale(.985); } to { opacity:1; transform:none; } }
+@media (max-width: 700px) {
+  .dashboard-competitors__benchmark { grid-template-columns: 1fr 1fr; }
+  .dashboard-competitors__benchmark > i { display: none; }
+  .dashboard-competitors__benchmark > aside { grid-column: 1 / -1; }
+  .competitor-modal__body { grid-template-columns: 1fr; }
+  .competitor-modal__metrics { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 460px) { .competitor-modal { padding: 10px; } .competitor-modal__grid, .competitor-modal__metrics { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-competitors *, .competitor-modal * { animation-duration:.01ms; transition-duration:.01ms; } }

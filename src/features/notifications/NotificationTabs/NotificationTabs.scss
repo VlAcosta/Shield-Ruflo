@@ -1,0 +1,63 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.notification-tabs {
+  @include card-surface;
+  min-height: 54px;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar { display: none; }
+
+  &__item {
+    @include focus-ring;
+    min-height: 40px;
+    padding: 0 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 12px;
+    color: $color-text-secondary;
+    background: transparent;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: color $transition-fast, background $transition-fast, box-shadow $transition-base, transform $transition-fast;
+
+    svg { width: 15px; height: 15px; }
+
+    em {
+      min-width: 21px;
+      height: 21px;
+      padding: 0 6px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: $color-primary;
+      background: rgba(102, 97, 245, .09);
+      font-style: normal;
+      font-size: 8px;
+      font-weight: 760;
+      transition: color $transition-fast, background $transition-fast;
+    }
+
+    &:hover:not(.is-active) { color: $color-text; background: rgba(102, 97, 245, .045); }
+    &:active { transform: scale(.985); }
+
+    &.is-active {
+      color: #fff;
+      background: $gradient-primary;
+      box-shadow: 0 10px 24px rgba(102, 97, 245, .22);
+
+      em { color: #fff; background: rgba(255, 255, 255, .16); }
+    }
+  }
+}

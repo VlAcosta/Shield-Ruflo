@@ -1,0 +1,80 @@
+/*
+ * Business Shield — readable responsive typography.
+ *
+ * Goal: the product must be comfortably readable at 100% browser zoom.
+ * The whole UI uses rem-based component sizes, therefore the root size is
+ * the single source of truth for the visual type scale.
+ *
+ * Target viewports: 2K / 1920 / 1240 / 980 / 480.
+ */
+:root {
+  --bs-type-scale-name: "desktop";
+  --bs-type-root: 20px;
+
+  /* Semantic minimums for future components. */
+  --bs-font-caption: 0.75rem;
+  --bs-font-small: 0.8125rem;
+  --bs-font-body: 1rem;
+  --bs-font-body-lg: 1.125rem;
+  --bs-font-title-sm: 1.25rem;
+  --bs-font-title: 1.5rem;
+}
+
+html {
+  font-size: var(--bs-type-root);
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+/* 2K / QHD and wider — generous, but not oversized. */
+@media (min-width: 2560px) {
+  :root {
+    --bs-type-scale-name: "2k";
+    --bs-type-root: 22px;
+  }
+}
+
+/* Full HD / 1920-class desktops — primary reference resolution. */
+@media (min-width: 1920px) and (max-width: 2559.98px) {
+  :root {
+    --bs-type-scale-name: "1920";
+    --bs-type-root: 21px;
+  }
+}
+
+/* Desktop / laptop between 1240 and Full HD. */
+@media (min-width: 1241px) and (max-width: 1919.98px) {
+  :root {
+    --bs-type-scale-name: "desktop";
+    --bs-type-root: 20px;
+  }
+}
+
+/* Compact desktop around 1240px. */
+@media (min-width: 981px) and (max-width: 1240px) {
+  :root {
+    --bs-type-scale-name: "1240";
+    --bs-type-root: 19.5px;
+  }
+}
+
+/* Tablet / narrow workspace around 980px. */
+@media (min-width: 481px) and (max-width: 980px) {
+  :root {
+    --bs-type-scale-name: "980";
+    --bs-type-root: 19px;
+  }
+}
+
+/* Mobile around 480px — keep body text readable without excessive wrapping. */
+@media (max-width: 480px) {
+  :root {
+    --bs-type-scale-name: "480";
+    --bs-type-root: 19px;
+  }
+}

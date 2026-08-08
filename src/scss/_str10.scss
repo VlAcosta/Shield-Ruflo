@@ -1,0 +1,222 @@
+/* =========================
+   STR10 — финальный CTA + footer
+========================= */
+
+.str10-hero {
+  width: 100%;
+  padding: 86px 0 110px;
+
+  background:
+    radial-gradient(1000px 700px at 16% 18%, rgba(122, 0, 217, 0.55) 0%, rgba(122, 0, 217, 0) 58%),
+    radial-gradient(900px 620px at 80% 70%, rgba(255, 106, 0, 0.65) 0%, rgba(255, 106, 0, 0) 60%),
+    linear-gradient(90deg, #7a00d9 0%, #ff2f8e 55%, #ff6a00 110%);
+}
+
+.str10-hero__container {
+  width: min(980px, calc(100% - 96px));
+  margin: 0 auto;
+  text-align: center;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .str10-hero__container { width: calc(100% - 28px); }
+}
+
+.str10-hero__title {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 1000;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 1024px) { .str10-hero__title { font-size: 46px; } }
+@media (max-width: 640px)  { .str10-hero__title { font-size: 34px; } }
+
+.str10-hero__sub {
+  margin: 18px auto 0;
+  max-width: 680px;
+
+  font-size: 18px;
+  line-height: 1.55;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.str10-hero__chips {
+  margin: 36px auto 0;
+  width: min(720px, 100%);
+
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .str10-hero__chips { grid-template-columns: 1fr; }
+}
+
+.str10-hero__chip {
+  padding: 14px 18px;
+  border-radius: 14px;
+
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.str10-hero__btns {
+  margin-top: 34px;
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.str10-hero__btn {
+  height: 64px;
+  min-width: 320px;
+  padding: 0 26px;
+
+  border-radius: 16px;
+  font-size: 28px;
+  font-weight: 1000;
+  letter-spacing: 0.02em;
+
+  cursor: pointer;
+  transition: transform .12s ease, filter .12s ease;
+}
+
+@media (max-width: 640px) {
+  .str10-hero__btn { min-width: 260px; font-size: 22px; }
+}
+
+.str10-hero__btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.str10-hero__btn:active { transform: translateY(0px) scale(0.99); }
+
+.str10-hero__btn--primary {
+  border: none;
+  background: rgba(255, 255, 255, 0.98);
+  color: rgba(17, 24, 39, 0.92);
+  box-shadow: 0 20px 40px rgba(17, 24, 39, 0.20);
+}
+
+.str10-hero__btn--ghost {
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ===== footer ===== */
+.str10-footer {
+  background: #172231;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 52px 0 34px;
+}
+
+.str10-footer__container {
+  width: min(1240px, calc(100% - 96px));
+  margin: 0 auto;
+}
+
+@media (max-width: 640px) {
+  .str10-footer__container { width: calc(100% - 28px); }
+}
+
+.str10-footer__top {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 30px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .str10-footer__top { grid-template-columns: 1fr; }
+}
+
+.str10-footer__brandRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.str10-footer__logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  padding: 10px;
+
+  background: linear-gradient(90deg, #7a00d9 0%, #ff2f8e 100%);
+  box-shadow: 0 18px 34px rgba(168, 85, 247, 0.20);
+}
+
+.str10-footer__brandName {
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.str10-footer__text {
+  text-align: left;
+  margin: 14px 0 0;
+  max-width: 520px;
+
+  font-size: 14px;
+  line-height: 1.55;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.70);
+}
+
+.str10-footer__textMuted {
+    text-align: left;
+  margin: 22px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.str10-footer__contactsTitle {
+  font-size: 18px;
+  font-weight: 1000;
+  color: #fff;
+  text-align: right;
+}
+
+@media (max-width: 1024px) {
+  .str10-footer__contactsTitle { text-align: left; }
+}
+
+.str10-footer__line {
+  margin: 34px 0 22px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.str10-footer__bottom {
+  text-align: center;
+}
+
+.str10-footer__copy {
+  font-size: 16px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.str10-footer__disc {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.18);
+}

@@ -1,0 +1,393 @@
+// ==============================================
+// Базовые переменные и миксины (рекомендую вынести)
+// ==============================================
+$transition-base: 140ms ease;
+$gradient-main: linear-gradient(90deg, #8501d8 0%, #ff6800 135%);
+$gradient-text: linear-gradient(90deg, #615fff 0%, #f6339a 100%);
+$shadow-card: 0 18px 34px rgba(17, 24, 39, 0.12), 0 2px 10px rgba(17, 24, 39, 0.06);
+
+// ==============================================
+// Глобальные стили
+// ==============================================
+.main_block {
+  min-height: 100vh;
+  background: linear-gradient(108deg, #f3e6ff 0%, #f6f7ff 50%, #cbe1ff 100%);
+}
+
+// ==============================================
+// Шапка
+// ==============================================
+.header_block {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 12px 0 20px;
+  border-bottom: 1.25px solid #f3f4f6;
+  background: rgba(255, 255, 255, 0.95);
+
+  .logo {
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+    align-items: center;
+
+    #logo_img {
+      width: 40px;
+      filter: drop-shadow(0 14px 22px rgba(133, 1, 216, 0.26));
+    }
+
+    #logo_text {
+      font-family: "Segoe UI Emoji";
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 20px;
+      background: $gradient-text;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  }
+
+  .section-span {
+    display: flex;
+    justify-content: center;
+    text-align: center;
+
+    #function,
+    #tarif,
+    #about,
+    #contacts {
+      display: none;
+    }
+
+    #burger {
+      padding-right: 28px;
+    }
+  }
+}
+
+// ==============================================
+// Главный блок
+// ==============================================
+.block_1 {
+  padding: 48px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  .but_main {
+    display: none;
+  }
+
+  .name_log {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0;
+
+    #logoShit {
+      width: 28vw;
+      min-width: 120px;
+      max-width: 170px;
+    }
+
+    #main_text {
+      text-align: center;
+      font-family: "Segoe UI Emoji";
+      font-size: 42px;
+      font-weight: 700;
+      line-height: 46px;
+      background: $gradient-text;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  }
+
+  .description {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    padding: 24.25px 20px;
+
+    #description_text,
+    #description_text_2 {
+      color: #4a5565;
+      font-family: "Segoe UI Emoji";
+      font-size: 22px;
+      font-weight: 400;
+      line-height: 36px;
+    }
+  }
+
+  .button_block {
+    margin: 35px 0;
+
+    .buttons,
+    .texts {
+      display: none;
+    }
+
+    #mobile_start_but {
+      display: inline-flex;
+      padding: 11.75px 30.73px 12.25px 30.75px;
+      justify-content: center;
+      align-items: center;
+      border-radius: 14px;
+      background: $gradient-text;
+      border: 0;
+      color: #fff;
+      font-family: "Segoe UI Emoji";
+      font-size: 22px;
+      font-style: normal;
+      font-weight: 400;
+      cursor: pointer;
+      transition: transform $transition-base, filter $transition-base;
+      
+      &:hover {
+        transform: translateY(-1px);
+        filter: saturate(1.1);
+      }
+      
+      &:active {
+        transform: translateY(0);
+      }
+    }
+  }
+
+  .block_2 {
+    display: none;
+  }
+}
+
+// ==============================================
+// Карточки в блоке 2 (общий стиль)
+// ==============================================
+.block_2 > div {
+  min-width: 280px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: $shadow-card;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 14px;
+
+
+  img {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 10px;
+  }
+}
+
+  #com_main_text{color: #F59E0B;}
+  #load_main_text{color: #6366F1;}
+  #reput_main_text{color: #10B981;}
+  #monit_main_text{color: #F73193;}
+
+// ==============================================
+// Планшет (≥ 899px)
+// ==============================================
+@media screen and (min-width: 899px) {
+  .header_block {
+    padding: 0 120px;
+
+    .logo {
+      #logo_img {
+        width: 68px;
+      }
+      #logo_text {
+        font-size: 28px;
+        line-height: 36px;
+      }
+    }
+
+    .section-span {
+      align-items: center;
+      gap: 40px;
+
+      #function,
+      #tarif,
+      #about,
+      #contacts {
+        display: block;
+        font-size: 20px;
+      }
+
+      #burger {
+        display: none;
+      }
+    }
+  }
+}
+
+// ==============================================
+// Десктоп (≥ 1280px)
+// ==============================================
+@media screen and (min-width: 1280px) {
+  .header_block {
+    padding: 0 40px;
+
+    .logo {
+      #logo_img {
+        width: 88px;
+      }
+      #logo_text {
+        font-size: 36px;
+        line-height: 44px;
+      }
+    }
+
+    .section-span {
+      #function,
+      #tarif,
+      #about,
+      #contacts {
+        font-size: 18px;
+      }
+    }
+  }
+
+  .block_1 {
+    .but_main {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(133, 1, 216, 0.14);
+      box-shadow: 0 18px 34px rgba(17, 24, 39, 0.1);
+      backdrop-filter: blur(12px);
+      cursor: pointer;
+      transition: transform $transition-base;
+
+      &:hover {
+        transform: translateY(-1px);
+      }
+
+      #but_text {
+        color: #6366f1;
+        font-family: Inter, sans-serif;
+        font-size: 12px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 16px;
+        letter-spacing: 0.055px;
+      }
+    }
+
+    .name_log {
+      flex-direction: row;
+
+      #main_text {
+        font-size: 88px;
+        line-height: 96px;
+      }
+    }
+
+    .description {
+      #description_text {
+        color: black;
+        font-size: 44px;
+        font-weight: bold;
+      }
+
+      #description_text_2 {
+        margin-top: 20px;
+        font-size: 22px;
+      }
+    }
+
+    .button_block {
+      #mobile_start_but {
+        display: none;
+      }
+
+      .buttons {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Manrope", sans-serif;
+        gap: 14px;
+
+        #start-but {
+          text-transform: uppercase;
+          padding: 20px 60px;
+          border-radius: 14px;
+          border: 0;
+          cursor: pointer;
+          font-size: 24px;
+          font-weight: 800;
+          color: #fff;
+          background: $gradient-main;
+          box-shadow: 0 16px 30px rgba(133, 1, 216, 0.22);
+          transition: transform $transition-base, filter $transition-base, box-shadow $transition-base;
+
+          &:hover {
+            transform: translateY(-1px);
+            filter: saturate(1.05);
+          }
+
+          &:active {
+            transform: translateY(0);
+            box-shadow: 0 12px 24px rgba(133, 1, 216, 0.2);
+          }
+        }
+
+        #info-but {
+          padding: 20px 36px;
+          border-radius: 14px;
+          cursor: pointer;
+          font-size: 24px;
+          font-weight: 600;
+          background: rgba(255, 255, 255, 0.78);
+          border: 1px solid rgba(17, 24, 39, 0.16);
+          color: rgba(17, 24, 39, 0.78);
+          box-shadow: 0 14px 26px rgba(17, 24, 39, 0.1);
+          backdrop-filter: blur(10px);
+          transition: transform $transition-base, box-shadow $transition-base, background $transition-base;
+
+          &:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 18px 34px rgba(17, 24, 39, 0.12);
+          }
+
+          &:active {
+            transform: translateY(0);
+          }
+        }
+      }
+    }
+
+    .block_2 {
+      display: flex;
+      gap: 20px;
+      #but_stars {
+        width: 18px;
+        height: 18px;
+      }
+
+      #com_main_text,
+      #load_main_text,
+      #reput_main_text,
+      #monit_main_text {
+        font-size: 36px;
+        font-weight: 700;
+        line-height: 1.1;
+        margin-bottom: 6px;
+      }
+
+      #desc_text {
+        font-size: 13px;
+        line-height: 1.25;
+        color: rgba(17, 24, 39, 0.55);
+      }
+    }
+  }
+}

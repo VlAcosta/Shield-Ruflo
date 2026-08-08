@@ -1,0 +1,215 @@
+@use '../../../styles/tokens' as *;
+
+.dashboard-checklist {
+  min-height: 320px;
+
+  &__toolbar {
+    margin-bottom: 11px;
+    padding: 10px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border: 1px solid #e9ecf4;
+    border-radius: 13px;
+    background: linear-gradient(135deg, rgba(249,250,255,.98), #fff);
+  }
+
+  &__progress-copy {
+    min-width: 140px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 0 7px;
+
+    strong { color: $color-text; font-size: 17px; font-weight: 800; letter-spacing: -.045em; }
+    span { color: $color-text-muted; font-size: 8px; }
+    > i {
+      grid-column: 1 / -1;
+      position: relative; height: 4px; margin-top: 6px; overflow: hidden; border-radius: 999px; background: #eceef5;
+      b {
+        display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6861f5, #a953ed);
+        transform-origin: left; animation: checklist-progress-enter 760ms cubic-bezier(.16,1,.3,1) both;
+      }
+    }
+  }
+
+  &__filters {
+    padding: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 10px;
+    background: #f3f5fa;
+
+    button {
+      height: 27px; padding: 0 9px; border: 0; border-radius: 8px; color: $color-text-muted; background: transparent;
+      cursor: pointer; font-size: 8px; font-weight: 650; transition: color $transition-fast, background $transition-fast, box-shadow $transition-fast;
+      &.is-active { color: $color-text; background: #fff; box-shadow: 0 4px 12px rgba(34,43,88,.06); }
+    }
+  }
+
+  &__table { overflow: hidden; border: 1px solid #edf0f5; border-radius: 13px; background: #fff; }
+
+  &__row {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) 120px 120px 92px;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 12px;
+    border-top: 1px solid #f0f2f7;
+    transition: background $transition-fast, transform $transition-fast;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 9px;
+      bottom: 9px;
+      width: 2px;
+      border-radius: 2px;
+      background: transparent;
+      transition: background $transition-fast;
+    }
+
+    &:not(&--head):hover { background: #fafaff; transform: translateX(1px); }
+    &:not(&--head):hover::before { background: #746cf6; }
+    &.is-done { background: rgba(249,250,252,.75); }
+  }
+
+  &__row--head {
+    min-height: 35px;
+    border-top: 0;
+    color: $color-text-muted;
+    background: #fafbfe;
+    font-size: 7px;
+    font-weight: 720;
+    letter-spacing: .045em;
+    text-transform: uppercase;
+  }
+
+  &__task {
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    color: $color-text;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-size: 8.5px;
+    font-weight: 650;
+  }
+
+  &__task > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  &__checkbox {
+    width: 19px;
+    height: 19px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: 1.5px solid #d7dcea;
+    border-radius: 6px;
+    color: #fff;
+    background: #fff;
+    font-size: 10px;
+    transition: transform $transition-spring, background $transition-fast, border-color $transition-fast, box-shadow $transition-fast;
+
+    &.is-checked {
+      border-color: #6861f5;
+      background: linear-gradient(135deg, #6861f5, #9556ed);
+      box-shadow: 0 4px 11px rgba(102,97,245,.18);
+      animation: checklist-check-pop 260ms cubic-bezier(.16,1,.3,1) both;
+    }
+  }
+
+  &__row.is-done &__task > span:last-child { color: $color-text-muted; text-decoration: line-through; text-decoration-color: #cbd0de; }
+  &__muted { color: $color-text-muted; font-size: 7.5px; }
+  &__empty { padding: 26px 16px; color: $color-text-muted; text-align: center; font-size: 9px; }
+}
+
+@keyframes checklist-progress-enter { from { transform: scaleX(.05); } to { transform: scaleX(1); } }
+@keyframes checklist-check-pop { from { transform: scale(.72); } to { transform: scale(1); } }
+
+@media (max-width: 760px) {
+  .dashboard-checklist {
+    &__toolbar { align-items: stretch; flex-direction: column; }
+    &__row { grid-template-columns: minmax(0, 1fr) 105px; }
+    &__row > :nth-child(3), &__row > :nth-child(4), &__row--head > :nth-child(3), &__row--head > :nth-child(4) { display: none; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-checklist__progress-copy > i b, .dashboard-checklist__checkbox.is-checked { animation: none; }
+}
+
+/* Stage 16 checklist composer */
+.checklist-create {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(25, 31, 61, .58);
+  }
+
+  &__card {
+    position: relative;
+    width: min(520px, 100%);
+    max-height: calc(100vh - 36px);
+    overflow: auto;
+    padding: 23px;
+    display: grid;
+    gap: 14px;
+    border: 1px solid rgba(255,255,255,.9);
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 34px 100px rgba(20,27,59,.28);
+    animation: checklist-create-enter 340ms cubic-bezier(.16,1,.3,1) both;
+  }
+
+  &__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+
+    > div { display: grid; gap: 3px; }
+    span { color: $color-primary; font-size: 8px; font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+    h2 { margin: 0; color: $color-text; font-size: 20px; font-weight: 810; letter-spacing: -.04em; }
+    p { margin: 2px 0 0; color: $color-text-muted; font-size: 9px; }
+    > button { width: 32px; height: 32px; border:0; border-radius:10px; color:$color-text-muted; background:#f5f6fa; cursor:pointer; font-size:18px; }
+  }
+
+  &__grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  &__field { display:grid; gap:6px; }
+  &__field > span { color:$color-text-secondary; font-size:8.5px; font-weight:680; small{color:$color-text-muted;font-weight:500;} }
+  &__field input,
+  &__field select,
+  &__field textarea {
+    width:100%; box-sizing:border-box; border:1px solid #e1e5ef; border-radius:12px; outline:none; color:$color-text; background:#fafbfe; font:inherit; font-size:9.5px; transition:border-color $transition-fast, box-shadow $transition-fast, background $transition-fast;
+    &:focus { border-color:rgba(102,97,245,.42); box-shadow:0 0 0 4px rgba(102,97,245,.08); background:#fff; }
+  }
+  &__field input, &__field select { min-height:43px; padding:0 12px; }
+  &__field textarea { min-height:76px; padding:10px 12px; resize:vertical; }
+
+  &__preview { padding:12px; display:grid;grid-template-columns:auto 1fr;gap:3px 10px;border:1px solid #eceef5;border-radius:13px;background:linear-gradient(135deg,#fafbff,#fff); > span{grid-row:1/3;align-self:center;padding:5px 8px;border-radius:999px;color:#675ff0;background:#efeeff;font-size:7px;font-weight:760;&.is-orange{color:#b36d00;background:#fff3dd;}&.is-red{color:#ce405c;background:#ffedf1;}&.is-neutral{color:#7e879f;background:#f0f2f6;}}strong{color:$color-text;font-size:9px;}small{color:$color-text-muted;font-size:7.5px;} }
+  &__error { padding:9px 11px;border-radius:10px;color:$color-danger;background:#fff0f3;font-size:8px;font-weight:650; }
+
+  footer { display:grid;grid-template-columns:.8fr 1.2fr;gap:9px;margin-top:2px; button{min-height:43px;border-radius:12px;font:inherit;font-size:9px;font-weight:720;cursor:pointer;}button:first-child{border:1px solid #e0e4ee;color:$color-text-secondary;background:#fff;}button:last-child{display:flex;align-items:center;justify-content:center;gap:8px;border:0;color:#fff;background:$gradient-primary;box-shadow:0 12px 24px rgba(102,97,245,.18);} }
+}
+
+@keyframes checklist-create-enter { from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);} }
+
+@media (max-width:560px) { .checklist-create__grid{grid-template-columns:1fr;} }
+@media (prefers-reduced-motion: reduce) { .checklist-create__card{animation:none;} }
+.dashboard-checklist__inline-error{margin:8px 0;padding:7px 9px;border-radius:9px;background:#fff1f3;color:#c94a64;font-size:8px}

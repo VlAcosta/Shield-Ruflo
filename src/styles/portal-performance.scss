@@ -1,0 +1,26 @@
+/* Stage 16: paint/layout optimizations for long portal screens. */
+
+@supports (content-visibility: auto) {
+  .support-faq__item,
+  .notification-card,
+  .task-list__row,
+  .task-board__card,
+  .report-list__row,
+  .payment-history__row,
+  .package-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 96px;
+  }
+}
+
+/* Keep expensive compositing effects only for true overlays (PIN/search).
+   Regular surfaces are opaque enough to look the same without GPU blur. */
+.portal__page {
+  isolation: isolate;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .portal__page * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

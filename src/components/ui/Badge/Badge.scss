@@ -1,0 +1,16 @@
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  &--neutral { color: #7e879d; background: #f1f3f8; }
+  &--violet { color: #615cf4; background: #efefff; }
+  &--green { color: #12a66f; background: #e9fbf4; }
+  &--orange { color: #e58a00; background: #fff7e4; }
+  &--red { color: #e83f61; background: #fff0f3; }
+}

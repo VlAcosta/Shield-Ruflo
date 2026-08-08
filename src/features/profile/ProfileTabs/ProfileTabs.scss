@@ -1,0 +1,84 @@
+@use '../../../styles/tokens' as *;
+@use '../../../styles/mixins' as *;
+
+.profile-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 54px;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid rgba(231, 234, 244, .92);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: $shadow-card;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar { display: none; }
+
+  &__item {
+    @include focus-ring;
+    position: relative;
+    min-height: 42px;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 13px;
+    color: $color-text-secondary;
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 620;
+    cursor: pointer;
+    transition: color $transition-base, background $transition-base, transform $transition-fast, box-shadow $transition-base;
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 4px;
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(102, 97, 245, 0), rgba(102, 97, 245, .75), rgba(166, 66, 239, 0));
+      opacity: 0;
+      transform: scaleX(.55);
+      transition: opacity $transition-base, transform $transition-spring;
+    }
+
+    &:hover {
+      color: $color-text;
+      background: rgba(247, 248, 253, .95);
+    }
+
+    &:active { transform: scale(.985); }
+
+    &.is-active {
+      color: #fff;
+      background: $gradient-primary;
+      box-shadow: 0 10px 24px rgba(102, 97, 245, .18);
+
+      &::after { opacity: 1; transform: scaleX(1); }
+    }
+  }
+
+  &__icon {
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+
+    svg { width: 18px; height: 18px; }
+  }
+}
+
+@media (max-width: 620px) {
+  .profile-tabs {
+    &__item { padding: 0 12px; }
+    &__item > span:last-child { display: none; }
+    &__icon, &__icon svg { width: 19px; height: 19px; }
+  }
+}

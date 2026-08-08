@@ -1,0 +1,41 @@
+
+@use "sass:math";
+
+@mixin container($max: 1100px, $pad: 24px) {
+  width: 100%;
+  max-width: $max;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: $pad;
+  padding-right: $pad;
+}
+
+
+@mixin mq($bp) {
+  @if $bp == sm {
+    @media (max-width: 640px) { @content; }
+  } @else if $bp == md {
+    @media (max-width: 768px) { @content; }
+  } @else if $bp == lg {
+    @media (max-width: 1024px) { @content; }
+  } @else if $bp == xl {
+    @media (max-width: 1280px) { @content; }
+  }
+}
+
+@mixin title-gradient {
+  background: linear-gradient(90deg, var(--c-purple) 0%, var(--c-orange) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@function rem($px, $base: 16px) {
+  @return math.div($px, $base) * 1rem;
+}
