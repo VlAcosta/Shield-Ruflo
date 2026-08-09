@@ -9,3 +9,23 @@ node_modules
 .env
 .env.local
 .env.*.local
+
+# ==================================================
+# Ruflo / Claude Flow runtime state
+# ==================================================
+
+.swarm/*.db
+.swarm/*.db-shm
+.swarm/*.db-wal
+.swarm/backups/
+
+.claude-flow/daemon-state.json
+.claude-flow/metrics/*.json
+.claude-flow/policy/state.json
+
+ruvector.db
+agentdb.rvf
+agentdb.rvf.lock
+
+# Codex audit/session exports
+business-shield-audit*.jsonl
