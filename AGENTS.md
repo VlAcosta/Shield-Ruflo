@@ -1,229 +1,461 @@
-# Shield-Ruflo
+# Business Shield — Agent Engineering Constitution
 
-> Multi-agent orchestration framework for agentic coding
+## 1. Mission
 
-## Project Overview
+Business Shield is a commercial production-grade Reputation Operations SaaS.
 
-A Claude Flow powered project
+The goal is not to build a prototype or visual demo.
+The goal is to progressively evolve the existing project into a reliable,
+secure, scalable and commercially usable SaaS product.
 
-**Tech Stack**: TypeScript, Node.js
-**Architecture**: Domain-Driven Design with bounded contexts
+The system may include and modify:
 
-## Quick Start
+- frontend;
+- backend;
+- database;
+- API;
+- authentication;
+- authorization and RBAC;
+- multi-tenancy;
+- integrations;
+- background workers;
+- queues;
+- realtime functionality;
+- analytics;
+- billing;
+- AI functionality;
+- observability;
+- infrastructure;
+- CI/CD;
+- automated tests.
 
-### Installation
-```bash
-npm install
-```
+Frontend-only limitations do NOT apply.
 
-### Build
-```bash
-npm run build
-```
+---
 
-### Test
-```bash
-npm test
-```
+## 2. Product principle
 
-### Development
-```bash
-npm run dev
-```
+Business Shield helps companies manage reputation and customer feedback.
 
-## Agent Coordination
+Reviews and reputation management are core product domains.
 
-### Swarm Configuration
+The product should progressively support:
 
-This project uses hierarchical swarm coordination for complex tasks:
+- review aggregation;
+- review monitoring;
+- review responses;
+- reputation analytics;
+- competitor monitoring;
+- QR-based review acquisition;
+- reports;
+- notifications;
+- tasks and workflows;
+- integrations;
+- organization/team management;
+- role-based permissions;
+- billing/subscriptions;
+- AI-assisted operations.
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| Topology | `hierarchical` | Queen-led coordination (anti-drift) |
-| Max Agents | 8 | Optimal team size |
-| Strategy | `specialized` | Clear role boundaries |
-| Consensus | `raft` | Leader-based consistency |
+Do not implement meaningless demo functionality merely to make UI controls appear functional.
 
-### When to Use Swarms
+---
 
-**Invoke swarm for:**
-- Multi-file changes (3+ files)
-- New feature implementation
-- Cross-module refactoring
-- API changes with tests
-- Security-related changes
-- Performance optimization
+## 3. Existing product must evolve, not be blindly rewritten
 
-**Skip swarm for:**
-- Single file edits
-- Simple bug fixes (1-2 lines)
-- Documentation updates
-- Configuration changes
+Before changing architecture:
 
-### Available Skills
+1. inspect the existing implementation;
+2. identify what already works;
+3. identify mocks and temporary implementations;
+4. identify duplicate/obsolete code;
+5. determine dependencies and regressions;
+6. propose the smallest safe migration path.
 
-Use `$skill-name` syntax to invoke:
+Preserve working functionality whenever practical.
 
-| Skill | Use Case |
-|-------|----------|
-| `$swarm-orchestration` | Multi-agent task coordination |
-| `$memory-management` | Pattern storage and retrieval |
-| `$sparc-methodology` | Structured development workflow |
-| `$security-audit` | Security scanning and CVE detection |
+Large rewrites require an explicit architectural justification.
 
-### Agent Types
+---
 
-| Type | Role | Use Case |
-|------|------|----------|
-| `researcher` | Requirements analysis | Understanding scope |
-| `architect` | System design | Planning structure |
-| `coder` | Implementation | Writing code |
-| `tester` | Test creation | Quality assurance |
-| `reviewer` | Code review | Security and quality |
+## 4. Multi-tenancy
 
-## Execution Model
+Business Shield is a multi-tenant SaaS.
 
-- **claude-flow** = LEDGER (coordinates: memory, routing, swarm state)
-- **Codex** = EXECUTOR (writes code, runs tests, creates files)
+Organization is the primary tenant.
 
-**Critical rule:** DON'T STOP after calling claude-flow commands. Coordination commands return instantly — continue immediately with the next implementation step.
+Business-owned entities must be organization-scoped.
 
-## Ruflo + Codex Automated Workflow
+Examples:
 
-Ruflo is the coordination ledger and policy decision point; Codex workers execute code, tests, and commands. A Ruflo coordination call records work but never replaces implementation.
+- reviews;
+- locations;
+- integrations;
+- competitors;
+- tasks;
+- reports;
+- notifications;
+- subscriptions;
+- analytics;
+- members;
+- settings.
 
-Use `guidance_brain({ mode: "recommend", task: "..." })` when the task can
-benefit from Ruflo-specific capabilities. Its live registry is authoritative
-for tool presence; registration alone does not prove configuration,
-reachability, health, or authorization. If it is not registered, use compatible
-`guidance_recommend`, CLI discovery, and repository instructions.
+Never allow cross-organization data leakage.
 
-1. **Recall** — search AgentDB memory and relevant ADRs for patterns and constraints.
-2. **Inspect** — read source, runtime, dependency, policy, and health state.
-3. **Route** — choose the smallest capable topology, agents, skills, and tools.
-4. **Plan** — define acceptance criteria, safety envelope, ownership, and validation.
-5. **Execute** — Codex workers implement in isolated scopes; Ruflo records coordination.
-6. **Test** — run focused tests, regression tests, and failure-path checks.
-7. **Validate** — check types, security, policy, compatibility, and artifact integrity.
-8. **Benchmark** — compare a source-bound candidate with a source-bound baseline.
-9. **Optimize** — improve measured bottlenecks without weakening the safety envelope.
-10. **Receipt** — bind claims, evidence, and decisions to exact source/build inputs.
-11. **Handoff** — reconcile concurrent work and disclose unresolved limitations.
-12. **Publish** — only an independently authorized release gate may publish immutable artifacts.
+Tenant isolation must be enforced server-side.
 
-### Concurrency and authority invariants
+---
 
-- Never allow two writers in one worktree.
-- Read-only research agents may share a checkout; writing agents may not.
-- A child may drop capabilities but can never add tools, servers, namespaces, network access, spend, concurrency, or delegation depth.
-- Cancel dependent and not-yet-started sibling work when policy denies an action or a required dependency fails.
-- MetaHarness may benchmark candidates concurrently, but it cannot promote, serve, or expand its own SafetyEnvelope.
-- Only the integration agent changes shared manifests or lockfiles.
-- Do not auto-commit, push, merge, release, or delete worktrees unless the user authorized that operation.
-- Every consequential action must produce a policy decision receipt; production, destructive, spend, and promotion actions may require human approval.
+## 5. Authentication and authorization
 
-### Repository harness adapter
+Frontend permission checks are UX only.
 
-When tracked repository instructions define a local collaboration harness:
+Authorization must always be enforced by the backend.
 
-1. Assign the isolated worktree before starting a writing session.
-2. Start or register the session, inspect current claims, and acquire only the
-   exact paths, resources, and development ports needed for the task.
-3. Renew leases during long work, check acknowledged inbox messages at integration
-   boundaries, and release claims when handing off or ending.
-4. Record focused and integration evidence against the exact source state,
-   then let the designated integration owner decide release.
+Never rely solely on:
 
-A repository lease coordinates ownership; it does not grant authorization.
-In-memory reference adapters demonstrate semantics but are not distributed,
-restart-durable release authorities.
-The worker still needs the current ADR-324/325 action capability and fencing
-epoch for every protected side effect. Heartbeat and lease expiry establish
-liveness; a PID is diagnostic only. HEAD alone is not an exact source-state
-identity when tracked or untracked changes exist, so a release receipt must
-bind a clean commit or an immutable snapshot including those changes.
+- hidden buttons;
+- disabled UI;
+- client-side roles;
+- localStorage permissions.
 
+Use explicit server-side permission checks.
 
-## MCP Integration
+Apply least privilege.
 
-Use MCP tools for coordination, then keep coding:
+---
 
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `swarm_init` | Start coordination | `swarm_init({topology: "hierarchical"})` |
-| `memory_store` | Save patterns | `memory_store({key: "auth", value: "JWT"})` |
-| `memory_search` | Find patterns | `memory_search({query: "auth patterns"})` |
-| `task_orchestrate` | Assign work | `task_orchestrate({task: "implement"})` |
+## 6. External provider truthfulness
 
-## Code Standards
+Never fake external success.
 
-### File Organization
-- **NEVER** save to root folder
-- `/src` - Source code files
-- `/tests` - Test files
-- `/docs` - Documentation
-- `/config` - Configuration files
+The UI must NOT claim:
 
-### Quality Rules
-- Files under 500 lines
-- No hardcoded secrets
-- Input validation at boundaries
-- Typed interfaces for public APIs
-- TDD London School (mock-first) preferred
+- Connected
+- Synced
+- Published
+- Paid
+- Authorized
+- Sent
+- Imported
+- Updated
 
-### Commit Messages
-```
-<type>(<scope>): <description>
+unless the corresponding backend/provider operation actually succeeded.
 
-[optional body]
-```
+Mocks must be clearly identifiable as mocks or development fixtures.
 
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
+---
 
-Do not add a `Co-Authored-By` trailer unless the repository explicitly
-configures and authorizes that attribution.
+## 7. Security
 
-## Security
+Never commit:
 
-### Critical Rules
-- NEVER commit secrets, credentials, or .env files
-- NEVER hardcode API keys
-- Always validate user input
-- Use parameterized queries for SQL
-- Sanitize output to prevent XSS
+- passwords;
+- API keys;
+- access tokens;
+- refresh tokens;
+- private keys;
+- .env files containing secrets;
+- Codex credentials;
+- provider credentials.
 
-### Path Security
-- Validate all file paths
-- Prevent directory traversal (../)
-- Use absolute paths internally
+Validate untrusted input.
 
-## Memory System
+Enforce authorization server-side.
 
-### Storing Patterns
-```bash
-npx @claude-flow/cli memory store \
-  --key "pattern-name" \
-  --value "pattern description" \
-  --namespace patterns
-```
+Prevent tenant data leakage.
 
-### Searching Memory
-```bash
-npx @claude-flow/cli memory search \
-  --query "search terms" \
-  --namespace patterns
-```
+Treat integrations, billing, authentication and admin functionality as security-sensitive.
 
-## Quick Commands
+---
 
-```bash
-npx @claude-flow/cli memory search --query "relevant patterns"
-npx @claude-flow/cli hooks route --task "current task description"
-npx @claude-flow/cli swarm init --topology hierarchical
-npx @claude-flow/cli hooks pre-task --description "task summary"
-```
+## 8. Database
 
-## Links
+All production database changes require migrations.
 
-- Documentation: https://github.com/ruvnet/ruflo
-- Issues: https://github.com/ruvnet/ruflo/issues
+Do not make destructive schema changes silently.
+
+Before destructive or irreversible migrations:
+
+1. explain the impact;
+2. propose migration/backfill strategy;
+3. protect existing data;
+4. document rollback strategy.
+
+---
+
+## 9. Architecture decisions
+
+Significant architectural decisions must be recorded in:
+
+docs/adr/
+
+Create an ADR when choosing or materially changing:
+
+- backend framework;
+- database;
+- ORM;
+- authentication architecture;
+- RBAC model;
+- multi-tenancy strategy;
+- queues;
+- realtime architecture;
+- billing provider;
+- external integration architecture;
+- AI provider architecture;
+- observability architecture.
+
+Do not silently introduce major infrastructure.
+
+---
+
+## 10. UI / UX requirements
+
+Business Shield should feel like a premium modern SaaS product.
+
+Target quality is comparable to products such as:
+
+- Stripe;
+- Linear;
+- Notion;
+- ClickUp.
+
+Do not blindly copy those products.
+
+Maintain a coherent Business Shield design language.
+
+Every important screen should consider:
+
+- loading state;
+- empty state;
+- error state;
+- unavailable/offline state;
+- success state where appropriate;
+- light theme;
+- dark theme;
+- keyboard accessibility;
+- responsive layout.
+
+Important viewport classes:
+
+- 2560 / 2K;
+- 1920;
+- 1240;
+- 980;
+- 480.
+
+Normal users should not need browser zoom to comfortably read the application.
+
+---
+
+## 11. Engineering workflow
+
+Before every significant task:
+
+1. Read this AGENTS.md.
+2. Search Ruflo memory for relevant decisions and prior work.
+3. Inspect relevant existing code.
+4. Inspect relevant tests.
+5. Determine affected domains.
+6. Determine data/security implications.
+7. Plan before editing.
+
+Do not start by rewriting files blindly.
+
+---
+
+## 12. Agent delegation
+
+For complex work, delegate independent investigation to specialized agents.
+
+Prefer parallel agents for:
+
+- repository exploration;
+- architecture analysis;
+- security review;
+- test analysis;
+- dependency research;
+- regression analysis.
+
+Avoid multiple agents simultaneously editing overlapping files.
+
+A single implementation owner should normally perform related code changes.
+
+---
+
+## 13. Definition of Done
+
+A task is NOT complete merely because the application builds.
+
+Depending on the affected area, validate:
+
+- lint;
+- type checking;
+- unit tests;
+- integration tests;
+- API tests;
+- browser/e2e tests;
+- production build;
+- authorization behavior;
+- tenant isolation;
+- error states;
+- responsive layout;
+- dark/light themes;
+- regressions.
+
+Report what was actually tested.
+
+Never claim tests passed if they were not executed.
+
+---
+
+## 14. Code quality
+
+Prefer:
+
+- small cohesive modules;
+- explicit naming;
+- reusable domain services;
+- centralized contracts;
+- typed boundaries where possible;
+- predictable state management;
+- documented APIs;
+- incremental refactoring.
+
+Avoid:
+
+- giant components;
+- duplicated business logic;
+- hidden side effects;
+- unexplained magic values;
+- mock data leaking into production logic;
+- premature abstractions.
+
+---
+
+## 15. Product integrity
+
+Maximum product quality does NOT mean maximum code volume.
+
+Do not add technology only because it is fashionable.
+
+Every dependency, service and abstraction must solve a real product or engineering problem.
+
+---
+
+## 16. Completion report
+
+After significant work, report:
+
+1. what was analyzed;
+2. what was changed;
+3. affected files;
+4. architecture decisions;
+5. migrations if any;
+6. tests performed;
+7. remaining risks;
+8. recommended next step.
+
+Store reusable conclusions and successful patterns in Ruflo memory.
+
+## 17. Mandatory Production Backend Delivery
+
+Business Shield is NOT a frontend-only project.
+
+Agents are explicitly authorized and expected to create and modify a real production backend whenever product functionality requires it.
+
+A feature is NOT complete when only its frontend, mock data, localStorage behavior, static JSON, placeholder API, fake service, or UI state exists.
+
+For features that require persistence, security, external integrations, automation, billing, analytics, background work, or server-side business logic, completion normally requires a real vertical slice including the relevant:
+
+- backend route/API;
+- controller/handler;
+- domain/application service;
+- database model/schema;
+- migration;
+- organization/tenant scoping;
+- authentication;
+- server-side authorization/RBAC;
+- request validation;
+- error handling;
+- persistence;
+- external provider adapter when applicable;
+- idempotency where applicable;
+- logging/observability where appropriate;
+- automated tests;
+- frontend integration with the real API.
+
+Frontend-only implementation is allowed only when the task explicitly requests frontend-only work.
+
+Do not mark a product feature complete if the backend required for real use is still missing.
+
+Do not replace backend requirements with:
+- TODO comments;
+- mock promises;
+- hardcoded successful responses;
+- fake API delays;
+- localStorage as production persistence;
+- static fixtures presented as live data;
+- frontend-only permission checks.
+
+When a feature needs backend work, the implementation team must build it.
+
+### Vertical Slice Principle
+
+Prefer delivering functionality end-to-end:
+
+User action
+→ frontend
+→ API
+→ authorization
+→ domain logic
+→ database/provider
+→ real result
+→ frontend state
+→ automated validation
+
+Do not build disconnected layers without a clear integration path.
+
+### Backend Foundation
+
+If the repository currently has no adequate backend, the team must:
+
+1. inspect current architecture;
+2. have product_architect propose the smallest suitable production architecture;
+3. record major choices in ADRs;
+4. establish the backend foundation;
+5. establish database migrations;
+6. establish authentication and tenant boundaries;
+7. connect frontend services to real APIs;
+8. add automated backend/API tests.
+
+Do not preserve a frontend-only architecture merely because that is the current state.
+
+### External Integrations
+
+If provider credentials are unavailable during development:
+
+- implement the real provider abstraction and backend flow as far as possible;
+- provide explicit configuration requirements;
+- provide honest unavailable/not-configured states;
+- add test adapters or fixtures when useful.
+
+Never simulate a successful external provider operation and present it as real.
+
+### Definition of Done for Backend-Dependent Features
+
+A backend-dependent feature is complete only when the relevant production path works end-to-end and its critical behavior is validated.
+
+At minimum consider:
+
+- API behavior;
+- persistence;
+- authentication;
+- authorization;
+- organization isolation;
+- validation;
+- failure handling;
+- migrations;
+- relevant automated tests;
+- frontend/backend contract compatibility.
+
+"Frontend works" is not equivalent to "feature is complete".
