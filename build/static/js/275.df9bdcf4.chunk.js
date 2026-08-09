@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkshit_osn=self.webpackChunkshit_osn||[]).push([[275],{4275(s,t,e){e.r(t),e.d(t,{default:()=>h});e(5043);var n=e(9819),u=e(283),i=e(579);function h(){return(0,i.jsx)(n.A,{title:"FAQ",subtitle:"\u041f\u043e\u043c\u043e\u0449\u044c",children:(0,i.jsx)(u.Y,{})})}}}]);
+//# sourceMappingURL=275.df9bdcf4.chunk.js.map

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkshit_osn=self.webpackChunkshit_osn||[]).push([[572],{572(e,n,s){s.r(n),s.d(n,{default:()=>c});s(5043);var a=s(5029),t=s(579);function c(){return(0,t.jsx)(a.C5,{to:"/chat?channel=manager",replace:!0})}}}]);
+//# sourceMappingURL=572.77d023ed.chunk.js.map

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkshit_osn=self.webpackChunkshit_osn||[]).push([[580],{580(s,e,t){t.r(e),t.d(e,{default:()=>r});t(5043);var u=t(9819),i=t(9543),n=t(579);function r(){return(0,n.jsx)(u.A,{title:"\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438",subtitle:"Provider Hub",children:(0,n.jsx)(i.A,{})})}}}]);
+//# sourceMappingURL=580.5e24204d.chunk.js.map

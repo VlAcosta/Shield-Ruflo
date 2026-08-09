@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkshit_osn=self.webpackChunkshit_osn||[]).push([[982],{4982(e,s,n){n.r(s),n.d(s,{default:()=>r});var t=n(5043),u=n(9364),i=n(4085),l=n(579);function r(){const[e,s]=(0,t.useState)(null),n=(0,t.useCallback)(e=>s(()=>e),[]);return(0,l.jsx)(u.A,{title:"\u041a\u043b\u0438\u0435\u043d\u0442\u044b",eyebrow:"\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043a\u043b\u0438\u0435\u043d\u0442\u0430\u043c\u0438",onRefresh:e||void 0,children:(0,l.jsx)(i.ii,{onRefreshReady:n})})}}}]);
+//# sourceMappingURL=982.02cfb074.chunk.js.map

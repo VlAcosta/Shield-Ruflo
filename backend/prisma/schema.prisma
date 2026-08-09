@@ -1,0 +1,553 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+
+  @@map("user_status")
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+
+  @@map("organization_status")
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+
+  @@map("onboarding_status")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MANAGER
+  ANALYST
+  MEMBER
+
+  @@map("organization_role")
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+
+  @@map("membership_status")
+}
+
+enum TeamInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+
+  @@map("team_invitation_status")
+}
+
+enum BusinessStatus {
+  ACTIVE
+  ARCHIVED
+
+  @@map("business_status")
+}
+
+enum LocationStatus {
+  ACTIVE
+  ARCHIVED
+
+  @@map("location_status")
+}
+
+
+enum ReviewSourceStatus {
+  ACTIVE
+  PAUSED
+  DISCONNECTED
+
+  @@map("review_source_status")
+}
+
+enum ReviewStatus {
+  NEW
+  DEFERRED
+  DONE
+  ARCHIVED
+
+  @@map("review_status")
+}
+
+enum ReviewWorkflowStatus {
+  INBOX
+  DRAFT
+  AWAITING_APPROVAL
+  APPROVED
+  PUBLISHED
+  REJECTED
+
+  @@map("review_workflow_status")
+}
+
+enum ReviewReplyStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
+  FAILED
+
+  @@map("review_reply_status")
+}
+
+enum ReviewAssignmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELED
+
+  @@map("review_assignment_status")
+}
+
+enum VerificationPurpose {
+  SIGN_IN
+  SIGN_UP
+  PHONE_CHANGE
+  ACCOUNT_RECOVERY
+
+  @@map("verification_purpose")
+}
+
+/// Infrastructure metadata created by B0 and retained for service-level state.
+model ServiceMetadata {
+  key       String   @id @db.VarChar(120)
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("_service_metadata")
+}
+
+/// Global user identity. Tenant access is granted only through OrganizationMember.
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  phone           String     @unique @db.VarChar(32)
+  email           String?    @unique @db.VarChar(320)
+  firstName       String?    @map("first_name") @db.VarChar(120)
+  lastName        String?    @map("last_name") @db.VarChar(120)
+  displayName     String?    @map("display_name") @db.VarChar(160)
+  position        String?    @db.VarChar(160)
+  telegram        String?    @db.VarChar(120)
+  avatarUrl       String?    @map("avatar_url") @db.Text
+  notificationPreferences Json? @map("notification_preferences")
+  status          UserStatus @default(ACTIVE)
+  phoneVerifiedAt DateTime?  @map("phone_verified_at")
+  emailVerifiedAt DateTime?  @map("email_verified_at")
+  lastLoginAt     DateTime?  @map("last_login_at")
+  profileCompletedAt DateTime? @map("profile_completed_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  deletedAt       DateTime?  @map("deleted_at")
+
+  memberships       OrganizationMember[] @relation("MemberUser")
+  invitedMemberships OrganizationMember[] @relation("MembershipInviter")
+  sentTeamInvitations TeamInvitation[] @relation("TeamInvitationCreator")
+  acceptedTeamInvitations TeamInvitation[] @relation("TeamInvitationAcceptor")
+  sessions          Session[]
+  verificationCodes VerificationCode[]
+  auditLogs         AuditLog[]             @relation("AuditActor")
+  reviewReplies     ReviewReply[]          @relation("ReviewReplyAuthor")
+  reviewAssignments ReviewAssignment[]     @relation("ReviewAssignmentCreator")
+
+  @@index([status], map: "users_status_idx")
+  @@map("users")
+}
+
+/// Tenant boundary. Business data always belongs to one organization.
+model Organization {
+  id                    String             @id @default(uuid()) @db.Uuid
+  name                  String             @db.VarChar(180)
+  slug                  String             @unique @db.VarChar(120)
+  status                OrganizationStatus @default(ACTIVE)
+  onboardingStatus      OnboardingStatus   @default(NOT_STARTED) @map("onboarding_status")
+  onboardingCompletedAt DateTime?          @map("onboarding_completed_at")
+  timezone              String             @default("Europe/Moscow") @db.VarChar(80)
+  locale                String             @default("ru-RU") @db.VarChar(16)
+  legalType             String?            @map("legal_type") @db.VarChar(16)
+  inn                   String?            @db.VarChar(12)
+  kpp                   String?            @db.VarChar(9)
+  ogrn                  String?            @db.VarChar(15)
+  legalAddress          String?            @map("legal_address") @db.Text
+  legalStatus           String?            @map("legal_status") @db.VarChar(160)
+  registrationDate      DateTime?          @map("registration_date") @db.Date
+  registrySource        String?            @map("registry_source") @db.VarChar(120)
+  registryVerifiedAt    DateTime?          @map("registry_verified_at")
+  onboardingStep        Int                @default(0) @map("onboarding_step")
+  onboardingDraft       Json?              @map("onboarding_draft")
+  onboardingStartedAt   DateTime?          @map("onboarding_started_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  archivedAt            DateTime?          @map("archived_at")
+
+  members        OrganizationMember[]
+  teamInvitations TeamInvitation[]
+  businesses     Business[]
+  auditLogs      AuditLog[]
+  activeSessions Session[]             @relation("SessionActiveOrganization")
+  reviewSources   ReviewSource[]
+  reviewAuthors   ReviewAuthor[]
+  reviews         Review[]
+  reviewTags      ReviewTag[]
+  reviewReplies   ReviewReply[]
+  reviewAssignments ReviewAssignment[]
+
+  @@index([status], map: "organizations_status_idx")
+  @@index([inn], map: "organizations_inn_idx")
+  @@map("organizations")
+}
+
+/// Membership is the only bridge between a user and tenant-scoped data.
+model OrganizationMember {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @map("organization_id") @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  role            OrganizationRole @default(MEMBER)
+  status          MembershipStatus @default(ACTIVE)
+  invitedByUserId String?          @map("invited_by_user_id") @db.Uuid
+  invitedAt       DateTime?        @map("invited_at")
+  joinedAt        DateTime?        @map("joined_at")
+  accessExpiresAt DateTime?        @map("access_expires_at")
+  suspendedAt     DateTime?        @map("suspended_at")
+  suspendedReason String?          @map("suspended_reason") @db.VarChar(240)
+  permissionOverrides Json?        @map("permission_overrides")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("MemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy    User?        @relation("MembershipInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  reviewAssignments ReviewAssignment[] @relation("ReviewAssignmentMember")
+
+  @@unique([organizationId, userId], map: "organization_members_org_user_key")
+  @@index([userId, status], map: "organization_members_user_status_idx")
+  @@index([organizationId, status], map: "organization_members_org_status_idx")
+  @@map("organization_members")
+}
+
+model TeamInvitation {
+  id               String               @id @default(uuid()) @db.Uuid
+  organizationId   String               @map("organization_id") @db.Uuid
+  createdByUserId  String               @map("created_by_user_id") @db.Uuid
+  acceptedByUserId String?              @map("accepted_by_user_id") @db.Uuid
+  email            String               @db.VarChar(320)
+  name             String?              @db.VarChar(180)
+  role             OrganizationRole     @default(MEMBER)
+  tokenHash        String               @unique @map("token_hash") @db.VarChar(128)
+  status           TeamInvitationStatus @default(PENDING)
+  accessExpiresAt  DateTime?            @map("access_expires_at")
+  permissionOverrides Json?             @map("permission_overrides")
+  expiresAt        DateTime             @map("expires_at")
+  acceptedAt       DateTime?            @map("accepted_at")
+  revokedAt        DateTime?            @map("revoked_at")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("TeamInvitationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  acceptedBy   User?        @relation("TeamInvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt], map: "team_invitations_org_status_created_idx")
+  @@index([email, status], map: "team_invitations_email_status_idx")
+  @@index([expiresAt, status], map: "team_invitations_expiry_status_idx")
+  @@map("team_invitations")
+}
+
+model Business {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String         @db.VarChar(180)
+  legalName      String?        @map("legal_name") @db.VarChar(240)
+  industry       String?        @db.VarChar(120)
+  website        String?        @db.Text
+  isPrimary      Boolean        @default(false) @map("is_primary")
+  status         BusinessStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  archivedAt     DateTime?      @map("archived_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  locations    Location[]
+  reviewSources ReviewSource[]
+  reviews       Review[]
+
+  @@index([organizationId, status], map: "businesses_org_status_idx")
+  @@index([organizationId, isPrimary], map: "businesses_org_primary_idx")
+  @@map("businesses")
+}
+
+model Location {
+  id           String         @id @default(uuid()) @db.Uuid
+  businessId   String         @map("business_id") @db.Uuid
+  name         String         @db.VarChar(180)
+  status       LocationStatus @default(ACTIVE)
+  isPrimary    Boolean        @default(false) @map("is_primary")
+  countryCode  String?        @map("country_code") @db.Char(2)
+  region       String?        @db.VarChar(160)
+  city         String?        @db.VarChar(160)
+  addressLine1 String?        @map("address_line_1") @db.VarChar(240)
+  addressLine2 String?        @map("address_line_2") @db.VarChar(240)
+  postalCode   String?        @map("postal_code") @db.VarChar(32)
+  latitude     Float?
+  longitude    Float?
+  timezone     String?        @db.VarChar(80)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  archivedAt   DateTime?      @map("archived_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  reviewSources ReviewSource[]
+  reviews       Review[]
+
+  @@index([businessId, status], map: "locations_business_status_idx")
+  @@index([businessId, isPrimary], map: "locations_business_primary_idx")
+  @@map("locations")
+}
+
+/// Server-side session record. Only a hash of the bearer/cookie token is stored.
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  activeOrganizationId String? @map("active_organization_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(128)
+  ipAddress  String?   @map("ip_address") @db.VarChar(64)
+  userAgent  String?   @map("user_agent") @db.Text
+  expiresAt  DateTime  @map("expires_at")
+  lastSeenAt DateTime? @map("last_seen_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganization Organization? @relation("SessionActiveOrganization", fields: [activeOrganizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, expiresAt], map: "sessions_user_expires_idx")
+  @@index([activeOrganizationId], map: "sessions_active_organization_idx")
+  @@index([expiresAt, revokedAt], map: "sessions_expiry_revoked_idx")
+  @@map("sessions")
+}
+
+/// One-time verification challenge. Raw OTP values must never be persisted.
+model VerificationCode {
+  id         String              @id @default(uuid()) @db.Uuid
+  userId     String?             @map("user_id") @db.Uuid
+  phone      String              @db.VarChar(32)
+  purpose    VerificationPurpose
+  codeHash   String              @map("code_hash") @db.VarChar(128)
+  attempts   Int                 @default(0)
+  maxAttempts Int                @default(5) @map("max_attempts")
+  requestIp  String?             @map("request_ip") @db.VarChar(64)
+  expiresAt  DateTime            @map("expires_at")
+  consumedAt DateTime?           @map("consumed_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([phone, purpose, createdAt], map: "verification_codes_phone_purpose_created_idx")
+  @@index([expiresAt, consumedAt], map: "verification_codes_expiry_consumed_idx")
+  @@map("verification_codes")
+}
+
+/// Immutable-style security and business activity journal.
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  action         String   @db.VarChar(160)
+  entityType     String?  @map("entity_type") @db.VarChar(120)
+  entityId       String?  @map("entity_id") @db.VarChar(120)
+  metadata       Json?
+  ipAddress      String?  @map("ip_address") @db.VarChar(64)
+  userAgent      String?  @map("user_agent") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor        User?         @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt], map: "audit_logs_org_created_idx")
+  @@index([actorUserId, createdAt], map: "audit_logs_actor_created_idx")
+  @@index([entityType, entityId], map: "audit_logs_entity_idx")
+  @@map("audit_logs")
+}
+
+
+/// A configured reputation provider/account for one tenant. Provider-specific transport is added later.
+model ReviewSource {
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  businessId        String             @map("business_id") @db.Uuid
+  locationId        String?            @map("location_id") @db.Uuid
+  provider          String             @db.VarChar(80)
+  name              String             @db.VarChar(180)
+  externalAccountId String?            @map("external_account_id") @db.VarChar(240)
+  externalUrl       String?            @map("external_url") @db.Text
+  status            ReviewSourceStatus @default(ACTIVE)
+  metadata          Json?
+  lastSyncedAt      DateTime?          @map("last_synced_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  authors      ReviewAuthor[]
+  reviews      Review[]
+
+  @@index([organizationId, status], map: "review_sources_org_status_idx")
+  @@index([businessId, status], map: "review_sources_business_status_idx")
+  @@index([locationId], map: "review_sources_location_idx")
+  @@map("review_sources")
+}
+
+model ReviewAuthor {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  sourceId       String   @map("source_id") @db.Uuid
+  externalId     String   @map("external_id") @db.VarChar(240)
+  name           String   @db.VarChar(180)
+  avatarUrl      String?  @map("avatar_url") @db.Text
+  profileUrl     String?  @map("profile_url") @db.Text
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       ReviewSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  reviews      Review[]
+
+  @@index([organizationId, name], map: "review_authors_org_name_idx")
+  @@unique([sourceId, externalId], map: "review_authors_source_external_key")
+  @@map("review_authors")
+}
+
+model Review {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  businessId     String               @map("business_id") @db.Uuid
+  locationId     String?              @map("location_id") @db.Uuid
+  sourceId       String               @map("source_id") @db.Uuid
+  authorId       String?              @map("author_id") @db.Uuid
+  externalId     String               @map("external_id") @db.VarChar(240)
+  rating         Int
+  title          String?              @db.VarChar(300)
+  text           String               @db.Text
+  language       String?              @db.VarChar(16)
+  status         ReviewStatus         @default(NEW)
+  workflowStatus ReviewWorkflowStatus @default(INBOX) @map("workflow_status")
+  sourceUrl      String?              @map("source_url") @db.Text
+  publishedAt    DateTime?            @map("published_at")
+  receivedAt     DateTime             @default(now()) @map("received_at")
+  repliedAt      DateTime?            @map("replied_at")
+  metadata       Json?
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  source       ReviewSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  author       ReviewAuthor? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  tags         ReviewTagLink[]
+  replies      ReviewReply[]
+  assignments  ReviewAssignment[]
+
+  @@unique([sourceId, externalId], map: "reviews_source_external_key")
+  @@index([organizationId, status, receivedAt], map: "reviews_org_status_received_idx")
+  @@index([organizationId, workflowStatus, receivedAt], map: "reviews_org_workflow_received_idx")
+  @@index([businessId, receivedAt], map: "reviews_business_received_idx")
+  @@index([locationId, receivedAt], map: "reviews_location_received_idx")
+  @@index([sourceId, receivedAt], map: "reviews_source_received_idx")
+  @@index([rating, receivedAt], map: "reviews_rating_received_idx")
+  @@map("reviews")
+}
+
+model ReviewTag {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(80)
+  slug           String   @db.VarChar(100)
+  color          String?  @db.VarChar(32)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reviews      ReviewTagLink[]
+
+  @@unique([organizationId, slug], map: "review_tags_org_slug_key")
+  @@index([organizationId, name], map: "review_tags_org_name_idx")
+  @@map("review_tags")
+}
+
+model ReviewTagLink {
+  reviewId String @map("review_id") @db.Uuid
+  tagId    String @map("tag_id") @db.Uuid
+
+  review Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  tag    ReviewTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([reviewId, tagId])
+  @@index([tagId, reviewId], map: "review_tag_links_tag_review_idx")
+  @@map("review_tag_links")
+}
+
+model ReviewReply {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  reviewId       String            @map("review_id") @db.Uuid
+  authorUserId   String?           @map("author_user_id") @db.Uuid
+  text           String            @db.Text
+  status         ReviewReplyStatus @default(DRAFT)
+  externalId     String?           @map("external_id") @db.VarChar(240)
+  failedReason   String?           @map("failed_reason") @db.Text
+  publishedAt    DateTime?         @map("published_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  review       Review       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  authorUser   User?        @relation("ReviewReplyAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([reviewId, createdAt], map: "review_replies_review_created_idx")
+  @@index([organizationId, status, createdAt], map: "review_replies_org_status_created_idx")
+  @@map("review_replies")
+}
+
+model ReviewAssignment {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  organizationId       String                 @map("organization_id") @db.Uuid
+  reviewId             String                 @map("review_id") @db.Uuid
+  organizationMemberId String                 @map("organization_member_id") @db.Uuid
+  assignedByUserId     String?                @map("assigned_by_user_id") @db.Uuid
+  status               ReviewAssignmentStatus @default(ACTIVE)
+  note                 String?                @db.VarChar(500)
+  completedAt          DateTime?              @map("completed_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  review       Review             @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  member       OrganizationMember @relation("ReviewAssignmentMember", fields: [organizationMemberId], references: [id], onDelete: Cascade)
+  assignedBy   User?              @relation("ReviewAssignmentCreator", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([reviewId, organizationMemberId], map: "review_assignments_review_member_key")
+  @@index([organizationId, status, createdAt], map: "review_assignments_org_status_created_idx")
+  @@index([organizationMemberId, status], map: "review_assignments_member_status_idx")
+  @@map("review_assignments")
+}
