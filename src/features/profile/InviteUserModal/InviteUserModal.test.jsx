@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import InviteUserModal from './InviteUserModal';
 import { getAvailableRoles } from '../../../services/access/rbacService';
 
-jest.mock('../../../services/access/rbacService', () => ({
-  getAvailableRoles: jest.fn(),
+vi.mock('../../../services/access/rbacService', () => ({
+  getAvailableRoles: vi.fn(),
 }));
 
 const roles = [
@@ -17,8 +17,8 @@ describe('InviteUserModal canonical role contract', () => {
   beforeEach(() => getAvailableRoles.mockReturnValue(roles));
 
   test('defaults to canonical MEMBER and excludes owner and local-only roles', async () => {
-    const onInvite = jest.fn().mockResolvedValue({ ok: false, message: 'Остановлено тестом' });
-    render(<InviteUserModal open busy={false} onClose={jest.fn()} onInvite={onInvite} />);
+    const onInvite = vi.fn().mockResolvedValue({ ok: false, message: 'Остановлено тестом' });
+    render(<InviteUserModal open busy={false} onClose={vi.fn()} onInvite={onInvite} />);
 
     expect(screen.queryByRole('radio', { name: /Владелец/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Локальная роль/ })).not.toBeInTheDocument();
@@ -32,7 +32,7 @@ describe('InviteUserModal canonical role contract', () => {
   });
 
   test('announces validation, marks the invalid field, and moves focus to it', () => {
-    render(<InviteUserModal open busy={false} onClose={jest.fn()} onInvite={jest.fn()} />);
+    render(<InviteUserModal open busy={false} onClose={vi.fn()} onInvite={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Создать приглашение' }));
 
@@ -47,15 +47,15 @@ describe('InviteUserModal canonical role contract', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
     trigger.focus();
-    const onClose = jest.fn();
-    const { rerender } = render(<InviteUserModal open busy={false} onClose={onClose} onInvite={jest.fn()} />);
+    const onClose = vi.fn();
+    const { rerender } = render(<InviteUserModal open busy={false} onClose={onClose} onInvite={vi.fn()} />);
     const closeButtons = screen.getAllByRole('button', { name: 'Закрыть' });
     const last = screen.getByRole('button', { name: 'Создать приглашение' });
     last.focus();
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(closeButtons[1]).toHaveFocus();
 
-    rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={jest.fn()} />);
+    rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={vi.fn()} />);
     expect(trigger).toHaveFocus();
     trigger.remove();
   });
