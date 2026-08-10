@@ -178,13 +178,6 @@ export async function disconnectProviderAccount(
       throw error;
     }
 
-    const availability = adapter.availability();
-    if (!availability.configured || !availability.connectable) {
-      const error = unavailableError(account.provider, availability.reasonCode, availability.reasonMessage);
-      await recordFailure(app, organizationId, account.id, error);
-      throw error;
-    }
-
     if (!adapter.disconnect) {
       const error = new AppError({
         code: 'PROVIDER_DISCONNECT_UNSUPPORTED',
