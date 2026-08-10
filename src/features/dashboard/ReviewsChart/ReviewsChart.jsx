@@ -25,9 +25,9 @@ function ReviewsChart() {
   const [activeIndex, setActiveIndex] = useState(null);
   const { section, status, refresh } = useDashboardData('reviews');
   const data = section?.[period];
-  const labels = Array.isArray(data?.labels) ? data.labels : [];
-  const received = Array.isArray(data?.received) ? data.received.map(Number) : [];
-  const answered = Array.isArray(data?.answered) ? data.answered.map(Number) : [];
+  const labels = useMemo(() => (Array.isArray(data?.labels) ? data.labels : []), [data?.labels]);
+  const received = useMemo(() => (Array.isArray(data?.received) ? data.received.map(Number) : []), [data?.received]);
+  const answered = useMemo(() => (Array.isArray(data?.answered) ? data.answered.map(Number) : []), [data?.answered]);
   const latestIndex = Math.max(0, labels.length - 1);
   const displayIndex = activeIndex ?? latestIndex;
   const hasData = labels.length > 0 && received.some((value) => value > 0);
