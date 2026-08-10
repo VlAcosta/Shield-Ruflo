@@ -3,20 +3,28 @@ import { getRuntimeEnv } from '../core/runtimeEnv';
 
 export const INTEGRATION_PROVIDER_ENDPOINT = getRuntimeEnv('INTEGRATIONS_ENDPOINT', '');
 
+const BACKEND_PROVIDER_IDS = Object.freeze({
+  google: 'google-business-profile',
+});
+
 export const PROVIDER_CAPABILITIES = Object.freeze({
   yandex: ['reviews.read', 'rating.read', 'replies.write'],
   gis: ['reviews.read', 'rating.read', 'replies.write'],
   ozon: ['reviews.read', 'rating.read', 'marketplace.read', 'replies.write'],
   otzovik: ['reviews.read', 'rating.read'],
   wb: ['reviews.read', 'rating.read', 'marketplace.read', 'replies.write'],
-  google: ['reviews.read', 'rating.read', 'replies.write'],
+  google: ['oauth', 'accounts.read', 'locations.read', 'profile.read'],
   telegram: ['notifications.write'],
   whatsapp: ['notifications.write'],
   amo: ['crm.read', 'crm.write'],
 });
 
+export function getBackendProviderId(providerId) {
+  return BACKEND_PROVIDER_IDS[providerId] || providerId;
+}
+
 function providerPath(providerId, action = '') {
-  const path = `/providers/${encodeURIComponent(providerId)}`;
+  const path = `/providers/${encodeURIComponent(getBackendProviderId(providerId))}`;
   return joinEndpoint(INTEGRATION_PROVIDER_ENDPOINT, `${path}${action ? `/${action}` : ''}`);
 }
 
@@ -31,6 +39,7 @@ export function getProviderCapabilities(providerId) {
 export function getProviderRuntime(providerId) {
   return {
     providerId,
+    backendProviderId: getBackendProviderId(providerId),
     transport: INTEGRATION_PROVIDER_ENDPOINT ? 'backend' : 'unresolved',
     endpointConfigured: Boolean(INTEGRATION_PROVIDER_ENDPOINT),
     capabilities: getProviderCapabilities(providerId),
@@ -78,4 +87,35 @@ export async function providerSync(providerId, { signal } = {}) {
 export async function providerDiagnostics(providerId, { signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
   return apiRequest(providerPath(providerId, 'diagnostics'), { signal, retries: 0 });
+}
+
+export async function googleBusinessOAuthStart({ signal } = {}) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  return apiRequest(providerPath('google', 'oauth/start'), {
+    method: 'POST',
+    signal,
+    idempotencyKey: createIdempotencyKey('google-business-oauth-start'),
+  });
+}
+
+export async function googleBusinessAccounts({ signal } = {}) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return { accounts: [] };
+  return apiRequest(providerPath('google', 'accounts'), { signal, retries: 0 });
+}
+
+export async function googleBusinessLocations(accountName, { signal } = {}) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return { locations: [] };
+  const match = /^accounts\/([A-Za-z0-9_-]+)$/.exec(String(accountName || ''));
+  if (!match) throw new Error('Некорректный Google Business account');
+  return apiRequest(providerPath('google', `accounts/${encodeURIComponent(match[1])}/locations`), { signal, retries: 0 });
+}
+
+export async function googleBusinessSelect(selection, { signal } = {}) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  return apiRequest(providerPath('google', 'selection'), {
+    method: 'PUT',
+    body: selection,
+    signal,
+    idempotencyKey: createIdempotencyKey('google-business-selection'),
+  });
 }
