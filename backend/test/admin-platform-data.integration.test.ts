@@ -10,6 +10,7 @@ const platformAdminId = randomUUID();
 const regularUserId = randomUUID();
 const organizationId = randomUUID();
 const planCode = `admin-${randomUUID().slice(0, 8)}`;
+const platformAdminIdentity = env.PLATFORM_ADMIN_IDENTITIES[1] || env.PLATFORM_ADMIN_IDENTITIES[0] || 'platform-data-admin@example.test';
 const platformAdminSessionToken = `admin-platform-data-${randomUUID()}`;
 const regularSessionToken = `regular-platform-data-${randomUUID()}`;
 const platformAdminCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(platformAdminSessionToken)}`;
@@ -20,7 +21,7 @@ beforeAll(async () => {
     data: [
       {
         id: platformAdminId,
-        email: env.PLATFORM_ADMIN_IDENTITIES[0] || 'platform-admin@example.test',
+        email: platformAdminIdentity,
         phone: `+7${Date.now()}71`,
         displayName: 'Platform Data Admin',
         profileCompletedAt: new Date(),
@@ -113,7 +114,7 @@ describe('platform admin PostgreSQL data', () => {
     });
     expect(clients.statusCode).toBe(200);
     expect(clients.json().clients).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: organizationId, name: 'Real PostgreSQL Client' }),
+      expect.objectContaining({ id: organizationId, name: 'ООО «Real PostgreSQL Client»' }),
     ]));
 
     const subscriptions = await app.inject({
