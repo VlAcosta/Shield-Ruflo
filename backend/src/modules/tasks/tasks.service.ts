@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { TaskPriority, TaskStatus } from '../../generated/prisma/client.js';
+import type { Prisma, TaskPriority, TaskStatus } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 
 const statusToClient: Record<TaskStatus, string> = {
@@ -35,6 +35,22 @@ const clientToPriority: Record<string, TaskPriority> = {
   LOW: 'LOW',
 };
 
+export type TaskMutationInput = {
+  title?: string | undefined;
+  description?: string | null | undefined;
+  status?: string | undefined;
+  priority?: string | undefined;
+  deadline?: string | null | undefined;
+  dueDate?: string | null | undefined;
+  businessId?: string | null | undefined;
+  locationId?: string | null | undefined;
+  reviewId?: string | null | undefined;
+  assigneeMemberIds?: string[] | undefined;
+  position?: number | undefined;
+};
+
+export type CreateTaskInput = TaskMutationInput & { title: string };
+
 export function parseTaskStatus(value: string | undefined): TaskStatus | undefined {
   return value ? clientToStatus[value] : undefined;
 }
@@ -43,10 +59,18 @@ export function parseTaskPriority(value: string | undefined): TaskPriority | und
   return value ? clientToPriority[value] : undefined;
 }
 
+function toJson(value: Record<string, unknown>): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
 async function assertScopedReferences(
   app: FastifyInstance,
   organizationId: string,
-  input: { businessId?: string | null; locationId?: string | null; reviewId?: string | null },
+  input: {
+    businessId?: string | null | undefined;
+    locationId?: string | null | undefined;
+    reviewId?: string | null | undefined;
+  },
 ) {
   if (input.businessId) {
     const business = await app.prisma.business.findFirst({ where: { id: input.businessId, organizationId }, select: { id: true } });
@@ -142,18 +166,7 @@ export async function listTasks(app: FastifyInstance, organizationId: string) {
 export async function createTask(
   app: FastifyInstance,
   context: { organizationId: string; userId: string },
-  input: {
-    title: string;
-    description?: string;
-    status?: string;
-    priority?: string;
-    deadline?: string | null;
-    dueDate?: string | null;
-    businessId?: string | null;
-    locationId?: string | null;
-    reviewId?: string | null;
-    assigneeMemberIds?: string[];
-  },
+  input: CreateTaskInput,
 ) {
   await assertScopedReferences(app, context.organizationId, input);
   const memberIds = [...new Set(input.assigneeMemberIds ?? [])];
@@ -167,22 +180,26 @@ export async function createTask(
   }
 
   const task = await app.prisma.$transaction(async (tx) => {
-    const created = await tx.task.create({
-      data: {
-        organizationId: context.organizationId,
-        createdByUserId: context.userId,
-        title: input.title,
-        description: input.description,
-        status: parseTaskStatus(input.status) ?? 'NEW',
-        priority: parseTaskPriority(input.priority) ?? 'MEDIUM',
-        deadline: input.deadline || input.dueDate ? new Date(input.deadline ?? input.dueDate!) : null,
-        businessId: input.businessId || null,
-        locationId: input.locationId || null,
-        reviewId: input.reviewId || null,
-        assignees: memberIds.length ? { create: memberIds.map((organizationMemberId) => ({ organizationMemberId })) } : undefined,
-      },
-      include: taskInclude,
-    });
+    const data: Prisma.TaskUncheckedCreateInput = {
+      organizationId: context.organizationId,
+      createdByUserId: context.userId,
+      title: input.title,
+      description: input.description ?? null,
+      status: parseTaskStatus(input.status) ?? 'NEW',
+      priority: parseTaskPriority(input.priority) ?? 'MEDIUM',
+      deadline: input.deadline || input.dueDate ? new Date(input.deadline ?? input.dueDate!) : null,
+      businessId: input.businessId ?? null,
+      locationId: input.locationId ?? null,
+      reviewId: input.reviewId ?? null,
+    };
+
+    const created = await tx.task.create({ data, include: taskInclude });
+    if (memberIds.length) {
+      await tx.taskAssignee.createMany({
+        data: memberIds.map((organizationMemberId) => ({ taskId: created.id, organizationMemberId })),
+        skipDuplicates: true,
+      });
+    }
     await tx.taskActivity.create({
       data: {
         organizationId: context.organizationId,
@@ -192,7 +209,7 @@ export async function createTask(
         metadata: { reviewId: input.reviewId ?? null },
       },
     });
-    return created;
+    return tx.task.findUniqueOrThrow({ where: { id: created.id }, include: taskInclude });
   });
   return serializeTask(task);
 }
@@ -201,36 +218,48 @@ export async function updateTask(
   app: FastifyInstance,
   context: { organizationId: string; userId: string },
   taskId: string,
-  patch: Record<string, unknown>,
+  patch: TaskMutationInput,
 ) {
   const existing = await app.prisma.task.findFirst({ where: { id: taskId, organizationId: context.organizationId } });
   if (!existing) throw new AppError({ code: 'TASK_NOT_FOUND', message: 'Задача не найдена', statusCode: 404 });
 
   await assertScopedReferences(app, context.organizationId, {
-    businessId: patch.businessId as string | null | undefined,
-    locationId: patch.locationId as string | null | undefined,
-    reviewId: patch.reviewId as string | null | undefined,
+    businessId: patch.businessId,
+    locationId: patch.locationId,
+    reviewId: patch.reviewId,
   });
 
   const status = typeof patch.status === 'string' ? parseTaskStatus(patch.status) : undefined;
   const priority = typeof patch.priority === 'string' ? parseTaskPriority(patch.priority) : undefined;
   const deadlineValue = patch.deadline ?? patch.dueDate;
 
+  const activityMetadata: Record<string, unknown> = {};
+  if (patch.title !== undefined) activityMetadata.title = patch.title;
+  if (patch.status !== undefined) activityMetadata.status = patch.status;
+  if (patch.priority !== undefined) activityMetadata.priority = patch.priority;
+  if (patch.position !== undefined) activityMetadata.position = patch.position;
+
   const updated = await app.prisma.$transaction(async (tx) => {
     const row = await tx.task.update({
       where: { id: existing.id },
       data: {
         ...(typeof patch.title === 'string' ? { title: patch.title } : {}),
-        ...(typeof patch.description === 'string' || patch.description === null ? { description: patch.description as string | null } : {}),
+        ...(typeof patch.description === 'string' || patch.description === null ? { description: patch.description } : {}),
         ...(status ? { status, completedAt: status === 'DONE' ? new Date() : null } : {}),
         ...(priority ? { priority } : {}),
         ...(deadlineValue !== undefined ? { deadline: deadlineValue ? new Date(String(deadlineValue)) : null } : {}),
-        ...(patch.position !== undefined ? { position: Number(patch.position) || 0 } : {}),
+        ...(patch.position !== undefined ? { position: patch.position } : {}),
       },
       include: taskInclude,
     });
     await tx.taskActivity.create({
-      data: { organizationId: context.organizationId, taskId, actorUserId: context.userId, action: 'task.updated', metadata: patch },
+      data: {
+        organizationId: context.organizationId,
+        taskId,
+        actorUserId: context.userId,
+        action: 'task.updated',
+        metadata: toJson(activityMetadata),
+      },
     });
     return row;
   });
