@@ -5,8 +5,10 @@ import {
   createSourceSchema,
   createTagSchema,
   listReviewsQuerySchema,
+  rejectReplySchema,
   replySchema,
   reviewIdParamsSchema,
+  reviewReplyIdParamsSchema,
   seedReviewSchema,
   sourceIdParamsSchema,
   updateReviewSchema,
@@ -25,7 +27,14 @@ import {
   updateReview,
   updateSource,
 } from './reviews.service.js';
-import { createVersionedDraft, listReplyHistory } from './review-replies.service.js';
+import {
+  approveReply,
+  createVersionedDraft,
+  listReplyHistory,
+  rejectReply,
+  requestPublishReply,
+  submitReplyForApproval,
+} from './review-replies.service.js';
 import { dispatchAutomationEvent } from '../operations/automation-engine.js';
 
 export const reviewsRoutes: FastifyPluginAsync = async (app) => {
@@ -51,6 +60,27 @@ export const reviewsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/reviews/:reviewId/replies', { preHandler: [app.authenticate, app.authorize('reviews.view')] }, async (request) => {
     const { reviewId } = reviewIdParamsSchema.parse(request.params);
     return { items: await listReplyHistory(app, request.auth!.organizationId!, reviewId) };
+  });
+
+  app.post('/reviews/:reviewId/replies/:replyId/submit', { preHandler: [app.authenticate, app.authorize('reviews.reply')] }, async (request) => {
+    const { reviewId, replyId } = reviewReplyIdParamsSchema.parse(request.params);
+    return submitReplyForApproval(app, request, reviewId, replyId);
+  });
+
+  app.post('/reviews/:reviewId/replies/:replyId/approve', { preHandler: [app.authenticate, app.authorize('reviews.approve')] }, async (request) => {
+    const { reviewId, replyId } = reviewReplyIdParamsSchema.parse(request.params);
+    return approveReply(app, request, reviewId, replyId);
+  });
+
+  app.post('/reviews/:reviewId/replies/:replyId/reject', { preHandler: [app.authenticate, app.authorize('reviews.approve')] }, async (request) => {
+    const { reviewId, replyId } = reviewReplyIdParamsSchema.parse(request.params);
+    const { reason } = rejectReplySchema.parse(request.body ?? {});
+    return rejectReply(app, request, reviewId, replyId, reason);
+  });
+
+  app.post('/reviews/:reviewId/replies/:replyId/publish', { preHandler: [app.authenticate, app.authorize('reviews.approve')] }, async (request) => {
+    const { reviewId, replyId } = reviewReplyIdParamsSchema.parse(request.params);
+    return requestPublishReply(app, request, reviewId, replyId);
   });
 
   app.post('/reviews/:reviewId/assignments', { preHandler: [app.authenticate, app.authorize('reviews.moderate')] }, async (request) => {
