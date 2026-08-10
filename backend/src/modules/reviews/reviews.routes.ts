@@ -21,11 +21,11 @@ import {
   listSources,
   listTags,
   removeAssignment,
-  replyToReview,
   seedReview,
   updateReview,
   updateSource,
 } from './reviews.service.js';
+import { createVersionedDraft, listReplyHistory } from './review-replies.service.js';
 
 export const reviewsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/reviews', { preHandler: [app.authenticate, app.authorize('reviews.view')] }, async (request) => {
@@ -44,7 +44,12 @@ export const reviewsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/reviews/:reviewId/reply', { preHandler: [app.authenticate, app.authorize('reviews.reply')] }, async (request) => {
     const { reviewId } = reviewIdParamsSchema.parse(request.params);
-    return replyToReview(app, request, reviewId, replySchema.parse(request.body));
+    return createVersionedDraft(app, request, reviewId, replySchema.parse(request.body));
+  });
+
+  app.get('/reviews/:reviewId/replies', { preHandler: [app.authenticate, app.authorize('reviews.view')] }, async (request) => {
+    const { reviewId } = reviewIdParamsSchema.parse(request.params);
+    return { items: await listReplyHistory(app, request.auth!.organizationId!, reviewId) };
   });
 
   app.post('/reviews/:reviewId/assignments', { preHandler: [app.authenticate, app.authorize('reviews.moderate')] }, async (request) => {
@@ -80,8 +85,8 @@ export const reviewsRoutes: FastifyPluginAsync = async (app) => {
     return createTag(app, request.auth!.organizationId!, createTagSchema.parse(request.body));
   });
 
-  // B6 bootstrap endpoint for manual/import testing. It is intentionally protected
-  // by reviews.settings and can later be replaced by provider sync workers.
+  // Protected idempotent import path. Provider workers use the same source/external ID
+  // uniqueness guarantee and never manufacture a successful external sync state.
   app.post('/reviews/import', { preHandler: [app.authenticate, app.authorize('reviews.settings')] }, async (request) => {
     return seedReview(app, request, seedReviewSchema.parse(request.body));
   });
