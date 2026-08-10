@@ -1,108 +1,71 @@
-import {
-  DEFAULT_INTEGRATIONS,
-  DEFAULT_NOTIFICATION_TRIGGERS,
-  DEFAULT_REPLY_TEMPLATES,
-  DEFAULT_SECURITY_LOG,
-  DEFAULT_SECURITY_SETTINGS,
-  DEFAULT_SMTP_SETTINGS,
-} from '../../features/admin/settings/model/adminSettingsData';
-import { getAdminSubscriptions, updateAdminPlan } from './adminSubscriptionsService';
+import { apiRequest, joinEndpoint } from '../core/apiClient';
 
-const CACHE_KEY = 'business-shield:admin-settings:v2';
-const endpoint = process.env.REACT_APP_ADMIN_SETTINGS_ENDPOINT || '';
+const ADMIN_SETTINGS_ENDPOINT = '/api/v1/admin/settings';
+export const ADMIN_SETTINGS_CHANGED_EVENT = 'business-shield:admin-settings-changed';
 
-function clone(value) { return JSON.parse(JSON.stringify(value)); }
-
-function defaultSnapshot() {
-  return {
-    notifications: clone(DEFAULT_NOTIFICATION_TRIGGERS),
-    smtp: clone(DEFAULT_SMTP_SETTINGS),
-    integrations: clone(DEFAULT_INTEGRATIONS),
-    templates: clone(DEFAULT_REPLY_TEMPLATES),
-    security: clone(DEFAULT_SECURITY_SETTINGS),
-    securityLog: clone(DEFAULT_SECURITY_LOG),
-  };
+function emit(snapshot) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(ADMIN_SETTINGS_CHANGED_EVENT, { detail: snapshot }));
+  }
 }
 
-function readCache() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-    return parsed && typeof parsed === 'object' ? { ...defaultSnapshot(), ...parsed } : defaultSnapshot();
-  } catch { return defaultSnapshot(); }
+async function request(path = '', options = {}) {
+  return apiRequest(joinEndpoint(ADMIN_SETTINGS_ENDPOINT, path), {
+    ...options,
+    timeout: 10000,
+  });
 }
 
-function writeCache(snapshot) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(snapshot));
+export async function getAdminSettings({ signal } = {}) {
+  const payload = await request('', { signal });
+  if (!payload || !Array.isArray(payload.plans) || !payload.capabilities) {
+    throw new Error('Сервер вернул некорректный snapshot platform settings');
+  }
+  return { ...payload, source: 'api' };
+}
+
+export async function updateAdminSettings(section, value) {
+  const result = await request(`/${section}`, { method: 'PATCH', body: value });
+  const snapshot = await getAdminSettings();
+  emit(snapshot);
+  return result;
+}
+
+export async function toggleAdminIntegration(integrationId, enabled) {
+  const result = await request(`/integrations/${integrationId}/toggle`, {
+    method: 'POST',
+    body: { enabled: Boolean(enabled) },
+  });
+  const snapshot = await getAdminSettings();
+  emit(snapshot);
+  return result;
+}
+
+export async function createAdminReplyTemplate(payload) {
+  const result = await request('/templates', { method: 'POST', body: payload });
+  const snapshot = await getAdminSettings();
+  emit(snapshot);
+  return result;
+}
+
+export async function updateAdminReplyTemplate(templateId, patch) {
+  const result = await request(`/templates/${templateId}`, { method: 'PATCH', body: patch });
+  const snapshot = await getAdminSettings();
+  emit(snapshot);
+  return result;
+}
+
+export async function deleteAdminReplyTemplate(templateId) {
+  await request(`/templates/${templateId}`, { method: 'DELETE' });
+  const snapshot = await getAdminSettings();
+  emit(snapshot);
   return snapshot;
 }
 
-async function request(path = '', options) {
-  const response = await fetch(`${endpoint}${path}`, {
-    credentials:'include',
-    headers:{ 'Content-Type':'application/json', ...(options?.headers || {}) },
-    ...options,
-  });
-  if (!response.ok) throw new Error(`Admin settings API: ${response.status}`);
-  if (response.status === 204) return null;
-  return response.json();
+export async function testAdminSmtp() {
+  return request('/smtp/test', { method: 'POST' });
 }
 
-export async function getAdminSettings() {
-  if (endpoint) {
-    const data = await request();
-    if (!data) throw new Error('Некорректный ответ API настроек');
-    return { ...data, source:'api' };
-  }
-  const billing = await getAdminSubscriptions();
-  return { ...readCache(), plans:billing.plans, source:'cache' };
+export function resetAdminSettingsCache() {
+  // Platform settings are server-authoritative.
 }
-
-export async function saveAdminSettingsSection(section, value) {
-  if (endpoint) return request(`/${section}`, { method:'PATCH', body:JSON.stringify(value) });
-  const snapshot = readCache();
-  snapshot[section] = value;
-  writeCache(snapshot);
-  return value;
-}
-
-export async function saveAdminPlanFromSettings(planId, patch) {
-  return updateAdminPlan(planId, patch);
-}
-
-export async function toggleAdminIntegration(integrationId) {
-  if (endpoint) return request(`/integrations/${integrationId}/toggle`, { method:'POST' });
-  const snapshot = readCache();
-  snapshot.integrations = snapshot.integrations.map((item) => item.id === integrationId ? { ...item, status:item.status === 'connected' ? 'disconnected' : 'connected' } : item);
-  writeCache(snapshot);
-  return snapshot.integrations.find((item) => item.id === integrationId);
-}
-
-export async function saveAdminTemplate(template) {
-  if (endpoint) {
-    return request(`/templates${template.id ? `/${template.id}` : ''}`, { method:template.id ? 'PATCH':'POST', body:JSON.stringify(template) });
-  }
-  const snapshot = readCache();
-  const id = template.id || `template-${Date.now()}`;
-  const next = { ...template, id };
-  const exists = snapshot.templates.some((item) => item.id === id);
-  snapshot.templates = exists ? snapshot.templates.map((item) => item.id === id ? next : item) : [next, ...snapshot.templates];
-  writeCache(snapshot);
-  return next;
-}
-
-export async function deleteAdminTemplate(templateId) {
-  if (endpoint) return request(`/templates/${templateId}`, { method:'DELETE' });
-  const snapshot = readCache();
-  snapshot.templates = snapshot.templates.filter((item) => item.id !== templateId);
-  writeCache(snapshot);
-  return true;
-}
-
-export async function testAdminSmtp(smtp) {
-  if (endpoint) return request('/smtp/test', { method:'POST', body:JSON.stringify(smtp) });
-  await new Promise((resolve) => setTimeout(resolve, 550));
-  if (!smtp.host || !smtp.email) throw new Error('Заполните SMTP хост и email');
-  return { ok:true, message:'Соединение установлено' };
-}
-
-export function resetAdminSettingsCache() { localStorage.removeItem(CACHE_KEY); }
