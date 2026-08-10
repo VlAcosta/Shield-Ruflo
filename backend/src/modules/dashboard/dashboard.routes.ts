@@ -1,8 +1,8 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
 import { getDashboardOverview } from './dashboard.service.js';
 
-function requireOrganizationId(request: { auth?: { organizationId?: string | null } }): string {
+function requireOrganizationId(request: FastifyRequest): string {
   const organizationId = request.auth?.organizationId;
   if (!organizationId) {
     throw new AppError({
