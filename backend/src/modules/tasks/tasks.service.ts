@@ -50,6 +50,7 @@ export type TaskMutationInput = {
 };
 
 export type CreateTaskInput = TaskMutationInput & { title: string };
+export type TaskPreferences = { view: 'board' | 'list' };
 
 export function parseTaskStatus(value: string | undefined): TaskStatus | undefined {
   return value ? clientToStatus[value] : undefined;
@@ -61,6 +62,41 @@ export function parseTaskPriority(value: string | undefined): TaskPriority | und
 
 function toJson(value: Record<string, unknown>): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function taskPreferencesKey(organizationId: string, userId: string) {
+  return `task.preferences:${organizationId}:${userId}`;
+}
+
+function parseTaskPreferences(value: unknown): TaskPreferences {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const view = (value as Record<string, unknown>).view;
+    if (view === 'list' || view === 'board') return { view };
+  }
+  return { view: 'board' };
+}
+
+export async function getTaskPreferences(app: FastifyInstance, organizationId: string, userId: string): Promise<TaskPreferences> {
+  const row = await app.prisma.serviceMetadata.findUnique({
+    where: { key: taskPreferencesKey(organizationId, userId) },
+    select: { value: true },
+  });
+  return parseTaskPreferences(row?.value);
+}
+
+export async function saveTaskPreferences(
+  app: FastifyInstance,
+  organizationId: string,
+  userId: string,
+  preferences: TaskPreferences,
+): Promise<TaskPreferences> {
+  const value = toJson(preferences);
+  await app.prisma.serviceMetadata.upsert({
+    where: { key: taskPreferencesKey(organizationId, userId) },
+    create: { key: taskPreferencesKey(organizationId, userId), value },
+    update: { value },
+  });
+  return preferences;
 }
 
 async function assertScopedReferences(
@@ -86,6 +122,16 @@ async function assertScopedReferences(
   if (input.reviewId) {
     const review = await app.prisma.review.findFirst({ where: { id: input.reviewId, organizationId }, select: { id: true } });
     if (!review) throw new AppError({ code: 'REVIEW_NOT_FOUND', message: 'Отзыв не найден', statusCode: 404 });
+  }
+}
+
+async function assertScopedMembers(app: FastifyInstance, organizationId: string, memberIds: string[]) {
+  if (!memberIds.length) return;
+  const count = await app.prisma.organizationMember.count({
+    where: { id: { in: memberIds }, organizationId, status: 'ACTIVE' },
+  });
+  if (count !== memberIds.length) {
+    throw new AppError({ code: 'TEAM_MEMBER_NOT_FOUND', message: 'Участник команды не найден', statusCode: 404 });
   }
 }
 
@@ -154,13 +200,16 @@ const taskInclude = {
   attachments: { orderBy: { createdAt: 'asc' as const } },
 };
 
-export async function listTasks(app: FastifyInstance, organizationId: string) {
-  const tasks = await app.prisma.task.findMany({
-    where: { organizationId, status: { not: 'ARCHIVED' } },
-    orderBy: [{ status: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
-    include: taskInclude,
-  });
-  return { version: 2, preferences: { view: 'board' }, tasks: tasks.map(serializeTask) };
+export async function listTasks(app: FastifyInstance, organizationId: string, userId: string) {
+  const [tasks, preferences] = await Promise.all([
+    app.prisma.task.findMany({
+      where: { organizationId, status: { not: 'ARCHIVED' } },
+      orderBy: [{ status: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
+      include: taskInclude,
+    }),
+    getTaskPreferences(app, organizationId, userId),
+  ]);
+  return { version: 2, preferences, tasks: tasks.map(serializeTask) };
 }
 
 export async function createTask(
@@ -170,14 +219,7 @@ export async function createTask(
 ) {
   await assertScopedReferences(app, context.organizationId, input);
   const memberIds = [...new Set(input.assigneeMemberIds ?? [])];
-  if (memberIds.length) {
-    const count = await app.prisma.organizationMember.count({
-      where: { id: { in: memberIds }, organizationId: context.organizationId, status: 'ACTIVE' },
-    });
-    if (count !== memberIds.length) {
-      throw new AppError({ code: 'TEAM_MEMBER_NOT_FOUND', message: 'Участник команды не найден', statusCode: 404 });
-    }
-  }
+  await assertScopedMembers(app, context.organizationId, memberIds);
 
   const task = await app.prisma.$transaction(async (tx) => {
     const data: Prisma.TaskUncheckedCreateInput = {
@@ -193,7 +235,7 @@ export async function createTask(
       reviewId: input.reviewId ?? null,
     };
 
-    const created = await tx.task.create({ data, include: taskInclude });
+    const created = await tx.task.create({ data });
     if (memberIds.length) {
       await tx.taskAssignee.createMany({
         data: memberIds.map((organizationMemberId) => ({ taskId: created.id, organizationMemberId })),
@@ -228,6 +270,8 @@ export async function updateTask(
     locationId: patch.locationId,
     reviewId: patch.reviewId,
   });
+  const memberIds = patch.assigneeMemberIds === undefined ? undefined : [...new Set(patch.assigneeMemberIds)];
+  if (memberIds) await assertScopedMembers(app, context.organizationId, memberIds);
 
   const status = typeof patch.status === 'string' ? parseTaskStatus(patch.status) : undefined;
   const priority = typeof patch.priority === 'string' ? parseTaskPriority(patch.priority) : undefined;
@@ -238,9 +282,13 @@ export async function updateTask(
   if (patch.status !== undefined) activityMetadata.status = patch.status;
   if (patch.priority !== undefined) activityMetadata.priority = patch.priority;
   if (patch.position !== undefined) activityMetadata.position = patch.position;
+  if (patch.businessId !== undefined) activityMetadata.businessId = patch.businessId;
+  if (patch.locationId !== undefined) activityMetadata.locationId = patch.locationId;
+  if (patch.reviewId !== undefined) activityMetadata.reviewId = patch.reviewId;
+  if (memberIds !== undefined) activityMetadata.assigneeMemberIds = memberIds;
 
   const updated = await app.prisma.$transaction(async (tx) => {
-    const row = await tx.task.update({
+    await tx.task.update({
       where: { id: existing.id },
       data: {
         ...(typeof patch.title === 'string' ? { title: patch.title } : {}),
@@ -249,9 +297,22 @@ export async function updateTask(
         ...(priority ? { priority } : {}),
         ...(deadlineValue !== undefined ? { deadline: deadlineValue ? new Date(String(deadlineValue)) : null } : {}),
         ...(patch.position !== undefined ? { position: patch.position } : {}),
+        ...(patch.businessId !== undefined ? { businessId: patch.businessId } : {}),
+        ...(patch.locationId !== undefined ? { locationId: patch.locationId } : {}),
+        ...(patch.reviewId !== undefined ? { reviewId: patch.reviewId } : {}),
       },
-      include: taskInclude,
     });
+
+    if (memberIds !== undefined) {
+      await tx.taskAssignee.deleteMany({ where: { taskId: existing.id } });
+      if (memberIds.length) {
+        await tx.taskAssignee.createMany({
+          data: memberIds.map((organizationMemberId) => ({ taskId: existing.id, organizationMemberId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     await tx.taskActivity.create({
       data: {
         organizationId: context.organizationId,
@@ -261,7 +322,7 @@ export async function updateTask(
         metadata: toJson(activityMetadata),
       },
     });
-    return row;
+    return tx.task.findUniqueOrThrow({ where: { id: existing.id }, include: taskInclude });
   });
   return serializeTask(updated);
 }
