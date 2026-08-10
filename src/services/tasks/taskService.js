@@ -30,6 +30,7 @@ function normalizeTask(task = {}) {
     comments: [],
     checklist: [],
     attachments: [],
+    assignees: [],
     description: '',
     ...task,
     type: task.type || (task.reviewId || task.sourceReviewId ? 'Отзывы' : 'Общее'),
@@ -75,6 +76,14 @@ function preparePatch(patch = {}) {
   }
   if (patch.dueDate !== undefined || patch.deadline !== undefined) {
     allowed.dueDate = normalizeDateInput(patch.dueDate ?? patch.deadline);
+  }
+  if (patch.businessId !== undefined) allowed.businessId = patch.businessId || null;
+  if (patch.locationId !== undefined) allowed.locationId = patch.locationId || null;
+  if (patch.reviewId !== undefined || patch.sourceReviewId !== undefined) {
+    allowed.reviewId = patch.reviewId ?? patch.sourceReviewId ?? null;
+  }
+  if (patch.assigneeMemberIds !== undefined) {
+    allowed.assigneeMemberIds = Array.isArray(patch.assigneeMemberIds) ? [...new Set(patch.assigneeMemberIds)] : [];
   }
   return allowed;
 }
@@ -149,9 +158,10 @@ export async function moveTask(taskId, status, beforeTaskId, snapshot) {
 
 export async function saveTaskPreferences(preferences, snapshot) {
   const remote = await request('/preferences', { method: 'PATCH', body: preferences });
+  if (!remote?.preferences) throw new Error('Tasks API did not persist preferences');
   const nextSnapshot = {
     ...snapshot,
-    preferences: { ...(snapshot?.preferences || {}), ...(remote?.preferences || preferences) },
+    preferences: { ...(snapshot?.preferences || {}), ...remote.preferences },
   };
   writeCache(nextSnapshot);
   return { snapshot: nextSnapshot };
