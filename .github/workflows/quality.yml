@@ -19,12 +19,12 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: business_shield
-          POSTGRES_PASSWORD: business_shield_ci
-          POSTGRES_DB: business_shield_ci
+          POSTGRES_PASSWORD: business_shield_test
+          POSTGRES_DB: business_shield_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U business_shield -d business_shield_ci"
+          --health-cmd "pg_isready -U business_shield -d business_shield_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -35,8 +35,8 @@ jobs:
 
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://business_shield:business_shield_ci@127.0.0.1:5432/business_shield_ci
-      TEST_DATABASE_URL: postgresql://business_shield:business_shield_ci@127.0.0.1:5432/business_shield_ci
+      DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      TEST_DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
       AUTH_SECRET: ci-only-business-shield-auth-secret-0123456789
       AUTH_COOKIE_SECURE: "false"
       AUTH_OTP_PROVIDER: console
