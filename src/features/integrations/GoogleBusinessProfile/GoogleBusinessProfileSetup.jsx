@@ -7,21 +7,32 @@ import {
   googleBusinessSelect,
   providerDiagnostics,
   providerDisconnect,
+  providerSync,
+  providerSyncStatus,
 } from '../../../services/integrations/integrationProviderRegistry';
 import './GoogleBusinessProfileSetup.scss';
 
 const GOOGLE_PROVIDER_ID = 'google';
+const ACTIVE_SYNC_STATUSES = new Set(['QUEUED', 'RUNNING']);
 
 const STATUS_COPY = Object.freeze({
   CONNECTED: { label: 'Подключено', tone: 'success' },
-  DEGRADED: { label: 'Нужен выбор профиля', tone: 'warning' },
+  DEGRADED: { label: 'Требует внимания', tone: 'warning' },
   CONNECTING: { label: 'Ожидает Google', tone: 'info' },
   ERROR: { label: 'Требует внимания', tone: 'danger' },
   DISCONNECTED: { label: 'Не подключено', tone: 'neutral' },
 });
 
+const SYNC_COPY = Object.freeze({
+  QUEUED: { label: 'В очереди', tone: 'info' },
+  RUNNING: { label: 'Синхронизируется', tone: 'info' },
+  SUCCESS: { label: 'Синхронизировано', tone: 'success' },
+  PARTIAL: { label: 'Частично', tone: 'warning' },
+  FAILED: { label: 'Ошибка синхронизации', tone: 'danger' },
+});
+
 function formatDate(value) {
-  if (!value) return 'ещё не проверялось';
+  if (!value) return 'ещё не выполнялось';
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return 'нет данных';
   return new Intl.DateTimeFormat('ru-RU', {
@@ -58,6 +69,7 @@ export default function GoogleBusinessProfileSetup() {
   const access = useAccessControl();
   const canManage = access.can('integrations.manage');
   const [diagnostics, setDiagnostics] = useState(null);
+  const [syncState, setSyncState] = useState({ lastSyncedAt: null, run: null });
   const [accounts, setAccounts] = useState([]);
   const [locations, setLocations] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState('');
@@ -71,6 +83,12 @@ export default function GoogleBusinessProfileSetup() {
   const statusMeta = STATUS_COPY[status] || STATUS_COPY.DISCONNECTED;
   const availability = diagnostics?.availability || { configured: false, connectable: false };
   const isConfigured = Boolean(availability.configured && availability.connectable);
+  const syncRun = syncState?.run || null;
+  const syncStatus = String(syncRun?.status || '').toUpperCase();
+  const syncMeta = SYNC_COPY[syncStatus] || null;
+  const syncActive = ACTIVE_SYNC_STATUSES.has(syncStatus);
+  const syncRetryableState = status === 'CONNECTED'
+    || (status === 'DEGRADED' && diagnostics?.lastErrorCode === 'PROVIDER_RECORDS_PARTIAL');
 
   const run = useCallback(async (action, callback) => {
     setBusy(action);
@@ -92,6 +110,17 @@ export default function GoogleBusinessProfileSetup() {
       return response;
     } catch (requestError) {
       setError(requestError?.message || 'Не удалось проверить Google Business Profile');
+      return null;
+    }
+  }, []);
+
+  const refreshSyncStatus = useCallback(async ({ silent = false } = {}) => {
+    try {
+      const response = await providerSyncStatus(GOOGLE_PROVIDER_ID);
+      setSyncState(response || { lastSyncedAt: null, run: null });
+      return response;
+    } catch (requestError) {
+      if (!silent) setError(requestError?.message || 'Не удалось получить состояние синхронизации отзывов');
       return null;
     }
   }, []);
@@ -120,7 +149,20 @@ export default function GoogleBusinessProfileSetup() {
     });
   }, [run]);
 
-  useEffect(() => { void refreshDiagnostics(); }, [refreshDiagnostics]);
+  useEffect(() => {
+    void refreshDiagnostics();
+    void refreshSyncStatus({ silent: true });
+  }, [refreshDiagnostics, refreshSyncStatus]);
+
+  useEffect(() => {
+    if (!syncActive) return undefined;
+    const timer = window.setTimeout(async () => {
+      const next = await refreshSyncStatus({ silent: true });
+      const nextStatus = String(next?.run?.status || '').toUpperCase();
+      if (nextStatus && !ACTIVE_SYNC_STATUSES.has(nextStatus)) void refreshDiagnostics();
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [refreshDiagnostics, refreshSyncStatus, syncActive, syncRun?.id, syncStatus]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -158,6 +200,17 @@ export default function GoogleBusinessProfileSetup() {
     } catch { /* visible error is set by run */ }
   }, [run]);
 
+  const startReviewSync = useCallback(async () => {
+    try {
+      const response = await run('sync', () => providerSync(GOOGLE_PROVIDER_ID));
+      if (response?.run) {
+        setSyncState((current) => ({ ...current, run: response.run }));
+        setNotice('Синхронизация отзывов поставлена в очередь. Статус обновляется по данным worker.');
+      }
+      await refreshSyncStatus({ silent: true });
+    } catch { /* visible error is set by run */ }
+  }, [refreshSyncStatus, run]);
+
   const toggleLocation = (name) => {
     setSelectedLocations((current) => current.includes(name)
       ? current.filter((item) => item !== name)
@@ -183,11 +236,12 @@ export default function GoogleBusinessProfileSetup() {
         lastErrorCode: integration?.lastErrorCode || null,
         lastErrorMessage: integration?.lastErrorMessage || null,
       }));
-      setNotice(`Google Business Profile подключён. Выбрано локаций: ${selectedLocations.length}. Импорт отзывов будет доступен после этапа P17.`);
+      setNotice(`Google Business Profile подключён. Выбрано локаций: ${selectedLocations.length}. Теперь можно импортировать отзывы из Google.`);
       setSetupOpen(false);
       setAccounts([]);
       setLocations([]);
       await refreshDiagnostics();
+      await refreshSyncStatus({ silent: true });
     } catch { /* visible error is set by run */ }
   };
 
@@ -198,6 +252,7 @@ export default function GoogleBusinessProfileSetup() {
       setSetupOpen(false);
       setAccounts([]);
       setLocations([]);
+      setSyncState({ lastSyncedAt: null, run: null });
       await refreshDiagnostics();
     } catch { /* visible error is set by run */ }
   };
@@ -205,10 +260,12 @@ export default function GoogleBusinessProfileSetup() {
   const primaryAction = useMemo(() => {
     if (!canManage) return null;
     if (!isConfigured) return { label: 'Требуется настройка сервера', disabled: true, action: null };
-    if (status === 'CONNECTED') return { label: 'Изменить профиль и локации', disabled: false, action: loadAccounts };
+    if (status === 'CONNECTED' || (status === 'DEGRADED' && diagnostics?.lastErrorCode === 'PROVIDER_RECORDS_PARTIAL')) {
+      return { label: 'Изменить профиль и локации', disabled: false, action: loadAccounts };
+    }
     if (status === 'DEGRADED') return { label: 'Завершить настройку', disabled: false, action: loadAccounts };
     return { label: 'Подключить через Google', disabled: false, action: startOAuth };
-  }, [canManage, isConfigured, loadAccounts, startOAuth, status]);
+  }, [canManage, diagnostics?.lastErrorCode, isConfigured, loadAccounts, startOAuth, status]);
 
   return (
     <section className="google-business-setup" aria-labelledby="google-business-title">
@@ -216,9 +273,9 @@ export default function GoogleBusinessProfileSetup() {
       <div className="google-business-setup__content">
         <header>
           <div>
-            <span className="google-business-setup__eyebrow">PRODUCTION PROVIDER · OAUTH 2.0</span>
+            <span className="google-business-setup__eyebrow">PRODUCTION PROVIDER · OAUTH 2.0 · REVIEW INGESTION</span>
             <h2 id="google-business-title">Google Business Profile</h2>
-            <p>Подключение аккаунтов и локаций напрямую через Google. Токены остаются на backend и не передаются в браузер.</p>
+            <p>Аккаунты, локации и отзывы загружаются через Google API. Токены остаются на backend и не передаются в браузер.</p>
           </div>
           <span className={`google-business-setup__status is-${statusMeta.tone}`}><i />{statusMeta.label}</span>
         </header>
@@ -227,8 +284,24 @@ export default function GoogleBusinessProfileSetup() {
           <div><span>Provider adapter</span><strong>{diagnostics?.adapterInstalled ? 'Установлен' : 'Не установлен'}</strong></div>
           <div><span>Серверная конфигурация</span><strong>{isConfigured ? 'Готова' : 'Не настроена'}</strong></div>
           <div><span>Последняя проверка</span><strong>{formatDate(diagnostics?.lastValidatedAt)}</strong></div>
-          <div><span>Отзывы</span><strong className="is-pending">P17 · ещё не включены</strong></div>
+          <div><span>Отзывы</span><strong className={syncMeta ? `is-${syncMeta.tone}` : ''}>{syncMeta?.label || 'Ещё не синхронизировались'}</strong></div>
         </div>
+
+        {syncRun ? (
+          <div className={`google-business-setup__sync is-${syncMeta?.tone || 'neutral'}`} role="status" aria-live="polite">
+            <div>
+              <strong>{syncMeta?.label || syncStatus}</strong>
+              <span>{syncActive ? 'Worker обрабатывает provider queue. Счётчики будут подтверждены backend после обработки.' : `Последняя синхронизация: ${formatDate(syncState.lastSyncedAt || syncRun.finishedAt)}`}</span>
+            </div>
+            <dl>
+              <div><dt>Новых</dt><dd>{Number(syncRun.importedCount || 0)}</dd></div>
+              <div><dt>Обновлено</dt><dd>{Number(syncRun.updatedCount || 0)}</dd></div>
+              <div><dt>Без изменений</dt><dd>{Number(syncRun.skippedCount || 0)}</dd></div>
+              <div><dt>Ошибок</dt><dd>{Number(syncRun.errorCount || 0)}</dd></div>
+            </dl>
+            {syncRun.errorMessage ? <p>{syncRun.errorCode ? `${syncRun.errorCode}: ` : ''}{syncRun.errorMessage}</p> : null}
+          </div>
+        ) : null}
 
         {!isConfigured && diagnostics ? (
           <div className="google-business-setup__provider-warning" role="status">
@@ -242,9 +315,10 @@ export default function GoogleBusinessProfileSetup() {
 
         {canManage ? (
           <div className="google-business-setup__actions">
-            {primaryAction ? <button type="button" className="is-primary" disabled={primaryAction.disabled || Boolean(busy)} onClick={primaryAction.action || undefined}>{busy ? 'Проверяем…' : primaryAction.label}</button> : null}
-            <button type="button" disabled={Boolean(busy)} onClick={() => void refreshDiagnostics()}>Обновить статус</button>
-            {['CONNECTED', 'DEGRADED', 'ERROR'].includes(status) ? <button type="button" className="is-danger" disabled={Boolean(busy)} onClick={disconnect}>Отключить Google</button> : null}
+            {primaryAction ? <button type="button" className="is-primary" disabled={primaryAction.disabled || Boolean(busy)} onClick={primaryAction.action || undefined}>{busy && busy !== 'sync' ? 'Проверяем…' : primaryAction.label}</button> : null}
+            {syncRetryableState ? <button type="button" className="is-primary" disabled={Boolean(busy) || syncActive} onClick={startReviewSync}>{syncActive || busy === 'sync' ? 'Синхронизация…' : 'Синхронизировать отзывы'}</button> : null}
+            <button type="button" disabled={Boolean(busy)} onClick={() => { void refreshDiagnostics(); void refreshSyncStatus(); }}>Обновить статус</button>
+            {['CONNECTED', 'DEGRADED', 'ERROR'].includes(status) ? <button type="button" className="is-danger" disabled={Boolean(busy) || syncActive} onClick={disconnect}>Отключить Google</button> : null}
           </div>
         ) : null}
       </div>
