@@ -29,6 +29,7 @@ const reportSchema = z.object({
   periodEnd: z.string().datetime(),
 });
 const notificationPreferencesSchema = z.record(z.string(), z.unknown());
+const AUTOMATION_DESCRIPTION_KEY = '__description';
 
 function authContext(request: FastifyRequest) {
   if (!request.auth?.organizationId) {
@@ -47,7 +48,21 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-async function createQueuedReport(app: FastifyInstance, organizationId: string, body: z.infer<typeof reportSchema>) {
+function automationConditions(conditions: Record<string, unknown>, description?: string) {
+  const value = { ...conditions };
+  if (description !== undefined) {
+    if (description) value[AUTOMATION_DESCRIPTION_KEY] = description;
+    else delete value[AUTOMATION_DESCRIPTION_KEY];
+  }
+  return value;
+}
+
+async function createQueuedReport(
+  app: FastifyInstance,
+  organizationId: string,
+  userId: string,
+  body: z.infer<typeof reportSchema>,
+) {
   const start = new Date(body.periodStart);
   const end = new Date(body.periodEnd);
   if (start >= end) {
@@ -65,6 +80,16 @@ async function createQueuedReport(app: FastifyInstance, organizationId: string, 
         payload: { reportId: row.id },
         dedupeKey: `report:${row.id}`,
         maxAttempts: 3,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        organizationId,
+        actorUserId: userId,
+        action: 'report.created',
+        entityType: 'Report',
+        entityId: row.id,
+        metadata: { type: row.type, periodStart: start.toISOString(), periodEnd: end.toISOString() },
       },
     });
     return row;
@@ -91,7 +116,7 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
         organizationId,
         name: body.name,
         trigger: body.trigger,
-        conditions: toJson(body.conditions),
+        conditions: toJson(automationConditions(body.conditions, body.description)),
         actions: toJson(body.actions),
         enabled: body.enabled,
       },
@@ -106,13 +131,21 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     const { organizationId, userId } = authContext(request);
     await assertEntitlement(app, organizationId, 'automations');
     const { automationId } = automationIdParams.parse(request.params);
-    const current = await app.prisma.automation.findFirst({ where: { id: automationId, organizationId }, select: { id: true } });
+    const current = await app.prisma.automation.findFirst({
+      where: { id: automationId, organizationId },
+      select: { id: true, conditions: true },
+    });
     if (!current) throw new AppError({ code: 'AUTOMATION_NOT_FOUND', message: 'Автоматизация не найдена', statusCode: 404 });
     const body = automationPatchSchema.parse(request.body);
+    const shouldUpdateConditions = body.conditions !== undefined || body.description !== undefined;
+    const nextConditions = automationConditions(
+      body.conditions !== undefined ? body.conditions : asRecord(current.conditions),
+      body.description,
+    );
     const data: Prisma.AutomationUpdateInput = {
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.trigger !== undefined ? { trigger: body.trigger } : {}),
-      ...(body.conditions !== undefined ? { conditions: toJson(body.conditions) } : {}),
+      ...(shouldUpdateConditions ? { conditions: toJson(nextConditions) } : {}),
       ...(body.actions !== undefined ? { actions: toJson(body.actions) } : {}),
       ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
     };
@@ -175,23 +208,23 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     return { evaluated: reviews.length, runs };
   });
 
-  app.get('/reports', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, async (request) => {
+  app.get('/reports', { preHandler: [app.authenticate, app.authorize('reports.view')] }, async (request) => {
     const { organizationId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
     return { reports: await app.prisma.report.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 100 }), schedules: [] };
   });
 
   const createReportHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    const { organizationId } = authContext(request);
+    const { organizationId, userId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
-    const report = await createQueuedReport(app, organizationId, reportSchema.parse(request.body));
+    const report = await createQueuedReport(app, organizationId, userId, reportSchema.parse(request.body));
     return reply.code(202).send({ report });
   };
 
-  app.post('/reports', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, createReportHandler);
-  app.post('/reports/generate', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, createReportHandler);
+  app.post('/reports', { preHandler: [app.authenticate, app.authorize('reports.create')] }, createReportHandler);
+  app.post('/reports/generate', { preHandler: [app.authenticate, app.authorize('reports.create')] }, createReportHandler);
 
-  app.get('/reports/:reportId', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, async (request) => {
+  app.get('/reports/:reportId', { preHandler: [app.authenticate, app.authorize('reports.view')] }, async (request) => {
     const { organizationId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
     const { reportId } = reportIdParams.parse(request.params);
@@ -200,7 +233,7 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     return { report };
   });
 
-  app.put('/reports/schedules', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, async (request) => {
+  app.put('/reports/schedules', { preHandler: [app.authenticate, app.authorize('reports.create')] }, async (request) => {
     const { organizationId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
     const { schedules } = z.object({ schedules: z.array(z.unknown()).max(50) }).parse(request.body);
