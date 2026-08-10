@@ -24,7 +24,11 @@ export default function useAccessControl() {
     };
   }, []);
 
-  const context = useMemo(() => getCurrentAccessContext(), [version]);
+  const context = useMemo(() => {
+    // `version` intentionally invalidates this snapshot after RBAC/membership events.
+    void version;
+    return getCurrentAccessContext();
+  }, [version]);
   const can = useCallback((permission) => hasPermission(permission, context), [context]);
   const canAny = useCallback((permissions = []) => permissions.some((permission) => can(permission)), [can]);
   const canAll = useCallback((permissions = []) => permissions.every((permission) => can(permission)), [can]);
