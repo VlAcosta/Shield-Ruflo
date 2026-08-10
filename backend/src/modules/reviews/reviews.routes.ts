@@ -26,6 +26,7 @@ import {
   updateSource,
 } from './reviews.service.js';
 import { createVersionedDraft, listReplyHistory } from './review-replies.service.js';
+import { dispatchAutomationEvent } from '../operations/automation-engine.js';
 
 export const reviewsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/reviews', { preHandler: [app.authenticate, app.authorize('reviews.view')] }, async (request) => {
@@ -85,9 +86,27 @@ export const reviewsRoutes: FastifyPluginAsync = async (app) => {
     return createTag(app, request.auth!.organizationId!, createTagSchema.parse(request.body));
   });
 
-  // Protected idempotent import path. Provider workers use the same source/external ID
-  // uniqueness guarantee and never manufacture a successful external sync state.
+  // Protected idempotent import path. The provider/source external ID uniqueness
+  // guarantee makes repeated imports safe, while automation execution has its own
+  // dedupe key so the same provider review cannot create duplicate operational work.
   app.post('/reviews/import', { preHandler: [app.authenticate, app.authorize('reviews.settings')] }, async (request) => {
-    return seedReview(app, request, seedReviewSchema.parse(request.body));
+    const body = seedReviewSchema.parse(request.body);
+    const result = await seedReview(app, request, body);
+    const review = result.review;
+    const automationResults = await dispatchAutomationEvent(app, {
+      type: 'new_review',
+      organizationId: request.auth!.organizationId!,
+      actorUserId: request.auth!.userId,
+      dedupeKey: `${review.sourceId}:${review.externalId}`,
+      review: {
+        id: review.id,
+        rating: review.rating,
+        businessId: review.businessId,
+        locationId: review.locationId,
+        author: review.author,
+        provider: review.provider,
+      },
+    });
+    return { ...result, automations: automationResults };
   });
 };
