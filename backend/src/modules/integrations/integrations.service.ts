@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { encryptIntegrationSecret } from './providers/credential-vault.js';
-import { connectProviderAccount } from './providers/provider-runtime.js';
+import { connectProviderAccount, disconnectProviderAccount } from './providers/provider-runtime.js';
 import { providerRegistry } from './providers/provider.registry.js';
 
 function toJson(value: Record<string, unknown>): Prisma.InputJsonValue {
@@ -116,14 +116,10 @@ export async function requestIntegrationConnect(app: FastifyInstance, organizati
 }
 
 export async function disconnectIntegration(app: FastifyInstance, organizationId: string, accountId: string) {
-  const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId }, select: { id: true } });
+  const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
   if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
-  const updated = await app.prisma.integrationAccount.update({
-    where: { id: account.id },
-    data: { status: 'DISCONNECTED', lastErrorCode: null, lastErrorMessage: null },
-    include: { credentials: { select: { key: true } } },
-  });
-  await app.prisma.integrationEvent.create({ data: { organizationId, accountId, type: 'connection.disconnected' } });
+
+  const updated = await disconnectProviderAccount(app, organizationId, account);
   return publicAccount(updated);
 }
 
