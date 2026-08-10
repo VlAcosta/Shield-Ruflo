@@ -1,11 +1,16 @@
-import { ADMIN_DASHBOARD_FALLBACK } from '../../features/admin/dashboard/model/adminDashboardData';
+import { apiRequest } from '../core/apiClient';
 
-const ENDPOINT = process.env.REACT_APP_ADMIN_DASHBOARD_ENDPOINT || '';
+const ADMIN_DASHBOARD_ENDPOINT = '/api/v1/admin/dashboard';
 
-export async function getAdminDashboard() {
-  if (!ENDPOINT) return ADMIN_DASHBOARD_FALLBACK;
+export async function getAdminDashboard({ signal } = {}) {
+  const payload = await apiRequest(ADMIN_DASHBOARD_ENDPOINT, {
+    signal,
+    timeout: 10000,
+  });
 
-  const response = await fetch(ENDPOINT, { credentials: 'include', headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`Admin dashboard request failed: ${response.status}`);
-  return response.json();
+  if (!payload || !Array.isArray(payload.metrics)) {
+    throw new Error('Сервер вернул некорректный admin dashboard snapshot');
+  }
+
+  return { ...payload, source: 'api' };
 }
