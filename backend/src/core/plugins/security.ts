@@ -7,7 +7,18 @@ export async function registerSecurity(app: FastifyInstance): Promise<void> {
   const allowedOrigins = new Set(env.CORS_ORIGINS);
 
   await app.register(helmet, {
-    contentSecurityPolicy: false,
+    // Swagger UI needs its own browser assets in development. The production
+    // JSON API can use a deny-by-default CSP because it serves no executable UI.
+    contentSecurityPolicy: env.SWAGGER_ENABLED ? false : {
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'no-referrer' },
   });
 
   await app.register(cors, {
