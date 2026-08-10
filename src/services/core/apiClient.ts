@@ -170,9 +170,8 @@ export async function apiRequest<T = unknown>(url: string, {
   const maxRetries = Number.isFinite(Number(retries))
     ? Math.max(0, Number(retries))
     : normalizedMethod === 'GET' ? 1 : 0;
-  let attempt = 0;
 
-  while (true) {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     try {
       return await executeRequest<T>(url, {
         method: normalizedMethod,
@@ -187,10 +186,11 @@ export async function apiRequest<T = unknown>(url: string, {
     } catch (error) {
       if (signal?.aborted) throw error;
       if (attempt >= maxRetries || !canRetry(error, normalizedMethod)) throw error;
-      attempt += 1;
-      await wait(retryDelay * (2 ** (attempt - 1)), signal);
+      await wait(retryDelay * (2 ** attempt), signal);
     }
   }
+
+  throw new ApiError('API retry loop ended unexpectedly', { url });
 }
 
 export function joinEndpoint(base: string, path = ''): string {
