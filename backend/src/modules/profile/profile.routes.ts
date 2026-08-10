@@ -22,6 +22,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       ...(body.position !== undefined ? { position: body.position } : {}),
       ...(body.telegram !== undefined ? { telegram: body.telegram } : {}),
       ...(body.avatar !== undefined ? { avatar: body.avatar } : {}),
+      ...(body.notifications !== undefined ? { notifications: body.notifications } : {}),
     });
   });
 
