@@ -5,7 +5,6 @@ import { apiRequest, joinEndpoint } from '../core/apiClient';
 const API_ENDPOINT = String(getRuntimeEnv('REVIEWS_ENDPOINT') || joinEndpoint(getRuntimeEnv('API_BASE', '/api/v1'), '/reviews')).replace(/\/$/, '');
 export const REVIEWS_CHANGED_EVENT = 'business-shield:reviews-changed';
 
-
 function normalizeReview(item = {}, index = 0) {
   const status = item.status || REVIEW_STATUS.NEW;
   const workflowStatus = item.workflowStatus || (
@@ -84,7 +83,37 @@ export async function submitReviewReply(reviewId, reply, { publish = false } = {
   if (!text) throw new Error('Ответ пуст');
   const payload = await request(`/${reviewId}/reply`, { method: 'POST', body: { text, publish } });
   if (!payload?.review) throw new Error('Сервер не подтвердил сохранение ответа');
-  return normalizeReview(payload.review);
+  return { review: normalizeReview(payload.review), reply: payload.reply || null };
+}
+
+export async function getReviewReplyHistory(reviewId, { signal } = {}) {
+  const payload = await request(`/${reviewId}/replies`, { signal });
+  return Array.isArray(payload?.items) ? payload.items : [];
+}
+
+export async function submitReplyForApproval(reviewId, replyId) {
+  const payload = await request(`/${reviewId}/replies/${replyId}/submit`, { method: 'POST' });
+  if (!payload?.review || !payload?.reply) throw new Error('Сервер не подтвердил отправку ответа на согласование');
+  return { review: normalizeReview(payload.review), reply: payload.reply };
+}
+
+export async function approveReviewReply(reviewId, replyId) {
+  const payload = await request(`/${reviewId}/replies/${replyId}/approve`, { method: 'POST' });
+  if (!payload?.review || !payload?.reply) throw new Error('Сервер не подтвердил согласование ответа');
+  return { review: normalizeReview(payload.review), reply: payload.reply };
+}
+
+export async function rejectReviewReply(reviewId, replyId, reason = '') {
+  const payload = await request(`/${reviewId}/replies/${replyId}/reject`, {
+    method: 'POST',
+    body: { reason: String(reason || '').trim() || undefined },
+  });
+  if (!payload?.review || !payload?.reply) throw new Error('Сервер не подтвердил отклонение ответа');
+  return { review: normalizeReview(payload.review), reply: payload.reply };
+}
+
+export async function publishReviewReply(reviewId, replyId) {
+  return request(`/${reviewId}/replies/${replyId}/publish`, { method: 'POST' });
 }
 
 export async function getPendingReviewsCount({ signal } = {}) {
