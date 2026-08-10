@@ -1,7 +1,15 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
-import { addChecklistItem, addTaskComment, createTask, listTasks, updateChecklistItem, updateTask } from './tasks.service.js';
+import {
+  addChecklistItem,
+  addTaskComment,
+  createTask,
+  listTasks,
+  saveTaskPreferences,
+  updateChecklistItem,
+  updateTask,
+} from './tasks.service.js';
 
 const statusSchema = z.enum(['new', 'progress', 'in_progress', 'waiting', 'done', 'archived', 'NEW', 'IN_PROGRESS', 'WAITING', 'DONE', 'ARCHIVED']);
 const prioritySchema = z.enum(['critical', 'high', 'medium', 'low', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
@@ -24,6 +32,7 @@ const moveSchema = z.object({ status: statusSchema, beforeTaskId: z.string().uui
 const commentSchema = z.object({ text: z.string().trim().min(1).max(10_000) });
 const checklistCreateSchema = z.object({ text: z.string().trim().min(1).max(400) });
 const checklistUpdateSchema = z.object({ completed: z.boolean() });
+const preferencesSchema = z.object({ view: z.enum(['board', 'list']) }).strict();
 
 function context(request: FastifyRequest) {
   if (!request.auth?.organizationId) {
@@ -34,7 +43,8 @@ function context(request: FastifyRequest) {
 
 export const tasksRoutes: FastifyPluginAsync = async (app) => {
   app.get('/tasks', { preHandler: [app.authenticate, app.authorize('tasks.view')] }, async (request) => {
-    return listTasks(app, context(request).organizationId);
+    const tenant = context(request);
+    return listTasks(app, tenant.organizationId, tenant.userId);
   });
 
   app.post('/tasks', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request, reply) => {
@@ -84,7 +94,11 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     return { item };
   });
 
-  app.patch('/tasks/preferences', { preHandler: [app.authenticate, app.authorize('tasks.view')] }, async () => {
-    return { preferences: { view: 'board' } };
+  app.patch('/tasks/preferences', { preHandler: [app.authenticate, app.authorize('tasks.view')] }, async (request) => {
+    const tenant = context(request);
+    const preferences = preferencesSchema.parse(request.body);
+    return {
+      preferences: await saveTaskPreferences(app, tenant.organizationId, tenant.userId, preferences),
+    };
   });
 };
