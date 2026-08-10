@@ -1,40 +1,73 @@
 import { AUTOMATION_TEMPLATES } from '../../features/automations/model';
 import { getCompanyScope, readScopedJson, writeScopedJson } from '../core/dataScope';
-import { getCachedReviews, updateReview } from '../reviews/reviewsService';
-import { getReviewSettings, getReviewSla, submitDraftForApproval, delegateReviewToShield } from '../reviews/reviewIntelligenceService';
-import { getTasksSnapshot, createTask } from '../tasks/taskService';
-import { pushLocalNotification } from '../notifications/notificationService';
-import { recordCompanyActivity } from '../activity/companyActivityService';
-import { buildReputationAnalytics } from '../reputation/reputationAnalyticsService';
+import { apiRequest, createIdempotencyKey, joinEndpoint } from '../core/apiClient';
+import { getRuntimeEnv } from '../core/runtimeEnv';
+import { isDemoDataEnabled } from '../core/runtimeConfig';
 
-const RULES_KEY = 'business-shield:automations:rules:v1';
-const LEDGER_KEY = 'business-shield:automations:ledger:v1';
-const LOG_KEY = 'business-shield:automations:log:v1';
+const AUTOMATIONS_ENDPOINT = String(getRuntimeEnv('AUTOMATIONS_ENDPOINT', '/api/v1/automations')).replace(/\/$/, '');
+const RULES_KEY = 'business-shield:automations:rules:v2';
+const LOG_KEY = 'business-shield:automations:log:v2';
 export const AUTOMATIONS_CHANGED_EVENT = 'business-shield:automations-changed';
 export const AUTOMATIONS_LOG_EVENT = 'business-shield:automations-log';
-const MAX_LOG = 120;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function normalizeRule(rule = {}) {
+  const conditions = rule.conditions && typeof rule.conditions === 'object' ? rule.conditions : {};
   return {
     id: rule.id || `automation-${Date.now().toString(36)}`,
-    name: String(rule.name || 'Новая автоматизация').slice(0, 72),
-    description: String(rule.description || '').slice(0, 220),
+    name: String(rule.name || 'Новая автоматизация').slice(0, 180),
+    description: String(rule.description || '').slice(0, 500),
     enabled: rule.enabled !== false,
     trigger: rule.trigger || 'review.received',
     conditions: {
-      ratingMin: Number(rule.conditions?.ratingMin || 1),
-      ratingMax: Number(rule.conditions?.ratingMax || 5),
-      platforms: Array.isArray(rule.conditions?.platforms) ? rule.conditions.platforms : [],
-      reasons: Array.isArray(rule.conditions?.reasons) ? rule.conditions.reasons : [],
+      ratingMin: Number(conditions.ratingMin ?? conditions.rating_min ?? 1),
+      ratingMax: Number(conditions.ratingMax ?? conditions.rating ?? 5),
+      platforms: Array.isArray(conditions.platforms) ? conditions.platforms : [],
+      reasons: Array.isArray(conditions.reasons) ? conditions.reasons : [],
+      ...conditions,
     },
-    actions: Array.isArray(rule.actions) ? rule.actions : ['notify'],
-    priority: rule.priority || 'high',
+    actions: Array.isArray(rule.actions)
+      ? rule.actions.map((action) => typeof action === 'string' ? action : action?.type).filter(Boolean)
+      : ['notify'],
+    priority: rule.priority || conditions.priority || 'high',
     systemTemplate: Boolean(rule.systemTemplate),
     createdAt: rule.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    updatedAt: rule.updatedAt || new Date().toISOString(),
+    executions: Array.isArray(rule.executions) ? rule.executions : [],
   };
+}
+
+function normalizeExecution(execution, rule) {
+  return {
+    id: execution.id,
+    createdAt: execution.startedAt || execution.createdAt || new Date().toISOString(),
+    ruleId: rule.id,
+    ruleName: rule.name,
+    trigger: rule.trigger,
+    targetId: execution.triggerPayload?.review?.id || '',
+    targetLabel: execution.triggerPayload?.review?.author || 'Репутационное событие',
+    status: String(execution.status || '').toUpperCase() === 'SUCCESS' ? 'success' : String(execution.status || '').toUpperCase() === 'FAILED' ? 'error' : 'running',
+    effects: Array.isArray(execution.actionResult) ? execution.actionResult.map((item) => item?.type).filter(Boolean) : [],
+    error: execution.errorMessage || '',
+  };
+}
+
+function emit(rules, log) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(AUTOMATIONS_CHANGED_EVENT, { detail: clone(rules) }));
+  window.dispatchEvent(new CustomEvent(AUTOMATIONS_LOG_EVENT, { detail: clone(log) }));
+}
+
+function writeSnapshot(rules) {
+  const normalized = (rules || []).map(normalizeRule);
+  const log = normalized.flatMap((rule) => rule.executions.map((execution) => normalizeExecution(execution, rule)))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 120);
+  writeScopedJson(RULES_KEY, normalized, { scope: getCompanyScope() });
+  writeScopedJson(LOG_KEY, log, { scope: getCompanyScope() });
+  emit(normalized, log);
+  return normalized;
 }
 
 function seedRules() {
@@ -44,72 +77,7 @@ function seedRules() {
 export function readAutomationRules() {
   const saved = readScopedJson(RULES_KEY, { scope: getCompanyScope(), legacy: true, fallback: null });
   if (Array.isArray(saved)) return saved.map(normalizeRule);
-  const seeded = seedRules();
-  writeScopedJson(RULES_KEY, seeded, { scope: getCompanyScope() });
-  return seeded;
-}
-
-function writeRules(rules) {
-  writeScopedJson(RULES_KEY, rules, { scope: getCompanyScope() });
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(AUTOMATIONS_CHANGED_EVENT, { detail: clone(rules) }));
-  return rules;
-}
-
-export function saveAutomationRule(input) {
-  const rules = readAutomationRules();
-  const rule = normalizeRule(input);
-  const exists = rules.some((item) => item.id === rule.id);
-  const next = exists ? rules.map((item) => item.id === rule.id ? rule : item) : [rule, ...rules];
-  writeRules(next);
-  recordCompanyActivity({ type: 'automation-rule', title: exists ? 'Изменена автоматизация' : 'Создана автоматизация', detail: rule.name, route: '/automations', tone: 'violet' });
-  return clone(rule);
-}
-
-export function deleteAutomationRule(ruleId) {
-  const next = readAutomationRules().filter((item) => item.id !== ruleId);
-  writeRules(next);
-  return next;
-}
-
-export function toggleAutomationRule(ruleId, enabled) {
-  const next = readAutomationRules().map((item) => item.id === ruleId ? { ...item, enabled: Boolean(enabled), updatedAt: new Date().toISOString() } : item);
-  writeRules(next);
-  return next;
-}
-
-export function createRuleFromTemplate(templateId) {
-  const template = AUTOMATION_TEMPLATES.find((item) => item.id === templateId);
-  if (!template) return null;
-  return normalizeRule({ ...template, id: `automation-${templateId}-${Date.now().toString(36)}`, systemTemplate: false, enabled: true, name: template.name });
-}
-
-function readLedger() {
-  const value = readScopedJson(LEDGER_KEY, { scope: getCompanyScope(), legacy: false, fallback: {} });
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-}
-
-function claimExecution(key) {
-  const ledger = readLedger();
-  if (ledger[key]) return false;
-  ledger[key] = new Date().toISOString();
-  const entries = Object.entries(ledger).slice(-600);
-  writeScopedJson(LEDGER_KEY, Object.fromEntries(entries), { scope: getCompanyScope() });
-  return true;
-}
-
-function releaseExecution(key) {
-  const ledger = readLedger();
-  if (!ledger[key]) return;
-  delete ledger[key];
-  writeScopedJson(LEDGER_KEY, ledger, { scope: getCompanyScope() });
-}
-
-function appendLog(item) {
-  const current = readScopedJson(LOG_KEY, { scope: getCompanyScope(), legacy: false, fallback: [] });
-  const log = [{ id: `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, createdAt: new Date().toISOString(), ...item }, ...(Array.isArray(current) ? current : [])].slice(0, MAX_LOG);
-  writeScopedJson(LOG_KEY, log, { scope: getCompanyScope() });
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(AUTOMATIONS_LOG_EVENT, { detail: clone(log) }));
-  return log[0];
+  return isDemoDataEnabled() ? seedRules() : [];
 }
 
 export function readAutomationLog() {
@@ -117,109 +85,77 @@ export function readAutomationLog() {
   return Array.isArray(value) ? value : [];
 }
 
-function matchesRule(rule, review) {
-  if (!review) return false;
-  const rating = Number(review.rating || 0);
-  if (rating < rule.conditions.ratingMin || rating > rule.conditions.ratingMax) return false;
-  if (rule.conditions.platforms.length && !rule.conditions.platforms.includes(review.platform)) return false;
-  if (rule.conditions.reasons.length) {
-    const reasons = new Set([...(review.aiReasons || []), ...(review.tags || [])]);
-    if (!rule.conditions.reasons.some((reason) => reasons.has(reason))) return false;
-  }
-  return true;
+async function request(path = '', options = {}) {
+  return apiRequest(joinEndpoint(AUTOMATIONS_ENDPOINT, path), { ...options, timeout: 10000 });
 }
 
-function notificationFor(rule, review, trigger) {
-  if (trigger === 'review.sla_breached') return { title: `SLA нарушен · ${review.platform}`, text: `${review.rating}★ · ${review.author}. Нужна немедленная реакция.`, tone: 'red' };
-  if (trigger === 'review.sla_at_risk') return { title: `SLA под риском · ${review.platform}`, text: `${review.rating}★ · использовано более 75% времени ответа.`, tone: 'amber' };
-  if (trigger === 'review.approval_waiting') return { title: 'Ответ ждёт согласования', text: `${review.platform} · ${review.author}. Черновик ожидает решения руководителя.`, tone: 'violet' };
-  return { title: `Новый негативный отзыв · ${review.platform}`, text: `${review.rating}★ · ${review.author}. Автоматизация «${rule.name}» запущена.`, tone: 'red' };
-}
-
-async function createGenericAutomationTask(rule, review, trigger) {
-  const snapshot = await getTasksSnapshot();
-  const existing = (snapshot.tasks || []).find((task) => task.sourceReviewId === review.id && (trigger === 'review.received' || task.automationTrigger === trigger));
-  if (existing) return existing.id;
-  const settings = await getReviewSettings().catch(() => null);
-  const sla = getReviewSla(review, settings);
-  const title = trigger === 'review.sla_breached'
-    ? `Срочно: просрочен SLA · ${review.platform}`
-    : trigger === 'review.received' ? `Обработать отзыв ${review.rating}★ · ${review.platform}` : `Реакция по отзыву · ${review.platform}`;
-  const remainingHours = trigger === 'review.received' ? Math.max(1, Number(sla?.remainingHours || (Number(review.rating) <= 2 ? 6 : 16))) : (rule.priority === 'critical' ? 2 : 6);
-  const due = new Date(Date.now() + remainingHours * 3600000);
-  const result = await createTask({
-    title,
-    type: 'Отзывы', priority: rule.priority, status: 'new', dueDate: due.toLocaleDateString('ru-RU'),
-    description: `${review.rating}★ · ${review.author}\n${review.text || ''}`,
-    sourceReviewId: review.id,
-    automationRuleId: rule.id,
-    automationTrigger: trigger,
-    comments: [{ id: `auto-${Date.now()}`, author: 'Автоматизация', initials: 'АВ', text: `Создано правилом «${rule.name}»`, time: 'сейчас' }],
-    checklist: [{ id: `check-${Date.now()}-1`, text: 'Проверить контекст отзыва', done: false }, { id: `check-${Date.now()}-2`, text: 'Подготовить действие', done: false }], attachments: [],
-  }, snapshot);
-  if (result?.task?.id && !review.taskId) await updateReview(review.id, { taskId: result.task.id });
-  return result?.task?.id || '';
-}
-
-async function executeRule(rule, review, trigger) {
-  const key = `${rule.id}:${trigger}:${review?.id || 'signal'}`;
-  if (!claimExecution(key)) return null;
-  const effects = [];
+export async function fetchAutomationSnapshot({ signal } = {}) {
   try {
-    for (const action of rule.actions) {
-      if (action === 'create_task' && review) effects.push({ type: action, value: await createGenericAutomationTask(rule, review, trigger) });
-      if (action === 'notify' && review) {
-        const payload = notificationFor(rule, review, trigger);
-        effects.push({ type: action, value: pushLocalNotification({ ...payload, type: 'reviews', actionLabel: 'Открыть отзыв', actionRoute: `/reviews?review=${review.id}` }).id });
-      }
-      if (action === 'send_for_approval' && review?.reply) effects.push({ type: action, value: await submitDraftForApproval(review.id, review.reply) });
-      if (action === 'assign_shield' && review) effects.push({ type: action, value: await delegateReviewToShield(review.id, 'Передано автоматическим правилом') });
-    }
-    appendLog({ ruleId: rule.id, ruleName: rule.name, trigger, targetId: review?.id || '', targetLabel: review ? `${review.platform} · ${review.rating}★ · ${review.author}` : 'Репутационный сигнал', status: 'success', effects: effects.map((item) => item.type) });
-    recordCompanyActivity({ type: 'automation-run', title: 'Сработала автоматизация', detail: rule.name, route: '/automations', targetId: review?.id || '', tone: 'success' });
-    return effects;
+    const remote = await request('', { signal });
+    const rules = writeSnapshot(remote?.automations || []);
+    return { rules, log: readAutomationLog(), source: 'api' };
   } catch (error) {
-    releaseExecution(key);
-    appendLog({ ruleId: rule.id, ruleName: rule.name, trigger, targetId: review?.id || '', targetLabel: review ? `${review.platform} · ${review.rating}★` : 'Репутационный сигнал', status: 'error', error: error?.message || 'Ошибка выполнения' });
-    return null;
+    if (error?.name === 'AbortError') throw error;
+    const cached = readAutomationRules();
+    if (cached.length) return { rules: cached, log: readAutomationLog(), source: 'cache', stale: true, error };
+    if (isDemoDataEnabled()) return { rules: seedRules(), log: [], source: 'demo' };
+    throw error;
   }
 }
 
-export async function evaluateReviewAutomations({ reviews = getCachedReviews(), reason = 'manual' } = {}) {
-  const rules = readAutomationRules().filter((rule) => rule.enabled);
-  const settings = await getReviewSettings().catch(() => null);
-  const now = Date.now();
-  const executions = [];
-  for (const review of reviews) {
-    for (const rule of rules) {
-      if (!matchesRule(rule, review)) continue;
-      let triggered = false;
-      if (rule.trigger === 'review.received') triggered = review.status !== 'done';
-      if (rule.trigger === 'review.sla_at_risk') { const sla = getReviewSla(review, settings); triggered = !sla.overdue && sla.progress >= 75 && review.workflowStatus !== 'published'; }
-      if (rule.trigger === 'review.sla_breached') { const sla = getReviewSla(review, settings); triggered = sla.overdue && review.workflowStatus !== 'published'; }
-      if (rule.trigger === 'review.approval_waiting') triggered = review.workflowStatus === 'approval' && now - new Date(review.approval?.requestedAt || now).getTime() >= 4 * 3600000;
-      if (triggered) executions.push(executeRule(rule, review, rule.trigger));
-    }
-  }
-
-  const spikeRules = rules.filter((rule) => rule.trigger === 'reputation.reason_spike');
-  if (spikeRules.length) {
-    const analytics = buildReputationAnalytics(reviews, settings, 30);
-    const spike = analytics.reasons.find((item) => item.count >= 2 && item.delta >= 50);
-    if (spike) {
-      for (const rule of spikeRules) {
-        if (rule.conditions.reasons.length && !rule.conditions.reasons.includes(spike.reason)) continue;
-        const signalKey = `${rule.id}:reason-spike:${spike.reason}:${new Date().toISOString().slice(0, 7)}`;
-        if (!claimExecution(signalKey)) continue;
-        const snapshot = await getTasksSnapshot();
-        if (rule.actions.includes('create_task')) await createTask({ title: `Разобрать рост негатива: ${spike.reason}`, type: 'Аналитика', priority: rule.priority, status: 'new', dueDate: new Date(Date.now() + 2 * DAY).toLocaleDateString('ru-RU'), description: `Причина «${spike.reason}» выросла на ${spike.delta}% и встретилась ${spike.count} раз за текущий период.`, comments: [], checklist: [{ id: `root-${Date.now()}`, text: 'Проверить отзывы и определить первопричину', done: false }], attachments: [], automationRuleId: rule.id }, snapshot);
-        if (rule.actions.includes('notify')) pushLocalNotification({ type: 'reviews', title: `Рост негатива: ${spike.reason}`, text: `+${spike.delta}% к прошлому периоду. Бизнес Щит рекомендует разобрать первопричину.`, tone: 'amber', actionLabel: 'Открыть аналитику', actionRoute: '/reputation' });
-        appendLog({ ruleId: rule.id, ruleName: rule.name, trigger: rule.trigger, targetId: spike.reason, targetLabel: `Причина: ${spike.reason}`, status: 'success', effects: rule.actions });
-      }
-    }
-  }
-  await Promise.allSettled(executions);
-  return { reason, evaluated: reviews.length, executions: executions.length };
+function apiPayload(rule) {
+  const normalized = normalizeRule(rule);
+  return {
+    name: normalized.name,
+    description: normalized.description,
+    trigger: normalized.trigger,
+    conditions: { ...normalized.conditions, priority: normalized.priority },
+    actions: normalized.actions,
+    enabled: normalized.enabled,
+  };
 }
 
-const DAY = 24 * 60 * 60 * 1000;
+export async function saveAutomationRule(input) {
+  const isPersisted = Boolean(input?.id && !String(input.id).startsWith('rule-') && !String(input.id).startsWith('automation-'));
+  const remote = await request(isPersisted ? `/${input.id}` : '', {
+    method: isPersisted ? 'PATCH' : 'POST',
+    body: apiPayload(input),
+    idempotencyKey: isPersisted ? undefined : createIdempotencyKey('automation-create'),
+  });
+  const saved = normalizeRule(remote?.automation || remote);
+  await fetchAutomationSnapshot();
+  return saved;
+}
+
+export async function deleteAutomationRule(ruleId) {
+  await request(`/${ruleId}`, { method: 'DELETE' });
+  const snapshot = await fetchAutomationSnapshot();
+  return snapshot.rules;
+}
+
+export async function toggleAutomationRule(ruleId, enabled) {
+  await request(`/${ruleId}`, { method: 'PATCH', body: { enabled: Boolean(enabled) } });
+  const snapshot = await fetchAutomationSnapshot();
+  return snapshot.rules;
+}
+
+export function createRuleFromTemplate(templateId) {
+  const template = AUTOMATION_TEMPLATES.find((item) => item.id === templateId);
+  if (!template) return null;
+  return normalizeRule({
+    ...template,
+    id: `automation-${templateId}-${Date.now().toString(36)}`,
+    systemTemplate: false,
+    enabled: true,
+  });
+}
+
+export async function evaluateReviewAutomations({ reason = 'manual' } = {}) {
+  const result = await request('/run', {
+    method: 'POST',
+    body: { reason },
+    idempotencyKey: createIdempotencyKey(`automation-run-${reason}`),
+  });
+  await fetchAutomationSnapshot();
+  return result;
+}
