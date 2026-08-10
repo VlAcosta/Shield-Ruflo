@@ -7,6 +7,10 @@ const booleanFromString = z
   .transform((value) => value === 'true');
 
 const optionalUrl = z.union([z.literal(''), z.string().url()]).default('');
+const identityList = z.string().default('').transform((value) => value
+  .split(',')
+  .map((entry) => entry.trim().toLowerCase())
+  .filter(Boolean));
 
 function isTrustedProxyEntry(value: string): boolean {
   if (value === 'loopback') return true;
@@ -60,6 +64,7 @@ const envSchema = z
           .filter(Boolean),
       ),
     SWAGGER_ENABLED: booleanFromString.default(true),
+    PLATFORM_ADMIN_IDENTITIES: identityList,
 
     AUTH_SECRET: z.string().min(32).default('development-only-auth-secret-change-me-now'),
     AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(31_536_000).default(2_592_000),
