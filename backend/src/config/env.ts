@@ -42,8 +42,6 @@ const envSchema = z
     APP_VERSION: z.string().min(1).default('0.5.0'),
     HOST: z.string().min(1).default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).default(8081),
-    // Disabled unless the deployment explicitly identifies its trusted edge.
-    // This keeps request.ip resistant to spoofed forwarding headers.
     TRUST_PROXY: trustedProxySchema,
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -68,8 +66,6 @@ const envSchema = z
     AUTH_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default('bs_session'),
     AUTH_COOKIE_DOMAIN: z.string().regex(/^$|^\.?[A-Za-z0-9.-]+$/).default(''),
     AUTH_COOKIE_SECURE: booleanFromString.default(false),
-    // Cookie-authenticated mutation routes do not yet have a dedicated CSRF
-    // token mechanism. Cross-site cookies must therefore remain disabled.
     AUTH_COOKIE_SAME_SITE: z.enum(['lax', 'strict']).default('lax'),
 
     AUTH_OTP_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
@@ -88,6 +84,8 @@ const envSchema = z
     COMPANY_LOOKUP_WEBHOOK_URL: optionalUrl,
     COMPANY_LOOKUP_WEBHOOK_TOKEN: z.string().default(''),
     COMPANY_LOOKUP_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+
+    INTEGRATION_CREDENTIALS_KEY: z.string().min(32).default('development-integration-credential-key-change-me'),
   })
   .superRefine((value, ctx) => {
     if (value.COMPANY_LOOKUP_PROVIDER === 'webhook' && !value.COMPANY_LOOKUP_WEBHOOK_URL) {
@@ -130,6 +128,9 @@ const envSchema = z
       }
       if (value.COMPANY_LOOKUP_PROVIDER === 'webhook' && !value.COMPANY_LOOKUP_WEBHOOK_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['COMPANY_LOOKUP_WEBHOOK_URL'], message: 'Production company lookup webhook must use HTTPS' });
+      }
+      if (value.INTEGRATION_CREDENTIALS_KEY === 'development-integration-credential-key-change-me') {
+        ctx.addIssue({ code: 'custom', path: ['INTEGRATION_CREDENTIALS_KEY'], message: 'Production requires a unique integration credential encryption key' });
       }
     }
   });
