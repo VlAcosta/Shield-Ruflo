@@ -409,18 +409,18 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
   const complete = pin.length === 4 && repeat.length === 4;
   const ready = complete && pin === repeat;
 
-  const addDigit = (digit) => {
+  const addDigit = useCallback((digit) => {
     if (pin.length < 4) {
       setPin((value) => `${value}${digit}`.slice(0, 4));
       return;
     }
     if (repeat.length < 4) setRepeat((value) => `${value}${digit}`.slice(0, 4));
-  };
+  }, [pin.length, repeat.length]);
 
-  const removeDigit = () => {
+  const removeDigit = useCallback(() => {
     if (repeat.length) setRepeat((value) => value.slice(0, -1));
     else setPin((value) => value.slice(0, -1));
-  };
+  }, [repeat.length]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -441,7 +441,7 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pin, repeat, complete, ready, finishing, confirmed, canFinish]);
+  }, [addDigit, canFinish, complete, confirmed, finishing, ready, removeDigit]);
 
   useEffect(() => {
     if (!confirmed || finishing) return undefined;
