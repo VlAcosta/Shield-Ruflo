@@ -2,7 +2,7 @@ import { applyOnboardingConfiguration, loadOnboardingState, saveOnboardingState 
 import { authService } from '../auth/authService';
 import { createDefaultOnboardingDraft } from '../../features/onboarding/model/onboardingData';
 
-jest.mock('../auth/authService', () => ({ authService: { persistSession: jest.fn() } }));
+vi.mock('../auth/authService', () => ({ authService: { persistSession: vi.fn() } }));
 
 const response = (body, status = 200) => Promise.resolve({
   ok: status >= 200 && status < 300,
@@ -14,7 +14,7 @@ const response = (body, status = 200) => Promise.resolve({
 });
 
 describe('onboardingService server authority', () => {
-  beforeEach(() => { localStorage.clear(); authService.persistSession.mockClear(); global.fetch = jest.fn(); });
+  beforeEach(() => { localStorage.clear(); authService.persistSession.mockClear(); global.fetch = vi.fn(); });
 
   test('hydrates the draft returned by the backend', async () => {
     const draft = { ...createDefaultOnboardingDraft(), step: 1, organization: { ...createDefaultOnboardingDraft().organization, title: 'ООО Сервер' } };
