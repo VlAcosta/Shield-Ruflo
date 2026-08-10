@@ -32,12 +32,11 @@ export function decryptIntegrationSecret(value: string): string {
       decipher.update(Buffer.from(encryptedValue, 'base64')),
       decipher.final(),
     ]).toString('utf8');
-  } catch (error) {
+  } catch {
     throw new AppError({
       code: 'INTEGRATION_CREDENTIAL_DECRYPT_FAILED',
       message: 'Не удалось расшифровать credential интеграции',
       statusCode: 500,
-      cause: error,
     });
   }
 }
