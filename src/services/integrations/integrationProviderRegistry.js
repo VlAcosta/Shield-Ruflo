@@ -13,7 +13,7 @@ export const PROVIDER_CAPABILITIES = Object.freeze({
   ozon: ['reviews.read', 'rating.read', 'marketplace.read', 'replies.write'],
   otzovik: ['reviews.read', 'rating.read'],
   wb: ['reviews.read', 'rating.read', 'marketplace.read', 'replies.write'],
-  google: ['oauth', 'accounts.read', 'locations.read', 'profile.read'],
+  google: ['oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read'],
   telegram: ['notifications.write'],
   whatsapp: ['notifications.write'],
   amo: ['crm.read', 'crm.write'],
@@ -82,6 +82,11 @@ export async function providerSync(providerId, { signal } = {}) {
     signal,
     idempotencyKey: createIdempotencyKey(`integration-sync-${providerId}`),
   });
+}
+
+export async function providerSyncStatus(providerId, { signal } = {}) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return { providerId: getBackendProviderId(providerId), accountId: null, lastSyncedAt: null, run: null };
+  return apiRequest(providerPath(providerId, 'sync-status'), { signal, retries: 0 });
 }
 
 export async function providerDiagnostics(providerId, { signal } = {}) {
