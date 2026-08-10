@@ -9,13 +9,13 @@ describe('joinEndpoint', () => {
 
 describe('authentication failures', () => {
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test('announces a 401 so the application can leave an expired session', async () => {
-    const onInvalidSession = jest.fn();
+    const onInvalidSession = vi.fn();
     window.addEventListener(AUTH_SESSION_INVALID_EVENT, onInvalidSession);
-    jest.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       error: { code: 'UNAUTHENTICATED', message: 'Session expired' },
     }), {
       status: 401,
@@ -31,9 +31,9 @@ describe('authentication failures', () => {
   });
 
   test('does not invalidate the session for a permission denial', async () => {
-    const onInvalidSession = jest.fn();
+    const onInvalidSession = vi.fn();
     window.addEventListener(AUTH_SESSION_INVALID_EVENT, onInvalidSession);
-    jest.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       error: { code: 'FORBIDDEN', message: 'Permission denied' },
     }), {
       status: 403,

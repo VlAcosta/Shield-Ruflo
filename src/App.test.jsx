@@ -16,7 +16,7 @@ function renderApp(path) {
 }
 
 afterEach(() => {
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 
@@ -27,8 +27,8 @@ test('renders the public landing route', async () => {
 });
 
 test('requires an authenticated backend session for onboarding', async () => {
-  jest.spyOn(authService, 'restoreSession').mockRejectedValue(Object.assign(new Error('Expired'), { status: 401 }));
-  jest.spyOn(authService, 'clearLocalSession').mockImplementation(() => {});
+  vi.spyOn(authService, 'restoreSession').mockRejectedValue(Object.assign(new Error('Expired'), { status: 401 }));
+  vi.spyOn(authService, 'clearLocalSession').mockImplementation(() => {});
 
   renderApp('/onboarding');
 
@@ -39,8 +39,8 @@ test('requires an authenticated backend session for onboarding', async () => {
 
 test('leaves a protected route when the active session becomes invalid', async () => {
   localStorage.setItem('onboarding_completed', '1');
-  jest.spyOn(authService, 'restoreSession').mockResolvedValue({ id: 'user-1' });
-  jest.spyOn(authService, 'clearLocalSession').mockImplementation(() => {});
+  vi.spyOn(authService, 'restoreSession').mockResolvedValue({ id: 'user-1' });
+  vi.spyOn(authService, 'clearLocalSession').mockImplementation(() => {});
 
   renderApp('/dashboard');
   await waitFor(() => expect(authService.restoreSession).toHaveBeenCalledTimes(1));
@@ -52,8 +52,8 @@ test('leaves a protected route when the active session becomes invalid', async (
 });
 
 test('requires backend platform-admin authorization before rendering admin routes', async () => {
-  jest.spyOn(authService, 'restoreSession').mockResolvedValue({ id: 'user-1' });
-  jest.spyOn(adminAccessService, 'check').mockRejectedValue(Object.assign(new Error('Denied'), { status: 403 }));
+  vi.spyOn(authService, 'restoreSession').mockResolvedValue({ id: 'user-1' });
+  vi.spyOn(adminAccessService, 'check').mockRejectedValue(Object.assign(new Error('Denied'), { status: 403 }));
 
   renderApp('/admin/dashboard');
 

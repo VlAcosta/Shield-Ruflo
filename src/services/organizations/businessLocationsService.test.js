@@ -6,7 +6,7 @@ describe('businessLocationsService', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('currentUser', JSON.stringify({ membership: { organizationId: 'org-a' } }));
-    global.fetch = jest.fn(() => response({ businesses: [] }));
+    global.fetch = vi.fn(() => response({ businesses: [] }));
   });
 
   test('lists businesses only under the active organization path', async () => {

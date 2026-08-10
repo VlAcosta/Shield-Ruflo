@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { authService } from '../../../services/auth/authService';
 import MemberAccessOverlay from './MemberAccessOverlay';
 
-jest.mock('../../../services/auth/authService', () => ({
-  authService: { logout: jest.fn() },
+vi.mock('../../../services/auth/authService', () => ({
+  authService: { logout: vi.fn() },
 }));
 
 describe('MemberAccessOverlay logout', () => {
