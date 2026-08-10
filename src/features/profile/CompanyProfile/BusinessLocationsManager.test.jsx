@@ -3,15 +3,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import BusinessLocationsManager from './BusinessLocationsManager';
 import { businessLocationsService } from '../../../services/organizations/businessLocationsService';
 
-jest.mock('../../../services/organizations/businessLocationsService', () => ({
+vi.mock('../../../services/organizations/businessLocationsService', () => ({
   businessLocationsService: {
-    list: jest.fn(), createBusiness: jest.fn(), updateBusiness: jest.fn(), archiveBusiness: jest.fn(),
-    createLocation: jest.fn(), updateLocation: jest.fn(), archiveLocation: jest.fn(),
+    list: vi.fn(), createBusiness: vi.fn(), updateBusiness: vi.fn(), archiveBusiness: vi.fn(),
+    createLocation: vi.fn(), updateLocation: vi.fn(), archiveLocation: vi.fn(),
   },
 }));
 
 describe('BusinessLocationsManager', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   test('renders a truthful empty state and creates a business through the API', async () => {
     businessLocationsService.list.mockResolvedValue([]);
