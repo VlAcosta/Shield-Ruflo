@@ -7,7 +7,9 @@ vi.mock('../../../services/auth/authService', () => ({
 }));
 
 describe('MemberAccessOverlay logout', () => {
-  beforeEach(() => authService.logout.mockReset());
+  beforeEach(() => {
+    authService.logout.mockReset();
+  });
 
   test('keeps the user on screen and explains a server logout failure', async () => {
     let rejectLogout;
@@ -19,9 +21,8 @@ describe('MemberAccessOverlay logout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Войти снова' }));
     expect(authService.logout).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
+    act(() => {
       rejectLogout(new Error('Сервис авторизации недоступен'));
-      await Promise.resolve();
     });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Сервис авторизации недоступен');
