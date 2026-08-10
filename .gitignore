@@ -20,12 +20,20 @@ node_modules
 .swarm/backups/
 
 .claude-flow/daemon-state.json
+.claude-flow/daemon.pid
+.claude-flow/harness-active-policy.json
 .claude-flow/metrics/*.json
 .claude-flow/policy/state.json
+
+.claude/memory.db
+.claude/security-scans/
 
 ruvector.db
 agentdb.rvf
 agentdb.rvf.lock
+
+# Local caches / temporary files
+.tmp/
 
 # Codex audit/session exports
 business-shield-audit*.jsonl
