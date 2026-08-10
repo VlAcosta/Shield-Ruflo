@@ -3,11 +3,6 @@ import { ArrowIcon, CalendarIcon, MessageIcon, PaperclipIcon } from '../model/ic
 import { getPriorityMeta, getStatusMeta } from '../model/taskData';
 import './TaskList.scss';
 
-const SORTS = Object.freeze({
-  due: 'dueDate',
-  priority: 'priority',
-});
-
 const PRIORITY_WEIGHT = Object.freeze({ critical: 4, high: 3, medium: 2, low: 1 });
 
 function dateWeight(value) {
