@@ -56,7 +56,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
-        run: npm install --include=dev --package-lock=false
+        run: npm ci
 
       - name: Generate Prisma client
         run: npm run prisma:generate
@@ -87,7 +87,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install frontend dependencies
-        run: npm install --include=dev --package-lock=false
+        run: npm ci
 
       - name: Lint
         run: npm run lint
