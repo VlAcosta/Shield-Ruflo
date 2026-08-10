@@ -45,6 +45,18 @@ module.exports = {
     {
       files: ['**/*.test.*', '**/*.spec.*'],
       env: { browser: true, node: true },
+      globals: {
+        describe: 'readonly',
+        test: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        vi: 'readonly',
+        jest: 'readonly',
+      },
     },
   ],
 };
