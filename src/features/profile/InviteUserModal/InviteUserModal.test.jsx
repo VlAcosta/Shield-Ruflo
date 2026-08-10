@@ -56,7 +56,7 @@ describe('InviteUserModal canonical role contract', () => {
     const closeButtons = screen.getAllByRole('button', { name: 'Закрыть' });
     const last = screen.getByRole('button', { name: 'Создать приглашение' });
     last.focus();
-    fireEvent.keyDown(last, { key: 'Tab', code: 'Tab' });
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab', code: 'Tab' });
     expect(closeButtons[1]).toHaveFocus();
 
     rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={vi.fn()} />);
