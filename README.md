@@ -1,70 +1,211 @@
-# Getting Started with Create React App
+# Business Shield
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Business Shield is a multi-tenant Reputation Operations SaaS for local, multi-location and agency businesses.
 
-## Available Scripts
+The product converts external customer feedback into controlled operational work:
 
-In the project directory, you can run:
+**Collect → Normalize → Understand → Prioritize → Respond → Act → Resolve → Measure → Improve.**
 
-### `npm start`
+## Architecture
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Business Shield is intentionally implemented as a modular monolith.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Runtime components:
 
-### `npm test`
+- React web application;
+- Fastify + TypeScript API;
+- PostgreSQL-backed durable background worker;
+- PostgreSQL + Prisma;
+- provider adapter layer for external reputation systems;
+- background jobs for provider sync, reply publication, reports and automations;
+- Nginx/HTTPS in production.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+The backend is authoritative for authentication, authorization, tenant isolation, entitlements, integrations, external side effects, billing state and audit trails.
 
-### `npm run build`
+## Repository layout
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```text
+backend/                 Fastify API, worker, Prisma and backend tests
+src/                     React application
+public/                  static frontend assets
+scripts/                 development/deployment/quality scripts
+e2e/                     Playwright browser tests
+.github/workflows/       CI/security pipelines
+docs/                    architecture, security and operations docs
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Requirements
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- Node.js 22.23.x recommended; backend supports Node >=22.12 <25.
+- npm 10.x.
+- PostgreSQL 16 recommended.
+- Docker is optional for local PostgreSQL but used by the current VPS deployment.
 
-### `npm run eject`
+## Local development
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Frontend
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```bash
+npm ci
+npm start
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+The frontend currently uses the `/api/v1` same-origin API contract. P14 migrates the existing application incrementally from Create React App to Vite + TypeScript; do not introduce new CRA-specific infrastructure.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Backend
 
-## Learn More
+```bash
+cd backend
+cp .env.example .env
+npm ci
+npm run prisma:generate
+npm run db:deploy
+npm run dev
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Run the worker in another terminal:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```bash
+cd backend
+npm run dev:worker
+```
 
-### Code Splitting
+## Environment
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Never commit `.env`, OTP codes, cookies, provider credentials or database credentials.
 
-### Analyzing the Bundle Size
+Important backend variables include:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+```text
+NODE_ENV
+HOST
+PORT
+DATABASE_URL
+AUTH_SECRET
+AUTH_COOKIE_NAME
+AUTH_COOKIE_SECURE
+AUTH_COOKIE_SAME_SITE
+AUTH_OTP_PROVIDER
+AUTH_OTP_WEBHOOK_URL
+AUTH_OTP_WEBHOOK_TOKEN
+COMPANY_LOOKUP_PROVIDER
+CORS_ORIGINS
+PLATFORM_ADMIN_IDENTITIES
+INTEGRATION_CREDENTIALS_KEY
+```
 
-### Making a Progressive Web App
+Production configuration is deliberately stricter than development. Console/fixed/debug OTP modes, insecure cookies and default secrets must not be used for a production release.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+See `backend/.env.example` and `scripts/production-preflight.sh` for the executable source of truth.
 
-### Advanced Configuration
+## Database migrations
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+Development migration creation:
 
-### Deployment
+```bash
+cd backend
+npm run db:migrate
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+Production/staging application of committed migrations:
 
-### `npm run build` fails to minify
+```bash
+cd backend
+npm run db:status
+npm run db:deploy
+npm run db:status
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Never run `prisma migrate dev` against production.
+
+## Testing
+
+Frontend:
+
+```bash
+npm run lint
+CI=true npm run test:ci
+CI=true npm run build
+```
+
+Backend unit and isolated integration tests are executed by GitHub Actions against a dedicated PostgreSQL test database.
+
+```bash
+cd backend
+npm run typecheck
+npm test
+npm run build
+```
+
+Integration tests that write fixtures must require `NODE_ENV=test` and an explicit `TEST_DATABASE_URL` pointing at a test-only database. Do not run fixture integration suites against the production database.
+
+Browser E2E:
+
+```bash
+npm run test:e2e:p0
+```
+
+CI validates the real HttpOnly-session + PostgreSQL Reviews path in Chromium.
+
+## Deployment
+
+Current production topology:
+
+```text
+Internet
+  ↓ HTTPS
+Nginx
+  ├─ React static build
+  └─ /api/v1/* → Fastify API (127.0.0.1:8081)
+                    ↓
+                 PostgreSQL
+                    ↑
+             durable worker
+```
+
+Typical deployment sequence:
+
+1. confirm CI is green;
+2. back up PostgreSQL and environment configuration;
+3. pull the approved production commit;
+4. `npm ci` and build frontend/backend;
+5. `prisma migrate deploy`;
+6. restart API and worker systemd services;
+7. verify `/health` and `/health/ready`;
+8. perform external HTTPS smoke tests and browser authentication checks.
+
+The repository includes `scripts/install-production-services.sh` and `scripts/production-preflight.sh` for the current VPS topology.
+
+## Security principles
+
+- HttpOnly + Secure production session cookies;
+- server-side RBAC and organization-scoped authorization;
+- tenant IDs are derived from authenticated server context, never trusted from the browser;
+- integration credentials are encrypted at rest and are never returned to the frontend;
+- no fake `CONNECTED`, `PUBLISHED`, `PAID`, `SENT` or external-success state;
+- sensitive mutations generate audit events;
+- dependency, secret and SAST checks are release gates;
+- production data must never be used as an integration-test fixture database.
+
+## Product roadmap
+
+P0–P12 established the production backend foundation: auth, organizations, RBAC, company/onboarding, profile/team, reviews, analytics, tasks, integrations, durable jobs, operations, billing/entitlements and release hardening.
+
+The V2 roadmap continues with P13–P26:
+
+- release/security gate;
+- Vite + TypeScript frontend modernization;
+- provider adapter SDK and Google Business Profile reference adapter;
+- provider-independent review ingestion;
+- AI Review Intelligence and Reply Copilot;
+- Reputation Cases;
+- Review Acquisition;
+- Competitive Intelligence;
+- AI Visibility;
+- Listings/Location Health;
+- Ask Shield;
+- Enterprise/Agency capabilities.
+
+## Production truth rule
+
+Business Shield must never claim that an external operation succeeded until the authoritative external system confirms it. Unknown or degraded states are first-class product states and must be surfaced explicitly.
