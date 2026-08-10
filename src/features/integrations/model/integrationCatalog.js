@@ -60,18 +60,6 @@ export const INTEGRATION_ITEMS = Object.freeze([
     priority: 5,
   },
   {
-    id: 'google',
-    name: 'Google Business',
-    shortName: 'Google',
-    category: 'Отзывы',
-    description: 'Google Maps и бизнес-профиль',
-    placeholder: 'https://maps.google.com/...',
-    recommended: false,
-    tone: 'blue',
-    sourceType: 'reviews',
-    priority: 20,
-  },
-  {
     id: 'telegram',
     name: 'Telegram Bot',
     shortName: 'Telegram',

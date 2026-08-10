@@ -178,13 +178,6 @@ export async function disconnectProviderAccount(
       throw error;
     }
 
-    const availability = adapter.availability();
-    if (!availability.configured || !availability.connectable) {
-      const error = unavailableError(account.provider, availability.reasonCode, availability.reasonMessage);
-      await recordFailure(app, organizationId, account.id, error);
-      throw error;
-    }
-
     if (!adapter.disconnect) {
       const error = new AppError({
         code: 'PROVIDER_DISCONNECT_UNSUPPORTED',
@@ -212,18 +205,26 @@ export async function disconnectProviderAccount(
     }
   }
 
-  const updated = await app.prisma.integrationAccount.update({
-    where: { id: account.id },
-    data: { status: 'DISCONNECTED', lastErrorCode: null, lastErrorMessage: null },
-    include: { credentials: { select: { key: true } } },
-  });
-  await app.prisma.integrationEvent.create({
-    data: {
-      organizationId,
-      accountId: account.id,
-      type: requiresProviderConfirmation ? 'connection.disconnected.verified' : 'connection.disconnected',
-    },
-  });
+  const [, updated] = await app.prisma.$transaction([
+    app.prisma.integrationCredential.deleteMany({ where: { accountId: account.id } }),
+    app.prisma.integrationAccount.update({
+      where: { id: account.id },
+      data: {
+        status: 'DISCONNECTED',
+        externalAccountId: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      },
+      include: { credentials: { select: { key: true } } },
+    }),
+    app.prisma.integrationEvent.create({
+      data: {
+        organizationId,
+        accountId: account.id,
+        type: requiresProviderConfirmation ? 'connection.disconnected.verified' : 'connection.disconnected',
+      },
+    }),
+  ]);
   return updated;
 }
 
