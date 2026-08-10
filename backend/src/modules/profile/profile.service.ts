@@ -3,10 +3,16 @@ import { AppError } from '../../core/errors/app-error.js';
 import { getCompanyProfile } from '../company/company.service.js';
 import { listTeamMembers } from '../team/team.service.js';
 
+type NotificationPreferencesInput = {
+  email?: boolean | undefined;
+  telegram?: boolean | undefined;
+  push?: boolean | undefined;
+};
+
 type NotificationPreferences = {
-  email?: boolean;
-  telegram?: boolean;
-  push?: boolean;
+  email: boolean;
+  telegram: boolean;
+  push: boolean;
 };
 
 function sessionDevice(userAgent: string | null) {
@@ -46,7 +52,7 @@ async function currentUser(app: FastifyInstance, userId: string) {
   return user;
 }
 
-function normalizedNotificationPreferences(value: unknown): Required<NotificationPreferences> {
+function normalizedNotificationPreferences(value: unknown): NotificationPreferences {
   const defaults = { email: true, telegram: false, push: false };
   if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
   const raw = value as Record<string, unknown>;
@@ -117,7 +123,7 @@ export async function updatePersonalProfile(
     position?: string;
     telegram?: string;
     avatar?: string;
-    notifications?: NotificationPreferences;
+    notifications?: NotificationPreferencesInput;
   },
 ) {
   if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
