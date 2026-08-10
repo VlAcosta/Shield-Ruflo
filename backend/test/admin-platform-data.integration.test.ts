@@ -124,7 +124,7 @@ describe('platform admin PostgreSQL data', () => {
     });
     expect(subscriptions.statusCode).toBe(200);
     expect(subscriptions.json().subscriptions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ organizationId }),
+      expect.objectContaining({ clientId: organizationId }),
     ]));
 
     const analytics = await app.inject({
