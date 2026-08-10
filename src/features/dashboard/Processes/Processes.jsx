@@ -11,7 +11,7 @@ function PlusIcon(){return <svg viewBox="0 0 16 16" fill="none" aria-hidden="tru
 function Processes(){
   const navigate=useNavigate();
   const { section,status,refresh }=useDashboardData('processes');
-  const processes=Array.isArray(section)?section:[];
+  const processes=useMemo(()=>Array.isArray(section)?section:[],[section]);
   const completed=useMemo(()=>processes.filter((item)=>Number(item.progress)>=100).length,[processes]);
   const averageProgress=useMemo(()=>processes.length?Math.round(processes.reduce((sum,item)=>sum+Number(item.progress||0),0)/processes.length):0,[processes]);
   return <DashboardCard title="Процессы" eyebrow="OPERATIONS" action={<button type="button" className="dashboard-processes__create" onClick={()=>navigate('/tasks')}><PlusIcon/> Создать</button>} className="dashboard-processes" motion="left">
