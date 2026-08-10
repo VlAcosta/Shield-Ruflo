@@ -65,7 +65,6 @@ beforeAll(async () => {
       businessId: business.id,
       sourceId: source.id,
       externalId: randomUUID(),
-      authorName: 'Integration reviewer',
       rating: 5,
       text: 'Great service',
       receivedAt: new Date(),
