@@ -25,14 +25,29 @@ export async function getAdminSubscriptions({ signal } = {}) {
 }
 
 export async function createAdminPlan(payload) {
-  const result = await request('/plans', { method: 'POST', body: payload });
+  const body = {
+    code: String(payload?.code || '').trim(),
+    name: String(payload?.name || '').trim(),
+    price: Number(payload?.price || 0),
+    currency: String(payload?.currency || 'RUB').trim().toUpperCase(),
+  };
+  const result = await request('/plans', { method: 'POST', body });
   const snapshot = await getAdminSubscriptions();
   emit(snapshot);
   return result?.plan || result;
 }
 
 export async function updateAdminPlan(planId, patch) {
-  const result = await request(`/plans/${encodeURIComponent(planId)}`, { method: 'PATCH', body: patch });
+  const body = {};
+  if (patch?.name !== undefined) body.name = String(patch.name).trim();
+  if (patch?.price !== undefined) body.price = Number(patch.price || 0);
+  if (patch?.active !== undefined) body.active = Boolean(patch.active);
+
+  if (!Object.keys(body).length) {
+    throw new Error('Нет поддерживаемых изменений тарифа');
+  }
+
+  const result = await request(`/plans/${encodeURIComponent(planId)}`, { method: 'PATCH', body });
   const snapshot = await getAdminSubscriptions();
   emit(snapshot);
   return result?.plan || result;
