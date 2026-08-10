@@ -4,6 +4,7 @@ import { authService } from '../../../services/auth/authService';
 import PortalSidebar from './PortalSidebar';
 
 const mockNavigate = jest.fn();
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
 
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
@@ -26,6 +27,14 @@ jest.mock('../navigation', () => ({
   }],
 }));
 
+function renderSidebar() {
+  return render(
+    <MemoryRouter future={routerFuture}>
+      <PortalSidebar />
+    </MemoryRouter>,
+  );
+}
+
 describe('PortalSidebar logout', () => {
   beforeEach(() => {
     authService.logout.mockReset();
@@ -34,7 +43,7 @@ describe('PortalSidebar logout', () => {
 
   test('redirects only after the backend has revoked the session', async () => {
     authService.logout.mockResolvedValue(null);
-    render(<MemoryRouter><PortalSidebar /></MemoryRouter>);
+    renderSidebar();
 
     fireEvent.click(screen.getByRole('button', { name: 'Выйти из аккаунта' }));
 
@@ -44,7 +53,7 @@ describe('PortalSidebar logout', () => {
 
   test('shows a retryable error when server logout fails', async () => {
     authService.logout.mockRejectedValue(new Error('Сессия не завершена'));
-    render(<MemoryRouter><PortalSidebar /></MemoryRouter>);
+    renderSidebar();
 
     fireEvent.click(screen.getByRole('button', { name: 'Выйти из аккаунта' }));
 
@@ -54,7 +63,7 @@ describe('PortalSidebar logout', () => {
   });
 
   test('keeps a permission-locked destination focusable and explains why it cannot navigate', () => {
-    render(<MemoryRouter><PortalSidebar /></MemoryRouter>);
+    renderSidebar();
 
     const locked = screen.getByRole('button', { name: /Отзывы/ });
     expect(locked).not.toBeDisabled();
