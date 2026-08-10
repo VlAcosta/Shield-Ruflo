@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createAdminPlan, getAdminSubscriptions, toggleAdminAutoRenew, updateAdminPlan, updateAdminSubscription } from '../../../../services/admin/adminSubscriptionsService';
+import {
+  createAdminPlan,
+  getAdminSubscriptions,
+  updateAdminPlan,
+  updateClientSubscription,
+} from '../../../../services/admin/adminSubscriptionsService';
 
 export default function useAdminSubscriptions() {
   const [data, setData] = useState(null);
@@ -20,7 +25,6 @@ export default function useAdminSubscriptions() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
-
 
   const perform = useCallback(async (action) => {
     setSaving(true);
@@ -45,7 +49,6 @@ export default function useAdminSubscriptions() {
     refresh,
     updatePlan: (id, patch) => perform(() => updateAdminPlan(id, patch)),
     createPlan: (payload) => perform(() => createAdminPlan(payload)),
-    updateSubscription: (id, patch) => perform(() => updateAdminSubscription(id, patch)),
-    toggleAutoRenew: (id, value) => perform(() => toggleAdminAutoRenew(id, value)),
+    toggleAutoRenew: (id, value) => perform(() => updateClientSubscription(id, { autoRenew: value })),
   };
 }
