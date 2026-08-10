@@ -105,7 +105,7 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
   const meta = INTEGRATION_STATUS_META[integration.status] || INTEGRATION_STATUS_META.disconnected;
   const remoteReady = integration.providerMode === 'backend';
   const handleDiagnose = async () => {
-    try { setDiagnostics(await onDiagnose(integration.id)); } catch { /* error is surfaced globally */ }
+    try { setDiagnostics(await onDiagnose(integration.id)); } catch { return; }
   };
   return <aside className={`integration-inspector is-${integration.tone || 'violet'}`}>
     <div className="integration-inspector__hero">
@@ -190,7 +190,7 @@ function IntegrationHubWorkspace() {
       await hub.configure(connectTarget.id, payload);
       setConnectId(null);
       setSelectedId(connectTarget.id);
-    } catch { /* global message */ }
+    } catch { return; }
   };
 
   return <div className="integration-hub-page">
@@ -203,23 +203,23 @@ function IntegrationHubWorkspace() {
       <article><span>Активно</span><strong>{hub.metrics.enabled}</strong><small>источников выбрано</small></article>
       <article><span>Подключено</span><strong>{hub.metrics.connected}</strong><small>подтверждено backend</small></article>
       <article><span>Настроено</span><strong>{hub.metrics.configured}</strong><small>ожидает provider API</small></article>
-      <article className={hub.metrics.issues ? 'is-warning' : ''}><span>Требуют внимания</span><strong>{hub.metrics.issues}</strong><small>{hub.metrics.issues ? 'проверьте диагностику' : 'ошибок нет'}</small></article>
+      <article className={hub.metrics.issues ? 'is-alert' : ''}><span>Требуют внимания</span><strong>{hub.metrics.issues}</strong><small>{hub.metrics.issues ? 'нужна проверка' : 'ошибок нет'}</small></article>
     </section>
 
-    {!backendReady ? <section className="integration-provider-banner"><span>PROVIDER ABSTRACTION</span><div><strong>Frontend готов. Реальный транспорт ещё не выбран.</strong><p>Мы не показываем фиктивную синхронизацию. После подключения <code>REACT_APP_INTEGRATIONS_ENDPOINT</code> этот же интерфейс начнёт работать через backend adapters.</p></div><i>API</i></section> : null}
-    {hub.error ? <div className="integration-hub-error"><span>!</span><div><strong>Не удалось выполнить действие</strong><p>{hub.error}</p></div><button type="button" onClick={hub.clearError}>×</button></div> : null}
+    {hub.message ? <div className={`integration-hub-message is-${hub.message.type || 'info'}`}><span>{hub.message.text}</span><button type="button" onClick={hub.clearMessage}>×</button></div> : null}
 
-    <section className="integration-hub-workspace">
-      <div className="integration-provider-list">
-        <header><div><span>PROVIDERS</span><h2>Источники данных</h2></div><label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти источник" /></label></header>
-        <div className="integration-provider-filters">{[['all','Все'],['active','Активные'],['issues','Проблемы'],['recommended','Основные']].map(([id,label]) => <button key={id} type="button" className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
-        <div className="integration-provider-grid">{visible.map((integration) => <ProviderCard key={integration.id} integration={integration} selected={selectedId === integration.id} busy={hub.busy[integration.id]} canManage={canManage} onSelect={() => setSelectedId(integration.id)} onConfigure={() => setConnectId(integration.id)} onSync={() => hub.sync(integration.id).catch(() => {})} />)}</div>
-      </div>
-      <ProviderInspector integration={selected} busy={hub.busy[selected?.id]} canManage={canManage} onConfigure={() => setConnectId(selected?.id)} onSync={(id) => hub.sync(id).catch(() => {})} onReconnect={(id) => hub.reconnect(id).catch(() => {})} onDisconnect={(id) => hub.disconnect(id).catch(() => {})} onDiagnose={hub.diagnose} />
-    </section>
+    <div className="integration-command-bar">
+      <div className="integration-command-bar__filters">{[['all','Все'],['active','Активные'],['issues','С ошибками'],['recommended','Рекомендуемые']].map(([value,label]) => <button type="button" className={filter === value ? 'is-active' : ''} key={value} onClick={() => setFilter(value)}>{label}</button>)}</div>
+      <label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти источник…" /></label>
+    </div>
+
+    <div className="integration-hub-layout">
+      <section className="integration-provider-grid">{visible.map((integration) => <ProviderCard key={integration.id} integration={integration} selected={selected?.id === integration.id} busy={hub.busy[integration.id]} canManage={canManage} onSelect={() => setSelectedId(integration.id)} onConfigure={() => setConnectId(integration.id)} onSync={(event) => { event.stopPropagation(); hub.sync(integration.id); }} />)}{!visible.length ? <div className="integration-provider-grid__empty"><span>0</span><strong>Источники не найдены</strong><p>Измените фильтр или поисковый запрос.</p></div> : null}</section>
+      <ProviderInspector integration={selected} busy={selected ? hub.busy[selected.id] : null} canManage={canManage} onConfigure={() => selected && setConnectId(selected.id)} onSync={hub.sync} onReconnect={hub.reconnect} onDisconnect={hub.disconnect} onDiagnose={hub.diagnose} />
+    </div>
 
     <ActivityFeed items={hub.activity} />
-    <ConnectionModal integration={connectTarget} open={Boolean(connectTarget)} busy={hub.busy[connectTarget?.id]} onClose={() => setConnectId(null)} onSave={saveConnection} />
+    <ConnectionModal integration={connectTarget} open={Boolean(connectTarget)} busy={connectTarget ? hub.busy[connectTarget.id] : null} onClose={() => setConnectId(null)} onSave={saveConnection} />
   </div>;
 }
 
