@@ -149,14 +149,14 @@ export default function GoogleBusinessProfileSetup() {
     if (selectedAccount) void loadLocations(selectedAccount);
   }, [loadLocations, selectedAccount]);
 
-  const startOAuth = async () => {
+  const startOAuth = useCallback(async () => {
     try {
       const response = await run('oauth', () => googleBusinessOAuthStart());
       const authorizationUrl = safeGoogleAuthorizationUrl(response?.authorizationUrl);
       if (!authorizationUrl) throw new Error('Сервер не вернул безопасный Google OAuth URL');
       window.location.assign(authorizationUrl);
     } catch { /* visible error is set by run */ }
-  };
+  }, [run]);
 
   const toggleLocation = (name) => {
     setSelectedLocations((current) => current.includes(name)
@@ -208,7 +208,7 @@ export default function GoogleBusinessProfileSetup() {
     if (status === 'CONNECTED') return { label: 'Изменить профиль и локации', disabled: false, action: loadAccounts };
     if (status === 'DEGRADED') return { label: 'Завершить настройку', disabled: false, action: loadAccounts };
     return { label: 'Подключить через Google', disabled: false, action: startOAuth };
-  }, [canManage, isConfigured, loadAccounts, status]);
+  }, [canManage, isConfigured, loadAccounts, startOAuth, status]);
 
   return (
     <section className="google-business-setup" aria-labelledby="google-business-title">
