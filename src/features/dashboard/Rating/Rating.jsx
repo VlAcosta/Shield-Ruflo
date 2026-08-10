@@ -20,8 +20,8 @@ function Rating(){
   const [activeIndex,setActiveIndex]=useState(null);
   const { section,status,refresh }=useDashboardData('rating');
   const data=section?.[period];
-  const values=Array.isArray(data?.values)?data.values.map(Number).filter(Number.isFinite):[];
-  const labels=Array.isArray(data?.labels)?data.labels:[];
+  const values=useMemo(()=>Array.isArray(data?.values)?data.values.map(Number).filter(Number.isFinite):[],[data?.values]);
+  const labels=useMemo(()=>Array.isArray(data?.labels)?data.labels:[],[data?.labels]);
   const hasData=Number(data?.current)>0&&values.length>0;
   const points=useMemo(()=>buildPoints(values),[values]);
   const path=useMemo(()=>buildPath(points),[points]);
