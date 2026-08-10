@@ -9,8 +9,39 @@ import {
   readIntegrationActivity,
   readIntegrationConnections,
   reconnectIntegration,
+  saveConnectedIntegrations,
   syncIntegration,
 } from '../../../services/integrations/integrationService';
+import {
+  googleBusinessAccounts,
+  googleBusinessLocations,
+  googleBusinessOAuthStart,
+  googleBusinessSelect,
+} from '../../../services/integrations/integrationProviderRegistry';
+
+function frontendStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  return status || 'disconnected';
+}
+
+function applyGoogleRemote(current, payload) {
+  const remote = payload?.integration || payload;
+  if (!remote || typeof remote !== 'object') return current;
+  const now = new Date().toISOString();
+  return current.map((item) => item.id === 'google' ? {
+    ...item,
+    enabled: remote.status !== 'DISCONNECTED',
+    status: frontendStatus(remote.status),
+    providerMode: 'backend',
+    externalAccountId: remote.externalAccountId || null,
+    configuration: remote.configuration || {},
+    lastSyncAt: remote.lastSyncedAt || item.lastSyncAt || null,
+    lastSuccessAt: remote.lastValidatedAt || now,
+    lastError: remote.lastErrorMessage || '',
+    lastErrorAt: remote.lastErrorMessage ? now : null,
+    updatedAt: now,
+  } : item);
+}
 
 export default function useIntegrationHub() {
   const [connections, setConnections] = useState(() => readIntegrationConnections());
@@ -55,7 +86,20 @@ export default function useIntegrationHub() {
   }, [refresh]);
 
   const configure = useCallback((id, payload) => run(id, 'configure', () => configureIntegration(id, payload)), [run]);
-  const reconnect = useCallback((id) => run(id, 'reconnect', () => reconnectIntegration(id)), [run]);
+  const startGoogleOAuth = useCallback(() => run('google', 'oauth', () => googleBusinessOAuthStart()), [run]);
+  const loadGoogleAccounts = useCallback(() => run('google', 'accounts', () => googleBusinessAccounts()), [run]);
+  const loadGoogleLocations = useCallback((accountName) => run('google', 'locations', () => googleBusinessLocations(accountName)), [run]);
+  const completeGoogleSelection = useCallback((selection) => run('google', 'selection', async () => {
+    const response = await googleBusinessSelect(selection);
+    const next = applyGoogleRemote(readIntegrationConnections(), response);
+    saveConnectedIntegrations(next);
+    return response;
+  }), [run]);
+  const reconnect = useCallback((id) => (
+    id === 'google'
+      ? startGoogleOAuth()
+      : run(id, 'reconnect', () => reconnectIntegration(id))
+  ), [run, startGoogleOAuth]);
   const disconnect = useCallback((id) => run(id, 'disconnect', () => disconnectIntegration(id)), [run]);
   const sync = useCallback((id) => run(id, 'sync', () => syncIntegration(id)), [run]);
   const diagnose = useCallback((id) => run(id, 'diagnostics', () => diagnoseIntegration(id)), [run]);
@@ -75,5 +119,9 @@ export default function useIntegrationHub() {
     disconnect,
     sync,
     diagnose,
+    startGoogleOAuth,
+    loadGoogleAccounts,
+    loadGoogleLocations,
+    completeGoogleSelection,
   };
 }
