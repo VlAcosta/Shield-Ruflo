@@ -11,6 +11,32 @@ const ROLE_COPY = {
   MEMBER: 'Работа с отзывами и задачами без административного доступа.',
 };
 
+const FOCUSABLE_SELECTOR = 'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+export function trapInviteModalFocus(container, event) {
+  if (event.key !== 'Tab') return false;
+
+  const focusable = Array.from(container?.querySelectorAll(FOCUSABLE_SELECTOR) || []);
+  if (!focusable.length) {
+    event.preventDefault();
+    return true;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
+}
+
 function CopyIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="10" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.7"/><path d="M15 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>;
 }
@@ -40,6 +66,14 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     [form.role, roles],
   );
 
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      if (!busy) onClose();
+      return;
+    }
+    trapInviteModalFocus(cardRef.current, event);
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     const previousOverflow = document.body.style.overflow;
@@ -47,26 +81,15 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     document.body.style.overflow = 'hidden';
     document.body.classList.add('portal-modal-open');
     const timer = window.setTimeout(() => cardRef.current?.querySelector('input')?.focus(), 40);
-    const handleKey = (event) => {
-      if (event.key === 'Escape' && !busy) onClose();
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(cardRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])') || []);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener('keydown', handleKey);
+
     return () => {
       document.body.style.overflow = previousOverflow;
       document.body.classList.remove('portal-modal-open');
       window.clearTimeout(timer);
-      window.removeEventListener('keydown', handleKey);
       const previousFocus = previousFocusRef.current;
       if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
     };
-  }, [busy, onClose, open]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -141,8 +164,8 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     : 'в течение 7 дней';
 
   return createPortal(
-    <div className="invite-user-modal" role="dialog" aria-modal="true" aria-labelledby="invite-user-title">
-      <button type="button" className="invite-user-modal__backdrop" onClick={busy ? undefined : onClose} aria-label="Закрыть" />
+    <div className="invite-user-modal" role="dialog" aria-modal="true" aria-labelledby="invite-user-title" onKeyDown={handleDialogKeyDown}>
+      <button type="button" className="invite-user-modal__backdrop" onClick={busy ? undefined : onClose} aria-label="Закрыть" tabIndex={-1} />
       <div className="invite-user-modal__stage">
         {!result ? (
           <form ref={cardRef} className="invite-user-modal__card" onSubmit={submit}>

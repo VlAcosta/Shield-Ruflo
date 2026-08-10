@@ -3,22 +3,26 @@ import { MemoryRouter } from 'react-router-dom';
 import { authService } from '../../../services/auth/authService';
 import PortalSidebar from './PortalSidebar';
 
-const mockNavigate = jest.fn();
+const mockNavigate = vi.fn();
 const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
 
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual('react-router-dom')),
   useNavigate: () => mockNavigate,
 }));
-jest.mock('../../../services/auth/authService', () => ({ authService: { logout: jest.fn() } }));
-jest.mock('../../../features/access/hooks/useAccessControl', () => () => ({ can: () => false, role: { label: 'Аналитик' } }));
-jest.mock('../../../services/access/rbacService', () => ({ findFirstAllowedRoute: () => '/dashboard' }));
-jest.mock('../../../features/appearance/hooks/useAppearance', () => () => ({
-  isDark: false,
-  mode: 'light',
-  toggleResolvedTheme: jest.fn(),
+vi.mock('../../../services/auth/authService', () => ({ authService: { logout: vi.fn() } }));
+vi.mock('../../../features/access/hooks/useAccessControl', () => ({
+  default: () => ({ can: () => false, role: { label: 'Аналитик' } }),
 }));
-jest.mock('../navigation', () => ({
+vi.mock('../../../services/access/rbacService', () => ({ findFirstAllowedRoute: () => '/dashboard' }));
+vi.mock('../../../features/appearance/hooks/useAppearance', () => ({
+  default: () => ({
+    isDark: false,
+    mode: 'light',
+    toggleResolvedTheme: vi.fn(),
+  }),
+}));
+vi.mock('../navigation', () => ({
   navigationItems: [{
     to: '/reviews',
     label: 'Отзывы',

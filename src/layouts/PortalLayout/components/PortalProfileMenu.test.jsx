@@ -3,18 +3,20 @@ import { MemoryRouter } from 'react-router-dom';
 import PortalProfileMenu from './PortalProfileMenu';
 import useOrganizationContext from '../../../features/access/hooks/useOrganizationContext';
 
-const mockNavigate = jest.fn();
-const mockSelect = jest.fn();
+const mockNavigate = vi.fn();
+const mockSelect = vi.fn();
 const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
 
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual('react-router-dom')),
   useNavigate: () => mockNavigate,
 }));
-jest.mock('../hooks/usePortalProfile', () => () => ({
-  initials: 'AP', fullName: 'Anna Petrova', roleLabel: 'Владелец', capabilities: {},
+vi.mock('../hooks/usePortalProfile', () => ({
+  default: () => ({
+    initials: 'AP', fullName: 'Anna Petrova', roleLabel: 'Владелец', capabilities: {},
+  }),
 }));
-jest.mock('../../../features/access/hooks/useOrganizationContext');
+vi.mock('../../../features/access/hooks/useOrganizationContext');
 
 function renderMenu(props) {
   return render(
@@ -35,7 +37,7 @@ function context(overrides = {}) {
     error: '',
     switchingId: '',
     announcement: '',
-    load: jest.fn(),
+    load: vi.fn(),
     select: mockSelect,
     ...overrides,
   };
@@ -55,7 +57,7 @@ describe('PortalProfileMenu organization switcher', () => {
         organization: { id: 'org-b', name: 'Бета', onboardingStatus: 'COMPLETED' },
       },
     });
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     renderMenu({ open: true, onClose });
 
     const activeOrganization = screen.getByRole('button', { name: /Альфа/ });
@@ -74,7 +76,7 @@ describe('PortalProfileMenu organization switcher', () => {
 
   test('retains the menu and shows a retryable switch error', () => {
     useOrganizationContext.mockReturnValue(context({ error: 'Доступ отозван' }));
-    renderMenu({ open: true, onClose: jest.fn() });
+    renderMenu({ open: true, onClose: vi.fn() });
     expect(screen.getByRole('alert')).toHaveTextContent('Доступ отозван');
   });
 
@@ -82,7 +84,7 @@ describe('PortalProfileMenu organization switcher', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
     trigger.focus();
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     const triggerRef = { current: trigger };
     const { unmount } = renderMenu({ open: true, onClose, triggerRef });
     await waitFor(() => expect(screen.getByRole('button', { name: /Альфа/ })).toHaveFocus());
@@ -94,9 +96,9 @@ describe('PortalProfileMenu organization switcher', () => {
   });
 
   test('shows recovery when the user has no active organization membership', () => {
-    const load = jest.fn();
+    const load = vi.fn();
     useOrganizationContext.mockReturnValue(context({ items: [], activeOrganizationId: null, load }));
-    renderMenu({ open: true, onClose: jest.fn() });
+    renderMenu({ open: true, onClose: vi.fn() });
     expect(screen.getByText('Нет активных организаций')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
     expect(load).toHaveBeenCalled();

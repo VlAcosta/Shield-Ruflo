@@ -21,11 +21,11 @@ function jsonResponse(payload, status = 200) {
 describe('reviewsService', () => {
   afterEach(() => {
     global.fetch = originalFetch;
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test('loads reviews from the production Reviews API contract', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
+    global.fetch = vi.fn().mockResolvedValue(
       jsonResponse({
         items: [
           {
@@ -61,7 +61,7 @@ describe('reviewsService', () => {
   });
 
   test('surfaces backend failure instead of silently using fake reviews', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 503,
       url: 'http://localhost/api/v1/reviews',

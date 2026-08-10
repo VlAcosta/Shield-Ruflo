@@ -51,17 +51,21 @@ export default function MemberAccessOverlay({ reason = 'revoked', security }) {
       if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) previouslyFocused.focus();
     };
   }, []);
-  const logout = async () => {
+
+  const logout = () => {
     if (loggingOut) return;
     setLoggingOut(true);
     setLogoutError('');
-    try {
-      await authService.logout();
-      window.location.assign('/auth?mode=login');
-    } catch (error) {
-      setLogoutError(error?.message || 'Не удалось безопасно завершить сессию. Повторите попытку.');
-      setLoggingOut(false);
-    }
+
+    void authService.logout().then(
+      () => {
+        window.location.assign('/auth?mode=login');
+      },
+      (error) => {
+        setLogoutError(error?.message || 'Не удалось безопасно завершить сессию. Повторите попытку.');
+        setLoggingOut(false);
+      },
+    );
   };
 
   return (

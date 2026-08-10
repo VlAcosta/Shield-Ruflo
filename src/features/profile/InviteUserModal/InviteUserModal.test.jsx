@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import InviteUserModal from './InviteUserModal';
+import InviteUserModal, { trapInviteModalFocus } from './InviteUserModal';
 import { getAvailableRoles } from '../../../services/access/rbacService';
 
-jest.mock('../../../services/access/rbacService', () => ({
-  getAvailableRoles: jest.fn(),
+vi.mock('../../../services/access/rbacService', () => ({
+  getAvailableRoles: vi.fn(),
 }));
 
 const roles = [
@@ -17,8 +17,8 @@ describe('InviteUserModal canonical role contract', () => {
   beforeEach(() => getAvailableRoles.mockReturnValue(roles));
 
   test('defaults to canonical MEMBER and excludes owner and local-only roles', async () => {
-    const onInvite = jest.fn().mockResolvedValue({ ok: false, message: 'Остановлено тестом' });
-    render(<InviteUserModal open busy={false} onClose={jest.fn()} onInvite={onInvite} />);
+    const onInvite = vi.fn().mockResolvedValue({ ok: false, message: 'Остановлено тестом' });
+    render(<InviteUserModal open busy={false} onClose={vi.fn()} onInvite={onInvite} />);
 
     expect(screen.queryByRole('radio', { name: /Владелец/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Локальная роль/ })).not.toBeInTheDocument();
@@ -32,7 +32,7 @@ describe('InviteUserModal canonical role contract', () => {
   });
 
   test('announces validation, marks the invalid field, and moves focus to it', () => {
-    render(<InviteUserModal open busy={false} onClose={jest.fn()} onInvite={jest.fn()} />);
+    render(<InviteUserModal open busy={false} onClose={vi.fn()} onInvite={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Создать приглашение' }));
 
@@ -43,19 +43,41 @@ describe('InviteUserModal canonical role contract', () => {
     expect(name).toHaveFocus();
   });
 
-  test('traps keyboard focus and restores the trigger when closed', () => {
+  test('wraps Tab and Shift+Tab inside the modal focus boundary', () => {
+    const container = document.createElement('div');
+    const first = document.createElement('button');
+    const last = document.createElement('button');
+    first.textContent = 'first';
+    last.textContent = 'last';
+    container.append(first, last);
+    document.body.appendChild(container);
+
+    const preventDefault = vi.fn();
+    last.focus();
+    expect(trapInviteModalFocus(container, { key: 'Tab', shiftKey: false, preventDefault })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(first).toHaveFocus();
+
+    preventDefault.mockClear();
+    first.focus();
+    expect(trapInviteModalFocus(container, { key: 'Tab', shiftKey: true, preventDefault })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(last).toHaveFocus();
+
+    container.remove();
+  });
+
+  test('autofocuses the form and restores the trigger when closed', async () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
     trigger.focus();
-    const onClose = jest.fn();
-    const { rerender } = render(<InviteUserModal open busy={false} onClose={onClose} onInvite={jest.fn()} />);
-    const closeButtons = screen.getAllByRole('button', { name: 'Закрыть' });
-    const last = screen.getByRole('button', { name: 'Создать приглашение' });
-    last.focus();
-    fireEvent.keyDown(window, { key: 'Tab' });
-    expect(closeButtons[1]).toHaveFocus();
+    const onClose = vi.fn();
+    const { rerender } = render(<InviteUserModal open busy={false} onClose={onClose} onInvite={vi.fn()} />);
 
-    rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={jest.fn()} />);
+    const name = screen.getByPlaceholderText('Анна Петрова');
+    await waitFor(() => expect(name).toHaveFocus());
+
+    rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={vi.fn()} />);
     expect(trigger).toHaveFocus();
     trigger.remove();
   });

@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import CompanyProfile from './CompanyProfile';
 
-jest.mock('./BusinessLocationsManager', () => () => null);
+vi.mock('./BusinessLocationsManager', () => ({ default: () => null }));
 
 const value = {
   title: 'ООО Север', inn: '7701234567', kpp: '770101001', ogrn: '1027700123456',
@@ -11,7 +11,7 @@ const value = {
 
 describe('CompanyProfile validation', () => {
   test('disables unchanged save and validates identifiers and website', () => {
-    const onSave = jest.fn();
+    const onSave = vi.fn();
     render(<CompanyProfile value={value} onSave={onSave} />);
     expect(screen.getByRole('button', { name: 'Нет изменений' })).toBeDisabled();
     fireEvent.change(screen.getByDisplayValue('7701234567'), { target: { value: '123' } });
@@ -23,7 +23,7 @@ describe('CompanyProfile validation', () => {
   });
 
   test('submits a valid changed profile', () => {
-    const onSave = jest.fn();
+    const onSave = vi.fn();
     render(<CompanyProfile value={value} onSave={onSave} />);
     fireEvent.change(screen.getByDisplayValue('Услуги'), { target: { value: 'Ритейл' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
