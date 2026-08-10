@@ -23,6 +23,9 @@ module.exports = {
   rules: {
     'react/react-in-jsx-scope': 'off',
     'react/prop-types': 'off',
+    // Business Shield deliberately focuses the primary control when a modal/search
+    // surface opens. Focus remains trapped/closable via keyboard in those surfaces.
+    'jsx-a11y/no-autofocus': 'off',
     'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
   },
   overrides: [
