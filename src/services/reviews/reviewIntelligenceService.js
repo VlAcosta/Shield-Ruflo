@@ -7,7 +7,7 @@ import {
   sentimentByRating,
   slaHoursByRating,
 } from '../../features/reviews/model/reviewData';
-import { apiRequest, createIdempotencyKey, joinEndpoint } from '../core/apiClient';
+import { apiRequest, joinEndpoint } from '../core/apiClient';
 import { getCompanyScope, readScopedJson, writeScopedJson } from '../core/dataScope';
 import { createTask, getTasksSnapshot } from '../tasks/taskService';
 import { recordCompanyActivity } from '../activity/companyActivityService';
@@ -324,34 +324,9 @@ export async function openLegalReviewCase(reviewId, payload = {}) {
 export async function publishThroughProvider(review, reply) {
   const text = String(reply || '').trim();
   if (!text) throw new Error('Ответ пуст');
-
-  if (PROVIDER_ENDPOINT) {
-    await apiRequest(joinEndpoint(PROVIDER_ENDPOINT, '/reply'), {
-      method: 'POST',
-      body: { reviewId: review.id, externalId: review.externalId || review.id, platform: review.platform, text },
-      idempotencyKey: createIdempotencyKey('review-reply'),
-      timeout: 12000,
-    });
-  }
-
-  const patch = {
-    reply: text,
-    status: 'done',
-    workflowStatus: REVIEW_WORKFLOW.PUBLISHED,
-    repliedAt: new Date().toISOString(),
-    approval: review.approval?.status === 'approved' ? review.approval : null,
-    publishTransport: PROVIDER_ENDPOINT ? 'provider' : 'local-demo',
-  };
-  await updateReview(review.id, patch);
-  recordCompanyActivity({
-    type: 'reviews.reply.published',
-    title: 'Опубликован ответ на отзыв',
-    detail: `${review.platform} · ${review.rating}★`,
-    route: `/reviews?review=${encodeURIComponent(review.id)}`,
-    targetId: review.id,
-    tone: 'success',
-  });
-  return patch;
+  throw new Error(PROVIDER_ENDPOINT
+    ? 'Публикация через площадку ещё не подключена к защищённому серверному workflow'
+    : 'Публикация через площадку не настроена');
 }
 
 export async function delegateReviewToShield(reviewId, note = '') {

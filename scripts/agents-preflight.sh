@@ -31,7 +31,7 @@ from pathlib import Path
 import tomllib
 
 files = sorted(Path(".codex/agents").glob("*.toml"))
-assert len(files) == 7, f"Expected 7 agents, found {len(files)}"
+assert len(files) >= 10, f"Expected at least 10 agents, found {len(files)}"
 
 for path in files:
     with path.open("rb") as f:

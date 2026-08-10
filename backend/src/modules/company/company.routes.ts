@@ -4,13 +4,19 @@ import { companyLookupSchema, updateCompanyProfileSchema } from './company.schem
 import { getCompanyProfile, lookupCompanyByInn, updateCompanyProfile } from './company.service.js';
 
 export const companyRoutes: FastifyPluginAsync = async (app) => {
-  app.post('/company/lookup', { preHandler: app.authenticate }, async (request) => {
+  app.post('/company/lookup', { preHandler: [app.authenticate, app.authorize('business.manage')] }, async (request) => {
+    if (!request.auth?.organizationId) {
+      throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
+    }
     const { inn } = companyLookupSchema.parse(request.body);
-    return lookupCompanyByInn(inn);
+    return lookupCompanyByInn(inn, {
+      organizationId: request.auth.organizationId,
+      userId: request.auth.userId,
+    });
   });
 
   app.get('/company/profile', {
-    preHandler: [app.authenticate, app.authorize('company.view')],
+    preHandler: [app.authenticate, app.authorize('business.view')],
   }, async (request) => {
     if (!request.auth?.organizationId) {
       throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
@@ -19,7 +25,7 @@ export const companyRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/company/profile', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('business.manage')],
   }, async (request) => {
     const body = updateCompanyProfileSchema.parse(request.body);
     return updateCompanyProfile(app, request, body);

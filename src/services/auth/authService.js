@@ -2,18 +2,16 @@ import { getRuntimeEnv } from '../core/runtimeEnv';
 import { apiRequest, joinEndpoint } from '../core/apiClient';
 import { COMPANY_MEMBERSHIP_KEY, COMPANY_MEMBERSHIP_CHANGED_EVENT } from '../profile/companyInvitationService';
 
-const API_BASE = String(getRuntimeEnv('API_BASE')).replace(/\/$/, '');
-const USERS_KEY = 'business-shield:auth-users:v1';
-const DEMO_CODE = '1111';
+const API_BASE = String(getRuntimeEnv('API_BASE', '/api/v1')).replace(/\/$/, '');
+const SESSION_CHANGED_EVENT = 'business-shield:auth-session-changed';
 
-const readUsers = () => {
-  try { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); } catch { return []; }
+const clearLocalSession = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('currentUser');
+  localStorage.removeItem(COMPANY_MEMBERSHIP_KEY);
+  window.dispatchEvent(new CustomEvent(COMPANY_MEMBERSHIP_CHANGED_EVENT, { detail: null }));
+  window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT, { detail: null }));
 };
-
-const writeUsers = (users) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
-const isNetworkError = (error) => error instanceof TypeError || error?.name === 'AbortError' || /network|fetch|failed|abort/i.test(error?.message || '');
-const createToken = () => `demo-token-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const createSession = () => `demo-session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const requestJson = async (path, options = {}, timeoutMs = 6000) => {
   if (!API_BASE) throw new TypeError('Auth API is not configured');
@@ -21,55 +19,26 @@ const requestJson = async (path, options = {}, timeoutMs = 6000) => {
 };
 
 export const authService = {
-  demoCode: DEMO_CODE,
-
   async requestCode({ phone, mode, planId, invitationToken }) {
-    try {
-      return await requestJson('/auth/request-code', {
+    return requestJson('/auth/request-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, mode, tariff: planId || null, invitation_token: invitationToken || null }),
-      });
-    } catch (error) {
-      if (!isNetworkError(error)) throw error;
-      return { session_id: createSession(), demo: true, debug_code: DEMO_CODE };
-    }
+    });
   },
 
   async verifyCode({ phone, code, sessionId, mode, invitationToken }) {
-    try {
-      return await requestJson('/auth/verify-code', {
+    return requestJson('/auth/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, code, session_id: sessionId, mode, invitation_token: invitationToken || null }),
-      });
-    } catch (error) {
-      if (!isNetworkError(error)) throw error;
-      if (code !== DEMO_CODE) throw new Error('Неверный код. В демо-режиме используйте 1111.');
-
-      const existing = readUsers().find((user) => user.phone === phone)
-        || (() => {
-          try {
-            const current = JSON.parse(localStorage.getItem('currentUser') || 'null');
-            return current?.phone === phone ? current : null;
-          } catch { return null; }
-        })();
-
-      if (mode === 'login' && !existing) return { demo: true, needs_registration: true };
-
-      const token = createToken();
-      return { demo: true, token, user: existing || null, needs_registration: false };
-    }
+    });
   },
 
-  async register({ phone, firstName, lastName, email, plan, token, invitationToken }) {
-    try {
-      return await requestJson('/auth/complete-profile', {
+  async register({ phone, firstName, lastName, email, plan, invitationToken }) {
+    return requestJson('/auth/complete-profile', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone,
           first_name: firstName,
@@ -78,29 +47,11 @@ export const authService = {
           tariff: plan?.id || null,
           invitation_token: invitationToken || null,
         }),
-      });
-    } catch (error) {
-      if (!isNetworkError(error)) throw error;
-
-      const users = readUsers();
-      const user = {
-        id: `local-${Date.now()}`,
-        phone,
-        firstName,
-        lastName,
-        email,
-        plan: plan || null,
-        invitationToken: invitationToken || null,
-        createdAt: new Date().toISOString(),
-      };
-      const nextUsers = [...users.filter((item) => item.phone !== phone), user];
-      writeUsers(nextUsers);
-      return { demo: true, token: token || createToken(), user };
-    }
+    });
   },
 
-  persistSession({ token, user }) {
-    if (token) localStorage.setItem('token', token);
+  persistSession({ user }) {
+    localStorage.removeItem('token');
     if (user) {
       const sessionEstablishedAt = new Date().toISOString();
       const normalizedUser = {
@@ -114,18 +65,57 @@ export const authService = {
         } : {}),
       };
       localStorage.setItem('currentUser', JSON.stringify(normalizedUser));
-      if (normalizedUser.phone) {
-        const users = readUsers();
-        writeUsers([...users.filter((item) => item.phone !== normalizedUser.phone), normalizedUser]);
-      }
       if (normalizedUser.membership) {
         localStorage.setItem(COMPANY_MEMBERSHIP_KEY, JSON.stringify(normalizedUser.membership));
-        localStorage.setItem('onboarding_completed', '1');
+        const organization = normalizedUser.membership.organization || {};
+        if (organization.onboardingStatus === 'COMPLETED') localStorage.setItem('onboarding_completed', '1');
+        else localStorage.removeItem('onboarding_completed');
+        if (organization.id || organization.name) {
+          const compatibleOrganization = {
+            id: organization.id || normalizedUser.membership.organizationId,
+            title: organization.name || organization.title || 'Организация',
+            name: organization.name || organization.title || 'Организация',
+            onboardingStatus: organization.onboardingStatus || 'NOT_STARTED',
+          };
+          localStorage.setItem('organization', JSON.stringify(compatibleOrganization));
+          window.dispatchEvent(new CustomEvent('business-shield:organization-changed', { detail: { organization: compatibleOrganization } }));
+        }
         window.dispatchEvent(new CustomEvent(COMPANY_MEMBERSHIP_CHANGED_EVENT, { detail: normalizedUser.membership }));
       } else {
         localStorage.removeItem(COMPANY_MEMBERSHIP_KEY);
         window.dispatchEvent(new CustomEvent(COMPANY_MEMBERSHIP_CHANGED_EVENT, { detail: null }));
       }
+      window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT, { detail: normalizedUser }));
     }
   },
+
+  async restoreSession({ signal } = {}) {
+    const payload = await requestJson('/me', { signal });
+    const user = payload?.user || null;
+    if (!user) throw new Error('Сессия не содержит пользователя');
+    const membership = user.membership || (payload.organizationContext ? {
+      id: payload.organizationContext.membershipId,
+      organizationId: payload.organizationContext.organizationId,
+      role: payload.organizationContext.role,
+      permissions: payload.organizationContext.permissions,
+    } : null);
+    const normalized = membership ? { ...user, membership } : user;
+    this.persistSession({ user: normalized });
+    return normalized;
+  },
+
+  async logout() {
+    await requestJson('/auth/logout', { method: 'POST', responseType: 'none' });
+    clearLocalSession();
+  },
+
+  async logoutAll() {
+    const result = await requestJson('/auth/logout-all', { method: 'POST' });
+    clearLocalSession();
+    return result;
+  },
+
+  clearLocalSession,
 };
+
+export { SESSION_CHANGED_EVENT };

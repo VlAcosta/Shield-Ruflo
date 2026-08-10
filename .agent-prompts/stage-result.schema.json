@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "stage": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["DONE", "PARTIAL", "BLOCKED"]
+    },
+    "continue_pipeline": {
+      "type": "boolean"
+    },
+    "external_blocker": {
+      "type": "boolean"
+    },
+    "significant_defects_found": {
+      "type": "boolean"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "remaining": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "stage",
+    "status",
+    "continue_pipeline",
+    "external_blocker",
+    "significant_defects_found",
+    "summary",
+    "tests",
+    "remaining"
+  ]
+}

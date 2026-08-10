@@ -133,7 +133,7 @@
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
     border: 0;
 
@@ -160,6 +160,7 @@
       > i { position: absolute; top: 12px; right: 12px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: transparent; background: #f2f4f9; }
       > i svg { width: 12px; height: 12px; }
       &:hover { transform: translateY(-2px); border-color: rgba(102, 97, 245, .22); }
+      &:has(input:focus-visible) { outline: 3px solid rgba(102, 97, 245, .22); outline-offset: 2px; border-color: rgba(102, 97, 245, .42); }
       &.is-active { border-color: rgba(102, 97, 245, .35); background: linear-gradient(150deg, rgba(102,97,245,.055), rgba(166,66,239,.025)); box-shadow: 0 12px 28px rgba(74, 70, 169, .08); }
       &.is-active > i { color: #fff; background: $gradient-primary; }
     }
@@ -174,9 +175,10 @@
     font-family: $font-family-display;
     font-size: 10px;
     font-weight: 800;
-    &.is-admin { color: #5d58ed; background: rgba(102,97,245,.1); }
-    &.is-moderator { color: #9d3fdc; background: rgba(166,66,239,.1); }
-    &.is-guest { color: #be7d00; background: rgba(245,162,10,.11); }
+    &.is-ADMIN { color: #5d58ed; background: rgba(102,97,245,.1); }
+    &.is-MANAGER { color: #9d3fdc; background: rgba(166,66,239,.1); }
+    &.is-ANALYST { color: #be7d00; background: rgba(245,162,10,.11); }
+    &.is-MEMBER { color: #087f91; background: rgba(19,174,190,.1); }
   }
 
   &__permission-note {

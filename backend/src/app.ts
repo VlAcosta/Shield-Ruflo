@@ -33,12 +33,13 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.code',
           '*.AUTH_SECRET',
           '*.AUTH_OTP_WEBHOOK_TOKEN',
+          '*.COMPANY_LOOKUP_WEBHOOK_TOKEN',
         ],
         censor: '[REDACTED]',
       },
     },
     genReqId: () => crypto.randomUUID(),
-    trustProxy: env.NODE_ENV === 'production',
+    trustProxy: env.TRUST_PROXY,
   });
 
   registerErrorHandler(app);

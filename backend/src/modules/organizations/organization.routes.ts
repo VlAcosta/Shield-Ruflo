@@ -30,6 +30,23 @@ function auditContext(request: FastifyRequest) {
   };
 }
 
+async function primaryMutation<T>(operation: () => Promise<T>, entity: 'business' | 'location'): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      throw new AppError({
+        code: entity === 'business' ? 'PRIMARY_BUSINESS_CONFLICT' : 'PRIMARY_LOCATION_CONFLICT',
+        message: entity === 'business'
+          ? 'Основной бизнес был изменён параллельно. Повторите запрос.'
+          : 'Основной филиал был изменён параллельно. Повторите запрос.',
+        statusCode: 409,
+      });
+    }
+    throw error;
+  }
+}
+
 export const organizationRoutes: FastifyPluginAsync = async (app) => {
   app.get('/organizations', { preHandler: app.authenticate }, async (request) => {
     if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
@@ -37,7 +54,7 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/organizations/current', {
-    preHandler: [app.authenticate, app.authorize('company.view')],
+    preHandler: [app.authenticate, app.authorize('business.view')],
   }, async (request) => {
     if (!request.auth?.organizationId) throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
     return { context: await getOrganizationContext(app, request.auth.userId, request.auth.organizationId) };
@@ -49,12 +66,15 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
     const organization = await app.prisma.organization.create({
       data: {
         name: body.name,
+        legalName: body.legal_name || null,
+        industry: body.industry || null,
+        website: body.website || null,
         slug: createOrganizationSlug(body.name),
         timezone: body.timezone,
         locale: body.locale,
         onboardingStatus: 'NOT_STARTED',
         members: { create: { userId: request.auth.userId, role: 'OWNER', status: 'ACTIVE', joinedAt: new Date() } },
-        businesses: { create: { name: body.business_name || body.name, isPrimary: true, status: 'ACTIVE' } },
+        businesses: { create: { name: body.business_name || body.name, legalName: body.legal_name || null, industry: body.industry || null, website: body.website || null, isPrimary: true, status: 'ACTIVE' } },
       },
     });
     await app.prisma.session.update({ where: { id: request.auth.sessionId }, data: { activeOrganizationId: organization.id } });
@@ -69,7 +89,7 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/organizations/:organizationId', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('business.manage')],
   }, async (request) => {
     const { organizationId } = organizationIdParamsSchema.parse(request.params);
     await assertActiveOrganization(request, organizationId);
@@ -86,6 +106,9 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
       where: { id: organizationId },
       data: {
         ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.legal_name !== undefined ? { legalName: body.legal_name || null } : {}),
+        ...(body.industry !== undefined ? { industry: body.industry || null } : {}),
+        ...(body.website !== undefined ? { website: body.website || null } : {}),
         ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
         ...(body.locale !== undefined ? { locale: body.locale } : {}),
         ...(body.legal_type !== undefined ? { legalType: body.legal_type } : {}),
@@ -103,7 +126,7 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/organizations/:organizationId/businesses', {
-    preHandler: [app.authenticate, app.authorize('company.view')],
+    preHandler: [app.authenticate, app.authorize('business.view')],
   }, async (request) => {
     const { organizationId } = organizationIdParamsSchema.parse(request.params);
     await assertActiveOrganization(request, organizationId);
@@ -112,21 +135,21 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/organizations/:organizationId/businesses', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('business.manage')],
   }, async (request) => {
     const { organizationId } = organizationIdParamsSchema.parse(request.params);
     await assertActiveOrganization(request, organizationId);
     const body = createBusinessSchema.parse(request.body);
-    const business = await app.prisma.$transaction(async (tx) => {
+    const business = await primaryMutation(() => app.prisma.$transaction(async (tx) => {
       if (body.is_primary) await tx.business.updateMany({ where: { organizationId, status: 'ACTIVE', isPrimary: true }, data: { isPrimary: false } });
       return tx.business.create({ data: { organizationId, name: body.name, legalName: body.legal_name || null, industry: body.industry || null, website: body.website || null, isPrimary: body.is_primary } });
-    });
+    }), 'business');
     await app.prisma.auditLog.create({ data: { organizationId, actorUserId: request.auth!.userId, action: 'business.created', entityType: 'business', entityId: business.id, ...auditContext(request) } });
     return { business };
   });
 
   app.get('/businesses/:businessId', {
-    preHandler: [app.authenticate, app.authorize('company.view')],
+    preHandler: [app.authenticate, app.authorize('business.view')],
   }, async (request) => {
     const { businessId } = businessIdParamsSchema.parse(request.params);
     const business = await requireActiveBusiness(app, request.auth!.organizationId!, businessId);
@@ -134,13 +157,13 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/businesses/:businessId', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('business.manage')],
   }, async (request) => {
     const { businessId } = businessIdParamsSchema.parse(request.params);
     const organizationId = request.auth!.organizationId!;
     await requireActiveBusiness(app, organizationId, businessId);
     const body = updateBusinessSchema.parse(request.body);
-    const business = await app.prisma.$transaction(async (tx) => {
+    const business = await primaryMutation(() => app.prisma.$transaction(async (tx) => {
       if (body.is_primary === true) await tx.business.updateMany({ where: { organizationId, status: 'ACTIVE', isPrimary: true, NOT: { id: businessId } }, data: { isPrimary: false } });
       if (body.is_primary === false) {
         const current = await tx.business.findUniqueOrThrow({ where: { id: businessId } });
@@ -156,13 +179,13 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
           ...(body.is_primary !== undefined ? { isPrimary: body.is_primary } : {}),
         },
       });
-    });
+    }), 'business');
     await app.prisma.auditLog.create({ data: { organizationId, actorUserId: request.auth!.userId, action: 'business.updated', entityType: 'business', entityId: businessId, metadata: { fields: Object.keys(body) }, ...auditContext(request) } });
     return { business };
   });
 
   app.delete('/businesses/:businessId', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('business.manage')],
   }, async (request) => {
     const { businessId } = businessIdParamsSchema.parse(request.params);
     const organizationId = request.auth!.organizationId!;
@@ -181,38 +204,46 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/businesses/:businessId/locations', {
-    preHandler: [app.authenticate, app.authorize('company.view')],
+    preHandler: [app.authenticate, app.authorize('locations.view')],
   }, async (request) => {
     const { businessId } = businessIdParamsSchema.parse(request.params);
     const business = await requireActiveBusiness(app, request.auth!.organizationId!, businessId);
     return { locations: business.locations };
   });
 
+  app.get('/locations/:locationId', {
+    preHandler: [app.authenticate, app.authorize('locations.view')],
+  }, async (request) => {
+    const { locationId } = locationIdParamsSchema.parse(request.params);
+    const location = await requireActiveLocation(app, request.auth!.organizationId!, locationId);
+    return { location };
+  });
+
   app.post('/businesses/:businessId/locations', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('locations.manage')],
   }, async (request) => {
     const { businessId } = businessIdParamsSchema.parse(request.params);
     const organizationId = request.auth!.organizationId!;
     await requireActiveBusiness(app, organizationId, businessId);
     const body = createLocationSchema.parse(request.body);
-    const location = await app.prisma.$transaction(async (tx) => {
+    const location = await primaryMutation(() => app.prisma.$transaction(async (tx) => {
       const count = await tx.location.count({ where: { businessId, status: 'ACTIVE' } });
       const makePrimary = body.is_primary || count === 0;
       if (makePrimary) await tx.location.updateMany({ where: { businessId, status: 'ACTIVE', isPrimary: true }, data: { isPrimary: false } });
       return tx.location.create({ data: { businessId, name: body.name, isPrimary: makePrimary, countryCode: body.country_code || null, region: body.region || null, city: body.city || null, addressLine1: body.address_line_1 || null, addressLine2: body.address_line_2 || null, postalCode: body.postal_code || null, latitude: body.latitude ?? null, longitude: body.longitude ?? null, timezone: body.timezone || null } });
-    });
+    }), 'location');
     await app.prisma.auditLog.create({ data: { organizationId, actorUserId: request.auth!.userId, action: 'location.created', entityType: 'location', entityId: location.id, ...auditContext(request) } });
     return { location };
   });
 
   app.patch('/locations/:locationId', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('locations.manage')],
   }, async (request) => {
     const { locationId } = locationIdParamsSchema.parse(request.params);
     const organizationId = request.auth!.organizationId!;
     const current = await requireActiveLocation(app, organizationId, locationId);
     const body = updateLocationSchema.parse(request.body);
-    const location = await app.prisma.$transaction(async (tx) => {
+    const location = await primaryMutation(() => app.prisma.$transaction(async (tx) => {
       if (body.is_primary === true) await tx.location.updateMany({ where: { businessId: current.businessId, status: 'ACTIVE', isPrimary: true, NOT: { id: locationId } }, data: { isPrimary: false } });
       if (body.is_primary === false && current.isPrimary) {
         const replacement = await tx.location.findFirst({ where: { businessId: current.businessId, status: 'ACTIVE', NOT: { id: locationId } }, orderBy: { createdAt: 'asc' } });
@@ -236,13 +267,13 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
           ...(body.timezone !== undefined ? { timezone: body.timezone || null } : {}),
         },
       });
-    });
+    }), 'location');
     await app.prisma.auditLog.create({ data: { organizationId, actorUserId: request.auth!.userId, action: 'location.updated', entityType: 'location', entityId: locationId, metadata: { fields: Object.keys(body) }, ...auditContext(request) } });
     return { location };
   });
 
   app.delete('/locations/:locationId', {
-    preHandler: [app.authenticate, app.authorize('company.edit')],
+    preHandler: [app.authenticate, app.authorize('locations.manage')],
   }, async (request) => {
     const { locationId } = locationIdParamsSchema.parse(request.params);
     const organizationId = request.auth!.organizationId!;

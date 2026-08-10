@@ -17,6 +17,18 @@ export const PERMISSION_GROUPS = Object.freeze([
     ],
   },
   {
+    id: 'business',
+    label: 'Бизнесы и филиалы',
+    description: 'Структура организации',
+    permissions: [
+      { id: 'business.view', label: 'Просматривать бизнесы', description: 'Видеть бизнесы организации' },
+      { id: 'business.manage', label: 'Управлять бизнесами', description: 'Создавать и изменять бизнесы' },
+      { id: 'locations.view', label: 'Просматривать филиалы', description: 'Видеть точки присутствия' },
+      { id: 'locations.manage', label: 'Управлять филиалами', description: 'Создавать и изменять филиалы' },
+      { id: 'analytics.view', label: 'Просматривать аналитику', description: 'Доступ к аналитике репутации' },
+    ],
+  },
+  {
     id: 'reviews',
     label: 'Отзывы',
     description: 'Мониторинг и ответы клиентам',
@@ -27,7 +39,6 @@ export const PERMISSION_GROUPS = Object.freeze([
       { id: 'reviews.approve', label: 'Согласовывать ответы', description: 'Одобрять ответы перед публикацией и возвращать на доработку' },
       { id: 'reviews.legal', label: 'Юридическая эскалация', description: 'Передавать спорные отзывы на юридическую проверку' },
       { id: 'reviews.settings', label: 'Настраивать политику', description: 'Режим ответа, tone of voice и автоматизации организации' },
-      { id: 'reputation.view', label: 'Смотреть Intelligence', description: 'Причины изменений, площадки, SLA и рекомендации' },
     ],
   },
   {
@@ -54,6 +65,7 @@ export const PERMISSION_GROUPS = Object.freeze([
     description: 'Командная работа и чек-листы',
     permissions: [
       { id: 'tasks.view', label: 'Просматривать задачи', description: 'Kanban, список, сроки и исполнители' },
+      { id: 'tasks.manage', label: 'Управлять задачами', description: 'Создавать, изменять и завершать задачи' },
       { id: 'tasks.create', label: 'Создавать задачи', description: 'Новые задачи и пункты чек-листа' },
       { id: 'tasks.edit', label: 'Редактировать задачи', description: 'Статус, срок, исполнитель, комментарии' },
       { id: 'tasks.delete', label: 'Удалять задачи', description: 'Безвозвратное удаление рабочих задач' },
@@ -93,6 +105,7 @@ export const PERMISSION_GROUPS = Object.freeze([
     description: 'Участники, роли и безопасность',
     permissions: [
       { id: 'team.view', label: 'Просматривать команду', description: 'Состав, роли, статусы и активность' },
+      { id: 'team.manage', label: 'Управлять командой', description: 'Приглашать и изменять участников' },
       { id: 'team.invite', label: 'Приглашать пользователей', description: 'Создавать персональные ссылки доступа' },
       { id: 'team.manage_roles', label: 'Управлять ролями', description: 'Назначать права и создавать свои роли' },
       { id: 'team.manage_security', label: 'Управлять безопасностью', description: 'Замораживать доступ, управлять сессиями и сроком доступа' },
@@ -116,10 +129,12 @@ export const ALL_PERMISSIONS = Object.freeze(
 
 const readOnlyPermissions = [
   'dashboard.view',
+  'business.view',
+  'locations.view',
   'reviews.view',
-  'reputation.view',
   'automations.view',
   'integrations.view',
+  'analytics.view',
   'tasks.view',
   'reports.view',
   'billing.view',
@@ -130,7 +145,7 @@ const readOnlyPermissions = [
 
 export const PRESET_ROLES = Object.freeze([
   {
-    id: 'owner',
+    id: 'OWNER',
     label: 'Владелец',
     description: 'Полный доступ без ограничений. Роль владельца нельзя удалить.',
     tone: 'violet',
@@ -138,7 +153,7 @@ export const PRESET_ROLES = Object.freeze([
     permissions: ALL_PERMISSIONS,
   },
   {
-    id: 'admin',
+    id: 'ADMIN',
     label: 'Администратор',
     description: 'Управляет компанией, командой и всеми рабочими разделами.',
     tone: 'indigo',
@@ -146,17 +161,19 @@ export const PRESET_ROLES = Object.freeze([
     permissions: ALL_PERMISSIONS.filter((permission) => permission !== 'billing.manage'),
   },
   {
-    id: 'moderator',
-    label: 'Модератор',
+    id: 'MANAGER',
+    label: 'Менеджер',
     description: 'Работает с отзывами, задачами, отчётами и поддержкой без административных настроек.',
     tone: 'purple',
     system: true,
     permissions: [
       'dashboard.view', 'dashboard.edit',
-      'reviews.view', 'reviews.reply', 'reviews.moderate', 'reviews.legal', 'reputation.view',
+      'business.view', 'business.manage', 'locations.view', 'locations.manage',
+      'reviews.view', 'reviews.reply', 'reviews.moderate', 'reviews.legal',
       'automations.view',
       'integrations.view',
-      'tasks.view', 'tasks.create', 'tasks.edit',
+      'analytics.view',
+      'tasks.view', 'tasks.manage', 'tasks.create', 'tasks.edit',
       'reports.view', 'reports.create', 'reports.export',
       'billing.view',
       'company.view',
@@ -165,19 +182,48 @@ export const PRESET_ROLES = Object.freeze([
     ],
   },
   {
-    id: 'guest',
-    label: 'Гость',
+    id: 'ANALYST',
+    label: 'Аналитик',
     description: 'Безопасный режим чтения: можно смотреть данные, но нельзя менять рабочее пространство.',
     tone: 'amber',
     system: true,
     permissions: readOnlyPermissions,
   },
+  {
+    id: 'MEMBER',
+    label: 'Участник',
+    description: 'Работает с отзывами и задачами без административного доступа.',
+    tone: 'cyan',
+    system: true,
+    permissions: ['dashboard.view', 'business.view', 'locations.view', 'reviews.view', 'reviews.reply', 'tasks.view', 'tasks.create', 'tasks.edit', 'integrations.view', 'automations.view', 'reports.view', 'company.view', 'team.view', 'support.view', 'support.write'],
+  },
 ]);
+
+const LEGACY_ROLE_IDS = Object.freeze({
+  owner: 'OWNER',
+  admin: 'ADMIN',
+  moderator: 'MANAGER',
+  guest: 'ANALYST',
+  member: 'MEMBER',
+});
+
+function normalizeRoleId(roleId) {
+  const raw = String(roleId || 'MEMBER').trim();
+  const standard = ['OWNER', 'ADMIN', 'MANAGER', 'ANALYST', 'MEMBER'];
+  const upper = raw.toUpperCase();
+  return LEGACY_ROLE_IDS[raw.toLowerCase()] || (standard.includes(upper) ? upper : raw);
+}
+
+function resolveMembershipRoleId(membership) {
+  const canonicalRole = String(membership?.role || '').toUpperCase();
+  if (['OWNER', 'ADMIN', 'MANAGER', 'ANALYST', 'MEMBER'].includes(canonicalRole)) return canonicalRole;
+  return normalizeRoleId(membership?.accessRoleId || membership?.role || 'MEMBER');
+}
 
 const ROUTE_PERMISSIONS = Object.freeze([
   { prefix: '/dashboard', permission: 'dashboard.view' },
   { prefix: '/reviews', permission: 'reviews.view' },
-  { prefix: '/reputation', permission: 'reputation.view' },
+  { prefix: '/reputation', permission: 'analytics.view' },
   { prefix: '/automations', permission: 'automations.view' },
   { prefix: '/integrations', permission: 'integrations.view' },
   { prefix: '/subscriptions', permission: 'billing.view' },
@@ -228,9 +274,9 @@ export function getAvailableRoles() {
 }
 
 export function getRoleById(roleId) {
-  const normalizedId = roleId || 'guest';
+  const normalizedId = normalizeRoleId(roleId);
   return getAvailableRoles().find((role) => role.id === normalizedId)
-    || PRESET_ROLES.find((role) => role.id === 'guest');
+    || PRESET_ROLES.find((role) => role.id === 'MEMBER');
 }
 
 export function getRoleLabel(roleId) {
@@ -267,7 +313,7 @@ export function deleteCustomRole(roleId) {
 }
 
 export function resolvePermissions(roleId, overrides = {}) {
-  const role = getRoleById(roleId);
+  const role = getRoleById(normalizeRoleId(roleId));
   const allowed = new Set(role?.permissions || []);
   (overrides.allow || []).forEach((permission) => {
     if (ALL_PERMISSIONS.includes(permission)) allowed.add(permission);
@@ -277,10 +323,20 @@ export function resolvePermissions(roleId, overrides = {}) {
 }
 
 export function getCurrentAccessContext(membership = readCurrentMembership()) {
-  const roleId = membership?.accessRoleId || membership?.role || 'owner';
+  const roleId = resolveMembershipRoleId(membership);
   const overrides = membership?.permissionOverrides || {};
   const role = getRoleById(roleId);
-  const permissions = resolvePermissions(roleId, overrides);
+  const hasServerOrganizationContext = Boolean(
+    membership?.organizationId || membership?.organization?.id,
+  );
+  const serverPermissions = Array.isArray(membership?.permissions)
+    ? membership.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission))
+    : null;
+  // An authenticated organization membership must never gain client-preset
+  // permissions when the server contract is incomplete or malformed. Legacy
+  // local role previews have no organization context and retain their fallback.
+  const permissions = serverPermissions
+    || (hasServerOrganizationContext ? [] : resolvePermissions(roleId, overrides));
   return {
     roleId,
     role,
@@ -288,7 +344,7 @@ export function getCurrentAccessContext(membership = readCurrentMembership()) {
     permissions,
     permissionSet: new Set(permissions),
     overrides,
-    isOwner: roleId === 'owner',
+    isOwner: roleId === 'OWNER',
   };
 }
 
@@ -307,7 +363,7 @@ export function findFirstAllowedRoute(context = getCurrentAccessContext()) {
   const candidates = [
     ['/dashboard', 'dashboard.view'],
     ['/reviews', 'reviews.view'],
-    ['/reputation', 'reputation.view'],
+    ['/reputation', 'analytics.view'],
     ['/automations', 'automations.view'],
     ['/tasks', 'tasks.view'],
     ['/reports', 'reports.view'],

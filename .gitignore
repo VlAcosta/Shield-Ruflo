@@ -29,3 +29,9 @@ agentdb.rvf.lock
 
 # Codex audit/session exports
 business-shield-audit*.jsonl
+.agent-state/
+logs/p0p12/
+
+# Generated backend artifacts (created by Prisma/TypeScript builds)
+backend/src/generated/
+backend/dist/

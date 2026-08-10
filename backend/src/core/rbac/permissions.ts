@@ -1,5 +1,9 @@
 export const permissions = [
   'dashboard.view',
+  'business.view',
+  'business.manage',
+  'locations.view',
+  'locations.manage',
   'dashboard.edit',
   'reviews.view',
   'reviews.reply',
@@ -8,6 +12,7 @@ export const permissions = [
   'reviews.legal',
   'reviews.settings',
   'tasks.view',
+  'tasks.manage',
   'tasks.create',
   'tasks.edit',
   'tasks.delete',
@@ -16,6 +21,13 @@ export const permissions = [
   'reports.export',
   'billing.view',
   'billing.manage',
+  'integrations.view',
+  'integrations.manage',
+  'automations.view',
+  'automations.manage',
+  'analytics.view',
+  'team.manage',
+  // Legacy capabilities retained in responses while existing clients migrate.
   'company.view',
   'company.edit',
   'team.view',
@@ -33,8 +45,13 @@ export type OrganizationRoleName = 'OWNER' | 'ADMIN' | 'MANAGER' | 'ANALYST' | '
 const all = [...permissions] as Permission[];
 const readOnly: Permission[] = [
   'dashboard.view',
+  'business.view',
+  'locations.view',
   'reviews.view',
   'tasks.view',
+  'integrations.view',
+  'automations.view',
+  'analytics.view',
   'reports.view',
   'reports.export',
   'billing.view',
@@ -45,8 +62,10 @@ const readOnly: Permission[] = [
 
 const manager: Permission[] = [
   'dashboard.view', 'dashboard.edit',
+  'business.view', 'business.manage', 'locations.view', 'locations.manage',
   'reviews.view', 'reviews.reply', 'reviews.moderate', 'reviews.legal',
-  'tasks.view', 'tasks.create', 'tasks.edit',
+  'tasks.view', 'tasks.manage', 'tasks.create', 'tasks.edit',
+  'integrations.view', 'automations.view', 'analytics.view',
   'reports.view', 'reports.create', 'reports.export',
   'billing.view',
   'company.view',
@@ -56,8 +75,10 @@ const manager: Permission[] = [
 
 const member: Permission[] = [
   'dashboard.view',
+  'business.view', 'locations.view',
   'reviews.view', 'reviews.reply',
   'tasks.view', 'tasks.create', 'tasks.edit',
+  'integrations.view', 'automations.view',
   'reports.view',
   'company.view',
   'team.view',
@@ -74,7 +95,7 @@ export const rolePermissions: Readonly<Record<OrganizationRoleName, readonly Per
 
 export function permissionsForRole(role: string): Permission[] {
   const normalized = role.toUpperCase() as OrganizationRoleName;
-  return [...(rolePermissions[normalized] ?? rolePermissions.MEMBER)];
+  return [...(rolePermissions[normalized] ?? [])];
 }
 
 export function roleHasPermission(role: string, permission: Permission): boolean {
@@ -86,13 +107,37 @@ export type PermissionOverrides = {
   deny?: string[];
 };
 
+export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
+  'billing.manage',
+]);
+
+/** Permissions an OWNER must retain so an organization cannot be administratively locked. */
+export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
+  'team.manage',
+  'billing.manage',
+]);
+
+export function isPermission(value: string): value is Permission {
+  return (permissions as readonly string[]).includes(value);
+}
+
+export function isNonDelegablePermission(value: string): value is Permission {
+  return isPermission(value) && nonDelegablePermissions.includes(value);
+}
+
 export function effectivePermissions(role: string, overrides: PermissionOverrides | null | undefined): Permission[] {
-  const allowed = new Set<Permission>(permissionsForRole(role));
+  const normalizedRole = role.toUpperCase();
+  const basePermissions = permissionsForRole(normalizedRole);
+  if (basePermissions.length === 0) return [];
+  const allowed = new Set<Permission>(basePermissions);
   for (const permission of overrides?.allow ?? []) {
-    if ((permissions as readonly string[]).includes(permission)) allowed.add(permission as Permission);
+    if (isPermission(permission) && !isNonDelegablePermission(permission)) allowed.add(permission);
   }
   for (const permission of overrides?.deny ?? []) {
-    if ((permissions as readonly string[]).includes(permission)) allowed.delete(permission as Permission);
+    if (
+      isPermission(permission)
+      && !(normalizedRole === 'OWNER' && essentialOwnerPermissions.includes(permission))
+    ) allowed.delete(permission);
   }
   return [...allowed];
 }

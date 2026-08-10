@@ -7,7 +7,7 @@ import {
   requestVerificationCode,
   revokeAllUserSessions,
   revokeToken,
-  tokenFromRequest,
+  tokensFromRequest,
   verifyVerificationCode,
 } from './auth.service.js';
 import { completeProfileSchema, requestCodeSchema, verifyCodeSchema } from './auth.schemas.js';
@@ -18,6 +18,16 @@ function setSessionCookie(reply: FastifyReply, token: string): void {
 
 function clearSessionCookie(reply: FastifyReply): void {
   reply.header('set-cookie', serializeClearedSessionCookie());
+}
+
+/**
+ * Session tokens are browser credentials and must only cross the HTTP boundary
+ * through the HttpOnly cookie. Keep this projection centralized so a new auth
+ * route cannot accidentally serialize the credential returned by the service.
+ */
+export function browserSessionBody<T extends { token: string }>(result: T): Omit<T, 'token'> {
+  const { token: _token, ...body } = result;
+  return body;
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
@@ -45,7 +55,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         ...(body.invitation_token !== undefined ? { invitationToken: body.invitation_token } : {}),
       });
       setSessionCookie(reply, result.token);
-      return result;
+      return browserSessionBody(result);
     },
   );
 
@@ -66,7 +76,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         ...(body.invitation_token ? { invitationToken: body.invitation_token } : {}),
       });
       setSessionCookie(reply, result.token);
-      return result;
+      return browserSessionBody(result);
     },
   );
 
@@ -80,7 +90,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       mode: 'login',
     });
     setSessionCookie(reply, result.token);
-    return result;
+    return browserSessionBody(result);
   });
 
   app.post(
@@ -100,7 +110,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         ...(body.invitation_token ? { invitationToken: body.invitation_token } : {}),
       });
       setSessionCookie(reply, result.token);
-      return result;
+      return browserSessionBody(result);
     },
   );
 
@@ -112,7 +122,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/auth/logout', async (request, reply) => {
-    await revokeToken(app, tokenFromRequest(request));
+    await Promise.all(tokensFromRequest(request).map((token) => revokeToken(app, token)));
     clearSessionCookie(reply);
     return reply.status(204).send();
   });

@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import React, { memo, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LockIcon, MoonIcon, SunIcon } from '../icons';
 import BrandMark from '../../../components/brand/BrandMark';
 import { navigationItems } from '../navigation';
@@ -7,12 +7,30 @@ import useAccessControl from '../../../features/access/hooks/useAccessControl';
 import { findFirstAllowedRoute } from '../../../services/access/rbacService';
 import useAppearance from '../../../features/appearance/hooks/useAppearance';
 import { APPEARANCE_MODES } from '../../../services/appearance/appearanceService';
+import { authService } from '../../../services/auth/authService';
 
 function PortalSidebar({ onLock, navigationLocked = false }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const access = useAccessControl();
   const appearance = useAppearance();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+  const [lockedHint, setLockedHint] = useState('');
   const brandTarget = navigationLocked ? '/onboarding' : findFirstAllowedRoute(access);
+
+  const logout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError('');
+    try {
+      await authService.logout();
+      navigate('/auth?mode=login', { replace: true });
+    } catch (error) {
+      setLogoutError(error?.message || 'Не удалось завершить сессию. Повторите попытку.');
+      setLoggingOut(false);
+    }
+  };
 
   return (
     <aside className="portal__sidebar">
@@ -31,14 +49,17 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
           const isActive = !navigationLocked && (location.pathname === to || location.pathname.startsWith(`${to}/`));
 
           if (navigationLocked) {
+            const explanation = 'Доступ откроется после завершения настройки';
             return (
               <button
                 key={to}
                 type="button"
                 className="portal__navItem portal__navItem--locked"
-                disabled
                 aria-disabled="true"
-                title="Доступ откроется после завершения настройки"
+                aria-describedby={lockedHint ? 'portal-navigation-lock-hint' : undefined}
+                title={explanation}
+                onClick={() => setLockedHint(explanation)}
+                onFocus={() => setLockedHint(explanation)}
               >
                 <span className="portal__navIcon"><Icon /></span>
                 <span className="portal__navText">{label}</span>
@@ -48,14 +69,17 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
           }
 
           if (!allowed) {
+            const explanation = `Нет доступа. Текущая роль: ${access.role?.label || 'роль организации'}`;
             return (
               <button
                 key={to}
                 type="button"
                 className="portal__navItem portal__navItem--permission-locked"
-                disabled
                 aria-disabled="true"
-                title={`Нет доступа · ${access.role?.label || 'Роль'}`}
+                aria-describedby={lockedHint ? 'portal-navigation-lock-hint' : undefined}
+                title={explanation}
+                onClick={() => setLockedHint(explanation)}
+                onFocus={() => setLockedHint(explanation)}
               >
                 <span className="portal__navIcon"><Icon /></span>
                 <span className="portal__navText">{label}</span>
@@ -72,6 +96,7 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
           );
         })}
       </nav>
+      {lockedHint ? <p id="portal-navigation-lock-hint" className="portal__navLockedHint" role="status" aria-live="polite">{lockedHint}</p> : null}
 
       {!navigationLocked ? (
         <div className="portal__appearanceDock">
@@ -97,6 +122,14 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
           </Link>
         </div>
       ) : null}
+
+      <div className="portal__logoutDock">
+        {logoutError ? <div className="portal__logoutError" role="alert" aria-live="assertive">{logoutError}</div> : null}
+        <button type="button" className="portal__logoutButton" onClick={logout} disabled={loggingOut}>
+          <span aria-hidden="true">↪</span>
+          <strong>{loggingOut ? 'Завершаем сессию…' : 'Выйти из аккаунта'}</strong>
+        </button>
+      </div>
 
       {navigationLocked ? (
         <div className="portal__sidebarNotice">

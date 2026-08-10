@@ -21,9 +21,7 @@ import {
   readReviewSettings,
   requestReviewDraftChanges,
   saveReviewSettings,
-  submitDraftForApproval,
 } from '../../../../services/reviews/reviewIntelligenceService';
-import { updateReview } from '../../../../services/reviews/reviewsService';
 
 function matchesFilter(review, filters, query) {
   if (filters.platform !== 'all' && review.platform !== filters.platform) return false;
@@ -46,8 +44,6 @@ function matchesFilter(review, filters, query) {
 }
 
 export default function useReviewsIntelligence() {
-  const reviewsState = useReviews();
-  const { reviews, patchReview } = reviewsState;
   const [searchParams, setSearchParams] = useSearchParams();
   const [settings, setSettings] = useState(readReviewSettings);
   const [filters, setFilters] = useState(() => ({
@@ -58,6 +54,17 @@ export default function useReviewsIntelligence() {
   }));
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const serverQuery = useMemo(() => ({
+    ...(deferredQuery ? { q: deferredQuery } : {}),
+    ...(filters.rating !== 'all' ? { rating: filters.rating } : {}),
+    ...(filters.sentiment === REVIEW_SENTIMENT.NEGATIVE ? { maxRating: 3 } : {}),
+    ...(filters.sentiment === REVIEW_SENTIMENT.POSITIVE ? { minRating: 4 } : {}),
+    ...(filters.queue === 'processed' ? { workflowStatus: 'published' } : {}),
+    ...(filters.queue === 'approval' ? { workflowStatus: 'awaiting_approval' } : {}),
+    ...(filters.queue === 'inbox' ? { status: 'new,deferred' } : {}),
+  }), [deferredQuery, filters.queue, filters.rating, filters.sentiment]);
+  const reviewsState = useReviews(serverQuery);
+  const { reviews, patchReview, replyToReview } = reviewsState;
   const [selectedId, setSelectedId] = useState(() => searchParams.get('review') || '');
   const [working, setWorking] = useState('');
   const [notice, setNotice] = useState(null);
@@ -173,40 +180,26 @@ export default function useReviewsIntelligence() {
     if (!review) return null;
     return run(`ai:${review.id}`, async () => {
       const draft = await generateAiDraft(review, settings);
-      await updateReview(review.id, {
-        reply: draft.text,
-        aiReasons: draft.reasons,
-        workflowStatus: REVIEW_WORKFLOW.DRAFT,
-        aiDraftSource: draft.source,
-        aiDraftedAt: new Date().toISOString(),
-      });
+      await replyToReview(review.id, draft.text);
       return draft;
     }, 'Черновик подготовлен');
-  }, [run, selectedReview, settings]);
+  }, [replyToReview, run, selectedReview, settings]);
 
   const saveDraft = useCallback(async (text) => {
     if (!selectedReview) return;
-    return run(`draft:${selectedReview.id}`, () => updateReview(selectedReview.id, {
-      reply: text,
-      workflowStatus: REVIEW_WORKFLOW.DRAFT,
-    }), 'Черновик сохранён');
-  }, [run, selectedReview]);
+    return run(`draft:${selectedReview.id}`, async () => {
+      return replyToReview(selectedReview.id, text);
+    }, 'Черновик сохранён');
+  }, [replyToReview, run, selectedReview]);
 
   const delegateToShield = useCallback((note = '') => selectedReview && run(`shield:${selectedReview.id}`, () => delegateReviewToShield(selectedReview.id, note), 'Отзыв передан команде Бизнес Щит'), [run, selectedReview]);
 
   const submitReply = useCallback(async (text) => {
     if (!selectedReview) return;
     const value = String(text || '').trim();
-    if (settings.responseMode === 'shield') {
-      return delegateToShield(value);
-    }
     if (!value) throw new Error('Напишите ответ');
-
-    if (settings.responseMode === 'approval') {
-      return run(`approval:${selectedReview.id}`, () => submitDraftForApproval(selectedReview.id, value), 'Отправлено руководителю на согласование');
-    }
-    return run(`publish:${selectedReview.id}`, () => publishThroughProvider(selectedReview, value), settings.responseMode === 'shield' ? 'Ответ передан Бизнес Щит и отмечен опубликованным' : 'Ответ опубликован');
-  }, [delegateToShield, run, selectedReview, settings.responseMode]);
+    return saveDraft(value);
+  }, [saveDraft, selectedReview]);
 
   const approve = useCallback(() => selectedReview && run(`approve:${selectedReview.id}`, () => approveReviewDraft(selectedReview.id), 'Ответ согласован'), [run, selectedReview]);
   const requestChanges = useCallback((note) => selectedReview && run(`changes:${selectedReview.id}`, () => requestReviewDraftChanges(selectedReview.id, note), 'Ответ возвращён на доработку'), [run, selectedReview]);

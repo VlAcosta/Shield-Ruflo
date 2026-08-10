@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@claude-flow/cli": "^3.34.0"
+  },
+  "_npx": {
+    "packages": [
+      "@claude-flow/cli"
+    ]
+  }
+}

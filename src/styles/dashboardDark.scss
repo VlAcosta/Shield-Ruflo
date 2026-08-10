@@ -539,6 +539,27 @@ body.portal-dark-active .portal-profile-menu__identity {
 }
 body.portal-dark-active .portal-profile-menu__identity strong { color: #f0f3ff; }
 body.portal-dark-active .portal-profile-menu__identity span { color: #7d89a7; }
+body.portal-dark-active .portal-profile-menu__organizations {
+  border-color: rgba(133,146,185,.13);
+  background: #121a2b;
+}
+body.portal-dark-active .portal-profile-menu__organizationsTitle strong { color: #dce2f2; }
+body.portal-dark-active .portal-profile-menu__organizationsTitle span { color: #75819d; }
+body.portal-dark-active .portal-profile-menu__organizationList > li > button { color: #dce2f2; }
+body.portal-dark-active .portal-profile-menu__organizationList > li > button > span {
+  color: #b8aeff;
+  background: rgba(126,108,255,.13);
+}
+body.portal-dark-active .portal-profile-menu__organizationList > li > button strong,
+body.portal-dark-active .portal-profile-menu__organizationsEmpty strong { color: #e8ecfa; }
+body.portal-dark-active .portal-profile-menu__organizationList > li > button small,
+body.portal-dark-active .portal-profile-menu__organizationsEmpty { color: #75819d; }
+body.portal-dark-active .portal-profile-menu__organizationList > li > button:hover:not(:disabled),
+body.portal-dark-active .portal-profile-menu__organizationList > li > button:focus-visible,
+body.portal-dark-active .portal-profile-menu__organizationList > li > button.is-active {
+  border-color: rgba(145,132,255,.24);
+  background: #1a2137;
+}
 body.portal-dark-active .portal-profile-menu__section > button,
 body.portal-dark-active .portal-profile-menu__section + .portal-profile-menu__lock button {
   color: #dce2f2;
@@ -555,6 +576,19 @@ body.portal-dark-active .portal-profile-menu__section + .portal-profile-menu__lo
 body.portal-dark-active .portal-profile-menu__section > button:hover,
 body.portal-dark-active .portal-profile-menu__section + .portal-profile-menu__lock button:hover { background: #182137; }
 body.portal-dark-active .portal-profile-menu__lock { border-top-color: rgba(133,146,185,.1); }
+
+body.portal-dark-active .member-access-overlay { background: #0b1120; }
+body.portal-dark-active .member-access-overlay__card {
+  border-color: rgba(139,151,188,.16);
+  background: rgba(16,24,39,.97);
+  box-shadow: 0 38px 90px rgba(0,0,0,.48);
+}
+body.portal-dark-active .member-access-overlay h2 { color: #f0f3ff; }
+body.portal-dark-active .member-access-overlay p,
+body.portal-dark-active .member-access-overlay__note { color: #8995b1; }
+body.portal-dark-active .member-access-overlay__meta { border-color: rgba(139,151,188,.14); background: #151e31; }
+body.portal-dark-active .member-access-overlay__meta strong { color: #dce2f2; }
+body.portal-dark-active .member-access-overlay__error { border-color: rgba(240,82,120,.28); color: #ff9caf; background: rgba(122,31,54,.2); }
 
 /* Command palette: remove the light inner panel in dark mode. */
 body.portal-dark-active .portal-command { background: rgba(3, 7, 15, .58); backdrop-filter: none; -webkit-backdrop-filter: none; }

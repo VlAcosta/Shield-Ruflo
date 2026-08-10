@@ -22,7 +22,6 @@ export function readCookie(cookieHeader: string | undefined, name: string): stri
 function sameSiteValue(): string {
   switch (env.AUTH_COOKIE_SAME_SITE) {
     case 'strict': return 'Strict';
-    case 'none': return 'None';
     default: return 'Lax';
   }
 }

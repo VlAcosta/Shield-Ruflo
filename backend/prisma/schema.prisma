@@ -182,6 +182,9 @@ model Organization {
   onboardingCompletedAt DateTime?          @map("onboarding_completed_at")
   timezone              String             @default("Europe/Moscow") @db.VarChar(80)
   locale                String             @default("ru-RU") @db.VarChar(16)
+  legalName             String?            @map("legal_name") @db.VarChar(240)
+  industry              String?            @db.VarChar(120)
+  website               String?            @db.Text
   legalType             String?            @map("legal_type") @db.VarChar(16)
   inn                   String?            @db.VarChar(12)
   kpp                   String?            @db.VarChar(9)
@@ -361,6 +364,7 @@ model VerificationCode {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([phone, purpose, createdAt], map: "verification_codes_phone_purpose_created_idx")
+  @@index([requestIp, createdAt], map: "verification_codes_request_ip_created_idx")
   @@index([expiresAt, consumedAt], map: "verification_codes_expiry_consumed_idx")
   @@map("verification_codes")
 }

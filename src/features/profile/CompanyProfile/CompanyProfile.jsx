@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BuildingIcon } from '../model/icons';
+import BusinessLocationsManager from './BusinessLocationsManager';
 import './CompanyProfile.scss';
 
 const FIELDS = [
@@ -12,18 +13,32 @@ const FIELDS = [
   ['industry', 'Отрасль'],
 ];
 
-export default function CompanyProfile({ value, busy, onSave, readOnly = false }) {
+function validate(form) {
+  const errors = {};
+  if (!/^\d{10}$|^\d{12}$/.test(form.inn || '')) errors.inn = 'ИНН должен содержать 10 или 12 цифр';
+  if (form.kpp && !/^\d{9}$/.test(form.kpp)) errors.kpp = 'КПП должен содержать 9 цифр';
+  if (form.ogrn && !/^\d{13}$|^\d{15}$/.test(form.ogrn)) errors.ogrn = 'ОГРН должен содержать 13 или 15 цифр';
+  if (form.website) {
+    try { new URL(form.website); } catch { errors.website = 'Укажите полный адрес сайта, включая https://'; }
+  }
+  return errors;
+}
+
+export default function CompanyProfile({ value, busy, onSave, readOnly = false, canViewBusinesses = false, canManageBusinesses = false, canManageLocations = false }) {
   const [form, setForm] = useState(value);
+  const errors = validate(form || {});
+  const changed = FIELDS.some(([key]) => String(form?.[key] || '') !== String(value?.[key] || ''));
+  const canSubmit = changed && !busy && Object.keys(errors).length === 0;
 
   useEffect(() => setForm(value), [value]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    if (!readOnly) onSave?.(form);
+    if (!readOnly && canSubmit) onSave?.(form);
   };
 
   return (
-    <form className="company-profile" onSubmit={handleSubmit}>
+    <div className="company-profile-stack"><form className="company-profile" onSubmit={handleSubmit}>
       <header className="company-profile__header">
         <div className="company-profile__mark"><BuildingIcon /></div>
         <div>
@@ -42,7 +57,7 @@ export default function CompanyProfile({ value, busy, onSave, readOnly = false }
           </div>
           <dl>
             {value.registrationDate ? <div><dt>Регистрация</dt><dd>{value.registrationDate}</dd></div> : null}
-            <div><dt>Источник</dt><dd>{value.registrySource || 'ЕГРЮЛ / ФНС'}</dd></div>
+            <div><dt>Источник</dt><dd>{value.registrySource || 'Источник не указан'}</dd></div>
           </dl>
         </section>
       ) : null}
@@ -56,15 +71,18 @@ export default function CompanyProfile({ value, busy, onSave, readOnly = false }
               onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
               readOnly={readOnly}
               aria-readonly={readOnly}
+              aria-invalid={Boolean(errors[key])}
+              aria-describedby={errors[key] ? `company-${key}-error` : undefined}
             />
+            {errors[key] ? <small id={`company-${key}-error`} role="alert">{errors[key]}</small> : null}
           </label>
         ))}
       </div>
 
       <footer>
         <div className="company-profile__verified"><i /> {readOnly ? 'Доступ только для просмотра по вашей роли' : 'Реквизиты можно обновлять без обращения в поддержку'}</div>
-        {!readOnly ? <button type="submit" disabled={busy}>{busy ? 'Сохраняем…' : 'Сохранить'}</button> : null}
+        {!readOnly ? <button type="submit" disabled={!canSubmit}>{busy ? 'Сохраняем…' : changed ? 'Сохранить' : 'Нет изменений'}</button> : null}
       </footer>
-    </form>
+    </form><BusinessLocationsManager canView={canViewBusinesses} canManageBusinesses={canManageBusinesses} canManageLocations={canManageLocations} /></div>
   );
 }

@@ -131,8 +131,6 @@ export default function AuthWorkspace() {
   const [phoneTail, setPhoneTail] = useState('');
   const [code, setCode] = useState(['','','','']);
   const [sessionId, setSessionId] = useState('');
-  const [temporaryToken, setTemporaryToken] = useState('');
-  const [demoMode, setDemoMode] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -207,7 +205,7 @@ export default function AuthWorkspace() {
     setBusy(true); setError('');
     try {
       const result = await authService.requestCode({ phone: fullPhone, mode: invitationMode ? 'register' : mode, planId: selectedPlan?.id, invitationToken: inviteToken || undefined });
-      setSessionId(result.session_id || result.sessionId || ''); setDemoMode(Boolean(result.demo)); setCode(['','','','']); setSeconds(60); setStep('otp');
+      setSessionId(result.session_id || result.sessionId || ''); setCode(['','','','']); setSeconds(60); setStep('otp');
       setTimeout(() => otpRefs.current[0]?.focus(), 80);
     } catch (err) { setError(err?.message || 'Не удалось отправить код'); } finally { setBusy(false); }
   };
@@ -217,8 +215,6 @@ export default function AuthWorkspace() {
     setBusy(true); setError('');
     try {
       const result = await authService.verifyCode({ phone: fullPhone, code: code.join(''), sessionId, mode: invitationMode ? 'register' : mode, invitationToken: inviteToken || undefined });
-      const token = result.token || temporaryToken;
-      setTemporaryToken(token || '');
       if (invitationMode) {
         if (result.user?.firstName) setFirstName(result.user.firstName);
         if (result.user?.lastName) setLastName(result.user.lastName);
@@ -234,8 +230,7 @@ export default function AuthWorkspace() {
         return;
       }
       if (mode === 'login') {
-        const fallbackUser = result.user || (() => { try { return JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch { return null; } })();
-        authService.persistSession({ token, user: fallbackUser || { phone: fullPhone } });
+        await authService.restoreSession();
         setSuccessText('Вход выполнен. Кабинет готов к работе.'); setStep('success');
       } else setStep('profile');
     } catch (err) { setError(err?.message || 'Не удалось подтвердить код'); } finally { setBusy(false); }
@@ -245,17 +240,17 @@ export default function AuthWorkspace() {
     if (!profileReady || busy) return;
     setBusy(true); setError('');
     try {
-      const result = await authService.register({ phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), plan: selectedPlan, token: temporaryToken, invitationToken: inviteToken || undefined });
+      const result = await authService.register({ phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), plan: selectedPlan, invitationToken: inviteToken || undefined });
       let user = result.user || { phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), plan: selectedPlan };
 
       if (invitationMode) {
         const membership = await acceptCompanyInvitation(inviteToken, user);
         user = { ...user, membership, role: membership.role };
-        authService.persistSession({ token: result.token || temporaryToken, user });
+        authService.persistSession({ user });
         persistCompanyContext(invitation, membership, pin);
         setSuccessText(`Вы присоединились к ${invitation?.company?.title || 'компании'} как ${getRoleLabel(membership.accessRoleId || membership.role)}. Рабочее пространство уже настроено.`);
       } else {
-        authService.persistSession({ token: result.token || temporaryToken, user });
+        authService.persistSession({ user });
         localStorage.removeItem('onboarding_completed');
         localStorage.removeItem('portal_pin_unlocked');
         setSuccessText('Аккаунт создан. Осталось настроить рабочее пространство.');
@@ -278,8 +273,8 @@ export default function AuthWorkspace() {
             <div className="auth-v2__tabs" role="tablist"><button type="button" className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>Вход</button><button type="button" className={mode === 'register' ? 'is-active' : ''} onClick={() => switchMode('register')}>Регистрация</button></div>
           )}
 
-          {invitationMode && inviteState === 'loading' ? <div className="auth-v2__step auth-v2__invite-loading"><span className="auth-v2__invite-loader"/><span className="auth-v2__eyebrow">Проверяем доступ</span><h2>Открываем приглашение</h2><p>Проверяем компанию, роль и срок действия ссылки.</p></div> : null}
-          {invitationMode && inviteState === 'error' ? <div className="auth-v2__step auth-v2__invite-invalid"><span className="auth-v2__eyebrow">Ссылка недоступна</span><h2>Не удалось принять приглашение</h2><p>{inviteError}</p><Link className="auth-v2__secondary-link" to="/auth?mode=login">Перейти к обычному входу</Link></div> : null}
+          {invitationMode && inviteState === 'loading' ? <div className="auth-v2__step auth-v2__invite-loading" role="status" aria-live="polite"><span className="auth-v2__invite-loader"/><span className="auth-v2__eyebrow">Проверяем доступ</span><h2>Открываем приглашение</h2><p>Проверяем компанию, роль и срок действия ссылки.</p></div> : null}
+          {invitationMode && inviteState === 'error' ? <div className="auth-v2__step auth-v2__invite-invalid" role="alert" aria-live="assertive"><span className="auth-v2__eyebrow">Ссылка недоступна</span><h2>Не удалось принять приглашение</h2><p>{inviteError}</p><Link className="auth-v2__secondary-link" to="/auth?mode=login">Перейти к обычному входу</Link></div> : null}
 
           {(inviteState === 'none' || inviteState === 'ready') && step === 'phone' ? (
             <div className="auth-v2__step">
@@ -288,7 +283,7 @@ export default function AuthWorkspace() {
               <p>{invitationMode ? `После SMS-кода вы получите доступ к ${invitation?.company?.title || 'рабочему пространству компании'}.` : (mode === 'login' ? 'Введите номер телефона — пришлём одноразовый код.' : 'Регистрация без пароля. Подтвердите телефон, затем заполните профиль.')}</p>
               <label className="auth-v2__field"><span>Страна</span><select value={country.id} onChange={(event) => { const nextCountry = COUNTRIES.find((item) => item.id === event.target.value); setCountry(nextCountry); setPhoneTail(''); }}><option value="ru">🇷🇺 Россия (+7)</option><option value="kz">🇰🇿 Казахстан (+7)</option><option value="by">🇧🇾 Беларусь (+375)</option></select></label>
               <label className="auth-v2__field"><span>Телефон</span><div className="auth-v2__phone"><b>{country.dial}</b><input value={formatTail(phoneTail, country.digits)} onChange={(event) => setPhoneTail(onlyDigits(event.target.value).slice(0,country.digits))} placeholder={country.placeholder} inputMode="tel" autoComplete="tel" /></div></label>
-              {error ? <div className="auth-v2__error">{error}</div> : null}
+              {error ? <div className="auth-v2__error" role="alert" aria-live="assertive">{error}</div> : null}
               <button className="auth-v2__primary" type="button" disabled={!phoneReady || busy} onClick={requestCode}>{busy ? 'Отправляем…' : 'Получить код'} <ArrowIcon /></button>
               <small className="auth-v2__policy">Телефон нужен для защищённого входа и важных событий аккаунта.</small>
             </div>
@@ -299,8 +294,7 @@ export default function AuthWorkspace() {
               <button className="auth-v2__back" type="button" onClick={() => { setStep('phone'); setError(''); }}>← Назад</button>
               <span className="auth-v2__eyebrow">{invitationMode ? 'Шаг 2 из 3' : 'Подтверждение'}</span><h2>Введите код</h2><p>Код отправлен на <strong>{country.dial} {formatTail(phoneTail, country.digits)}</strong>.</p>
               <OtpInput code={code} setCode={setCode} refs={otpRefs} />
-              {demoMode ? <div className="auth-v2__demo">Демо-режим API · код для проверки: <strong>{authService.demoCode}</strong></div> : null}
-              {error ? <div className="auth-v2__error">{error}</div> : null}
+              {error ? <div className="auth-v2__error" role="alert" aria-live="assertive">{error}</div> : null}
               <button className="auth-v2__primary" type="button" disabled={!otpReady || busy} onClick={verifyCode}>{busy ? 'Проверяем…' : 'Подтвердить'} <ArrowIcon /></button>
               <button className="auth-v2__resend" type="button" disabled={seconds > 0 || busy} onClick={requestCode}>{seconds > 0 ? `Отправить повторно через ${seconds} сек.` : 'Отправить код повторно'}</button>
             </div>
@@ -313,7 +307,7 @@ export default function AuthWorkspace() {
               <label className="auth-v2__field"><span>Email *</span><input value={email} onChange={(event) => !invitationMode && setEmail(event.target.value)} readOnly={invitationMode} autoComplete="email" type="email" placeholder="you@company.ru" /></label>
               {invitationMode ? <div className="auth-v2__pin-grid"><label className="auth-v2__field"><span>Личный PIN *</span><input value={pin} onChange={(event) => setPin(onlyDigits(event.target.value).slice(0,4))} inputMode="numeric" type="password" autoComplete="new-password" placeholder="4 цифры" maxLength={4} /></label><label className="auth-v2__field"><span>Повторите PIN *</span><input value={pinRepeat} onChange={(event) => setPinRepeat(onlyDigits(event.target.value).slice(0,4))} inputMode="numeric" type="password" autoComplete="new-password" placeholder="••••" maxLength={4} /></label>{pinRepeat && !pinReady ? <small className="auth-v2__pin-error">PIN должен состоять из 4 одинаково введённых цифр</small> : null}</div> : null}
               <label className="auth-v2__checkbox"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} /><span>Я принимаю условия использования и политику конфиденциальности</span></label>
-              {error ? <div className="auth-v2__error">{error}</div> : null}
+              {error ? <div className="auth-v2__error" role="alert" aria-live="assertive">{error}</div> : null}
               <button className="auth-v2__primary" type="button" disabled={!profileReady || busy} onClick={completeRegistration}>{busy ? (invitationMode ? 'Подключаем к компании…' : 'Создаём аккаунт…') : (invitationMode ? 'Войти в компанию' : 'Создать аккаунт')} <ArrowIcon /></button>
             </div>
           ) : null}

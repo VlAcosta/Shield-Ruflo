@@ -13,6 +13,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:integration:p0": "test -n \"$TEST_DATABASE_URL\" && DATABASE_URL=\"$TEST_DATABASE_URL\" NODE_ENV=test vitest run test/reviews-tenant.integration.test.ts --reporter=verbose",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

@@ -21,6 +21,7 @@ export const onboardingDraftSchema = z.object({
     confirmed: z.boolean().default(false),
     source: z.string().trim().max(120).default(''),
     demo: z.boolean().default(false),
+    lookupEvidence: z.string().trim().max(8192).default(''),
   }),
   integrations: z.record(z.string().max(80), integrationDraftItem).default({}),
   security: z.object({
@@ -32,6 +33,9 @@ export const onboardingDraftSchema = z.object({
 export const saveOnboardingStateSchema = z.object({
   step: z.number().int().min(0).max(2),
   draft: onboardingDraftSchema,
+}).refine((value) => value.step === value.draft.step, {
+  message: 'Onboarding step must match the draft step',
+  path: ['draft', 'step'],
 });
 
 export const completeOnboardingSchema = z.object({
@@ -45,6 +49,7 @@ export const completeOnboardingSchema = z.object({
     status: z.string().trim().max(160).optional(),
     registrationDate: z.string().trim().max(32).optional(),
     source: z.string().trim().max(120).optional(),
+    lookupEvidence: z.string().trim().max(8192).optional(),
     demo: z.boolean().default(false),
     confirmed: z.literal(true),
   }),

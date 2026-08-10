@@ -6,13 +6,14 @@ export function parseRegistrationDate(value?: string | null): Date | null {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
     const date = new Date(`${normalized}T00:00:00.000Z`);
-    if (!Number.isNaN(date.getTime())) return date;
+    if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === normalized) return date;
   }
 
   const ru = normalized.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (ru) {
-    const date = new Date(`${ru[3]}-${ru[2]}-${ru[1]}T00:00:00.000Z`);
-    if (!Number.isNaN(date.getTime())) return date;
+    const isoDate = `${ru[3]}-${ru[2]}-${ru[1]}`;
+    const date = new Date(`${isoDate}T00:00:00.000Z`);
+    if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === isoDate) return date;
   }
 
   throw new AppError({

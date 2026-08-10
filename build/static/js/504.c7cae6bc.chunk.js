@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkshit_osn=self.webpackChunkshit_osn||[]).push([[504],{504(s,e,t){t.r(e),t.d(e,{default:()=>a});t(5043);var n=t(3216),u=t(579);function a(){return(0,u.jsx)(n.C5,{to:"/faq",replace:!0})}}}]);
+//# sourceMappingURL=504.c7cae6bc.chunk.js.map

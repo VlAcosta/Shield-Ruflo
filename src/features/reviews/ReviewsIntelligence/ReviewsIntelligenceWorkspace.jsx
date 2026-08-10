@@ -86,14 +86,14 @@ export default function ReviewsIntelligenceWorkspace() {
         <div className="reviews-intel-hero__copy">
           <span className="reviews-intel-hero__eyebrow"><i /> REPUTATION OPERATIONS</span>
           <h1>Отзывы, которые требуют<br /><em>решения — сейчас.</em></h1>
-          <p>Единый центр для Яндекс, 2GIS, Ozon, Отзовика и WB: SLA, AI-черновики, согласование, причины негатива и юридическая эскалация.</p>
+          <p>Единый центр для подключённых источников: SLA, локальные черновики, согласование, причины негатива и юридическая эскалация.</p>
           <div className="reviews-intel-hero__mode">
             <span>Режим ответа</span>
             <strong>{intelligence.responseMode.label}</strong>
             <small>{intelligence.responseMode.description}</small>
           </div>
           <div className="reviews-intel-hero__links">
-            {access.can('reputation.view') ? <button type="button" onClick={() => navigate('/reputation')}>Аналитика репутации <span>→</span></button> : null}
+            {access.can('analytics.view') ? <button type="button" onClick={() => navigate('/reputation')}>Аналитика репутации <span>→</span></button> : null}
             {access.can('automations.view') ? <button type="button" onClick={() => navigate('/automations')}>Автоматизации <span>→</span></button> : null}
           </div>
         </div>
@@ -109,14 +109,14 @@ export default function ReviewsIntelligenceWorkspace() {
             <i className="reviews-pulse-ring__orbit reviews-pulse-ring__orbit--two" />
           </div>
           <div className="reviews-intel-hero__signal">
-            <span><i /> мониторинг активен</span>
+            <span><i /> данные из вашего рабочего пространства</span>
             <strong>{intelligence.metrics.overdue ? `${intelligence.metrics.overdue} SLA требуют реакции` : 'Критических просрочек нет'}</strong>
           </div>
         </div>
       </section>
 
       <section className="reviews-intel-metrics" aria-label="Метрики отзывов">
-        <article className="is-violet"><span>В работе</span><strong>{queueCounts.inbox}</strong><small>5 основных площадок</small><i /></article>
+        <article className="is-violet"><span>В работе</span><strong>{queueCounts.inbox}</strong><small>по доступным источникам</small><i /></article>
         <article className="is-red"><span>Негатив 1–3★</span><strong>{intelligence.metrics.negative}</strong><small>{intelligence.metrics.overdue ? `${intelligence.metrics.overdue} просрочено по SLA` : 'все в срок'}</small><i /></article>
         <article className="is-amber"><span>Согласование</span><strong>{intelligence.metrics.awaiting}</strong><small>ждут руководителя</small><i /></article>
         <article className="is-green"><span>Средний рейтинг</span><strong>{intelligence.metrics.average || '—'}</strong><small>по текущей выборке</small><i /></article>
@@ -184,6 +184,13 @@ export default function ReviewsIntelligenceWorkspace() {
             working={intelligence.working}
           />
         </section>
+      ) : null}
+      {!intelligence.loading && !intelligence.error && intelligence.pagination.pages > 1 ? (
+        <nav className="reviews-intel-pagination" aria-label="Страницы отзывов">
+          <button type="button" disabled={intelligence.pagination.page <= 1} onClick={() => intelligence.goToPage(intelligence.pagination.page - 1)}>← Назад</button>
+          <span>Страница {intelligence.pagination.page} из {intelligence.pagination.pages} · {intelligence.pagination.total} отзывов</span>
+          <button type="button" disabled={intelligence.pagination.page >= intelligence.pagination.pages} onClick={() => intelligence.goToPage(intelligence.pagination.page + 1)}>Далее →</button>
+        </nav>
       ) : null}
 
       <ReviewSettingsModal open={settingsOpen} settings={intelligence.settings} onClose={() => setSettingsOpen(false)} onSave={intelligence.updateSettings} />

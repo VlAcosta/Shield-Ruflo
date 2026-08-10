@@ -1,11 +1,8 @@
 import { getRuntimeEnv } from '../core/runtimeEnv';
-import { DEFAULT_REVIEWS, REVIEW_STATUS, REVIEW_WORKFLOW } from '../../features/reviews/model/reviewData';
-import { getCompanyScope, readScopedJson, writeScopedJson } from '../core/dataScope';
+import { REVIEW_STATUS, REVIEW_WORKFLOW } from '../../features/reviews/model/reviewData';
 import { apiRequest, joinEndpoint } from '../core/apiClient';
-import { isDemoDataEnabled } from '../core/runtimeConfig';
 
-const STORAGE_KEY = 'business-shield:reviews';
-const API_ENDPOINT = String(getRuntimeEnv('REVIEWS_ENDPOINT')).replace(/\/$/, '');
+const API_ENDPOINT = String(getRuntimeEnv('REVIEWS_ENDPOINT') || joinEndpoint(getRuntimeEnv('API_BASE', '/api/v1'), '/reviews')).replace(/\/$/, '');
 export const REVIEWS_CHANGED_EVENT = 'business-shield:reviews-changed';
 
 
@@ -16,16 +13,23 @@ function normalizeReview(item = {}, index = 0) {
       : status === REVIEW_STATUS.DEFERRED ? REVIEW_WORKFLOW.DRAFT
         : REVIEW_WORKFLOW.INBOX
   );
+  const normalizedWorkflowStatus = workflowStatus === 'awaiting_approval' ? REVIEW_WORKFLOW.APPROVAL : workflowStatus;
   const fallbackDate = new Date(Date.now() - (index + 1) * 75 * 60 * 1000);
   const fallbackCreatedAt = fallbackDate.toISOString();
   const hasCreatedAt = Boolean(item.createdAt);
+  const createdAt = item.createdAt || fallbackCreatedAt;
+  const createdDate = new Date(createdAt);
+  const author = item.author || 'Гость';
   return {
     ...item,
+    author,
+    initials: item.initials || author.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'Г',
+    source: item.source || item.location?.name || item.business?.name || item.provider || 'Источник',
     status,
-    workflowStatus,
-    createdAt: item.createdAt || fallbackCreatedAt,
-    date: hasCreatedAt ? item.date : 'сегодня',
-    time: hasCreatedAt ? item.time : fallbackDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+    workflowStatus: normalizedWorkflowStatus,
+    createdAt,
+    date: item.date || (hasCreatedAt ? createdDate.toLocaleDateString('ru-RU') : 'сегодня'),
+    time: item.time || createdDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
     tags: Array.isArray(item.tags) ? item.tags : [],
     aiReasons: Array.isArray(item.aiReasons) ? item.aiReasons : (Array.isArray(item.tags) ? item.tags : []),
     reply: item.reply || '',
@@ -36,17 +40,7 @@ function normalizeReview(item = {}, index = 0) {
 }
 
 function normalizeReviews(items = []) {
-  const normalized = (Array.isArray(items) ? items : []).map(normalizeReview);
-  if (!isDemoDataEnabled()) return normalized;
-  const ids = new Set(normalized.map((item) => item.id));
-  const platforms = new Set(normalized.map((item) => item.platform));
-  const missingPrimaryDemo = DEFAULT_REVIEWS.filter((item) => !ids.has(item.id) && ['Ozon', 'WB'].includes(item.platform) && !platforms.has(item.platform));
-  return [...normalized, ...missingPrimaryDemo.map((item, index) => normalizeReview(item, normalized.length + index))];
-}
-
-function cloneDefaultReviews() {
-  if (!isDemoDataEnabled()) return [];
-  return DEFAULT_REVIEWS.map((item, index) => normalizeReview({ ...item, tags: [...(item.tags || [])], aiReasons: [...(item.aiReasons || [])] }, index));
+  return (Array.isArray(items) ? items : []).map(normalizeReview);
 }
 
 function emitReviewsChanged(reviews) {
@@ -56,79 +50,44 @@ function emitReviewsChanged(reviews) {
   }));
 }
 
-function readLocalReviews() {
-  const parsed = readScopedJson(STORAGE_KEY, { scope: getCompanyScope(), legacy: true, fallback: null });
-  if (Array.isArray(parsed)) return normalizeReviews(parsed);
-  const seeded = cloneDefaultReviews();
-  writeScopedJson(STORAGE_KEY, seeded, { scope: getCompanyScope() });
-  return seeded;
-}
-
-function writeLocalReviews(reviews, { emit = true } = {}) {
-  writeScopedJson(STORAGE_KEY, reviews, { scope: getCompanyScope() });
-  if (emit && typeof window !== 'undefined') emitReviewsChanged(reviews);
-  return reviews;
-}
-
 async function request(path = '', options = {}) {
-  if (!API_ENDPOINT) return null;
   return apiRequest(joinEndpoint(API_ENDPOINT, path), { ...options, timeout: 8000 });
 }
 
 export function getCachedReviews() {
-  return readLocalReviews();
+  return [];
 }
 
-export async function getReviews({ signal } = {}) {
-  if (!API_ENDPOINT) return readLocalReviews();
-
-  try {
-    const payload = await request('', { signal });
-    const reviews = Array.isArray(payload) ? payload : payload?.items;
-    if (Array.isArray(reviews)) writeLocalReviews(normalizeReviews(reviews), { emit: false });
-    return Array.isArray(reviews) ? normalizeReviews(reviews) : readLocalReviews();
-  } catch (error) {
-    if (error?.name === 'AbortError') throw error;
-    return readLocalReviews();
-  }
+export async function getReviews({ signal, page = 1, pageSize = 30, ...filters } = {}) {
+  const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+  });
+  const payload = await request(`?${query.toString()}`, { signal });
+  const reviews = Array.isArray(payload) ? payload : payload?.items;
+  if (!Array.isArray(reviews)) throw new Error('Сервер вернул некорректный список отзывов');
+  return { items: normalizeReviews(reviews), pagination: payload?.pagination || { page, pageSize, total: reviews.length, pages: 1 } };
 }
 
 export async function updateReview(reviewId, patch) {
-  const local = readLocalReviews().map((item) => (
-    item.id === reviewId ? { ...item, ...patch } : item
-  ));
-  writeLocalReviews(local);
-
-  if (API_ENDPOINT) {
-    request(`/${reviewId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(patch),
-    }).catch(() => {});
-  }
-
-  return local;
+  const allowed = ['status', 'workflowStatus', 'tags'].reduce((result, key) => (
+    patch[key] === undefined ? result : { ...result, [key]: patch[key] }
+  ), {});
+  const payload = await request(`/${reviewId}`, { method: 'PATCH', body: allowed });
+  if (!payload?.review) throw new Error('Сервер не подтвердил изменение отзыва');
+  emitReviewsChanged([normalizeReview(payload.review)]);
+  return normalizeReview(payload.review);
 }
 
-export async function submitReviewReply(reviewId, reply) {
-  const patch = {
-    reply: String(reply || '').trim(),
-    status: REVIEW_STATUS.DONE,
-    workflowStatus: REVIEW_WORKFLOW.PUBLISHED,
-    repliedAt: new Date().toISOString(),
-  };
-
-  const local = await updateReview(reviewId, patch);
-
-  if (API_ENDPOINT) {
-    request(`/${reviewId}/reply`, {
-      method: 'POST',
-      body: JSON.stringify({ text: patch.reply }),
-    }).catch(() => {});
-  }
-
-  return local;
+export async function submitReviewReply(reviewId, reply, { publish = false } = {}) {
+  const text = String(reply || '').trim();
+  if (!text) throw new Error('Ответ пуст');
+  const payload = await request(`/${reviewId}/reply`, { method: 'POST', body: { text, publish } });
+  if (!payload?.review) throw new Error('Сервер не подтвердил сохранение ответа');
+  return normalizeReview(payload.review);
 }
 
-export function getPendingReviewsCount() {
-  return readLocalReviews().filter((item) => item.status === REVIEW_STATUS.NEW).length;
+export async function getPendingReviewsCount({ signal } = {}) {
+  const payload = await request('?status=new&page=1&pageSize=1', { signal });
+  return Number(payload?.pagination?.total || 0);
 }

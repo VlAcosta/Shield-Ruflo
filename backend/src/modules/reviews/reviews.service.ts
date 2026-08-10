@@ -152,6 +152,13 @@ async function syncTags(tx: any, organizationId: string, reviewId: string, names
 export async function updateReview(app: FastifyInstance, request: FastifyRequest, reviewId: string, patch: any) {
   const organizationId = request.auth!.organizationId!;
   await requireTenantReview(app, organizationId, reviewId);
+  if (patch.workflowStatus !== undefined && normalizeWorkflow(patch.workflowStatus) === 'PUBLISHED') {
+    throw new AppError({
+      code: 'REVIEW_PUBLISH_NOT_AVAILABLE',
+      message: 'Публикация ответа во внешнем источнике не настроена',
+      statusCode: 422,
+    });
+  }
   await app.prisma.$transaction(async (tx) => {
     await tx.review.update({
       where: { id: reviewId },
@@ -179,8 +186,13 @@ export async function updateReview(app: FastifyInstance, request: FastifyRequest
 export async function replyToReview(app: FastifyInstance, request: FastifyRequest, reviewId: string, body: { text: string; publish: boolean }) {
   const organizationId = request.auth!.organizationId!;
   await requireTenantReview(app, organizationId, reviewId);
-  const status = body.publish ? 'PUBLISHED' : 'DRAFT';
-  const now = new Date();
+  if (body.publish) {
+    throw new AppError({
+      code: 'REVIEW_PUBLISH_NOT_AVAILABLE',
+      message: 'Публикация ответа во внешнем источнике не настроена',
+      statusCode: 422,
+    });
+  }
   await app.prisma.$transaction(async (tx) => {
     await tx.reviewReply.create({
       data: {
@@ -188,21 +200,18 @@ export async function replyToReview(app: FastifyInstance, request: FastifyReques
         reviewId,
         authorUserId: request.auth!.userId,
         text: body.text,
-        status,
-        ...(body.publish ? { publishedAt: now } : {}),
+        status: 'DRAFT',
       },
     });
     await tx.review.update({
       where: { id: reviewId },
-      data: body.publish
-        ? { status: 'DONE', workflowStatus: 'PUBLISHED', repliedAt: now }
-        : { status: 'DEFERRED', workflowStatus: 'DRAFT' },
+      data: { status: 'DEFERRED', workflowStatus: 'DRAFT' },
     });
     await tx.auditLog.create({
       data: {
         organizationId,
         actorUserId: request.auth!.userId,
-        action: body.publish ? 'review.reply.published' : 'review.reply.drafted',
+        action: 'review.reply.drafted',
         entityType: 'review',
         entityId: reviewId,
         ...auditContext(request),
@@ -256,7 +265,12 @@ export async function updateSource(app: FastifyInstance, request: FastifyRequest
   const organizationId = request.auth!.organizationId!;
   const existing = await app.prisma.reviewSource.findFirst({ where: { id: sourceId, organizationId } });
   if (!existing) throw new AppError({ code: 'REVIEW_SOURCE_NOT_FOUND', message: 'Источник отзывов не найден', statusCode: 404 });
-  if (body.locationId) await requireActiveLocation(app, organizationId, body.locationId);
+  if (body.locationId) {
+    const location = await requireActiveLocation(app, organizationId, body.locationId);
+    if (location.business.id !== existing.businessId) {
+      throw new AppError({ code: 'LOCATION_NOT_FOUND', message: 'Филиал не найден', statusCode: 404 });
+    }
+  }
   return { source: await app.prisma.reviewSource.update({ where: { id: sourceId }, data: body }) };
 }
 
@@ -275,7 +289,12 @@ export async function seedReview(app: FastifyInstance, request: FastifyRequest, 
   const organizationId = request.auth!.organizationId!;
   const source = await app.prisma.reviewSource.findFirst({ where: { id: body.sourceId, organizationId, businessId: body.businessId } });
   if (!source) throw new AppError({ code: 'REVIEW_SOURCE_NOT_FOUND', message: 'Источник отзывов не найден', statusCode: 404 });
-  if (body.locationId) await requireActiveLocation(app, organizationId, body.locationId);
+  if (body.locationId) {
+    const location = await requireActiveLocation(app, organizationId, body.locationId);
+    if (location.business.id !== body.businessId) {
+      throw new AppError({ code: 'LOCATION_NOT_FOUND', message: 'Филиал не найден', statusCode: 404 });
+    }
+  }
   let authorId: string | null = null;
   if (body.author) {
     const externalId = body.author.externalId || `local:${body.author.name.toLowerCase()}`;

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { effectivePermissions, type PermissionOverrides } from '../../core/rbac/permissions.js';
 import { presentUser, publicUserInclude } from '../auth/auth.presenter.js';
@@ -13,6 +14,9 @@ export const publicOrganizationSelect = {
   onboardingCompletedAt: true,
   timezone: true,
   locale: true,
+  legalName: true,
+  industry: true,
+  website: true,
   legalType: true,
   inn: true,
   kpp: true,
@@ -45,8 +49,12 @@ export function createOrganizationSlug(name: string): string {
   return `${slugBase(name)}-${randomBytes(4).toString('hex')}`.slice(0, 120);
 }
 
-export async function ensureUserWorkspace(app: FastifyInstance, userId: string, displayName = ''): Promise<string> {
-  const existing = await app.prisma.organizationMember.findFirst({
+export async function ensureUserWorkspaceWithClient(
+  prisma: Prisma.TransactionClient,
+  userId: string,
+  displayName = '',
+): Promise<string> {
+  const existing = await prisma.organizationMember.findFirst({
     where: { userId, status: 'ACTIVE', AND: [{ OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: new Date() } }] }], organization: { status: 'ACTIVE' } },
     orderBy: { createdAt: 'asc' },
     select: { organizationId: true },
@@ -54,7 +62,7 @@ export async function ensureUserWorkspace(app: FastifyInstance, userId: string, 
   if (existing) return existing.organizationId;
 
   const workspaceName = displayName ? `Пространство ${displayName}` : 'Рабочее пространство';
-  const created = await app.prisma.organization.create({
+  const created = await prisma.organization.create({
     data: {
       name: workspaceName,
       slug: createOrganizationSlug(workspaceName),
@@ -65,6 +73,10 @@ export async function ensureUserWorkspace(app: FastifyInstance, userId: string, 
     select: { id: true },
   });
   return created.id;
+}
+
+export async function ensureUserWorkspace(app: FastifyInstance, userId: string, displayName = ''): Promise<string> {
+  return app.prisma.$transaction((tx) => ensureUserWorkspaceWithClient(tx, userId, displayName));
 }
 
 export async function listOrganizations(app: FastifyInstance, userId: string) {
@@ -99,8 +111,28 @@ export async function requireOrganizationMembership(app: FastifyInstance, userId
 
 export async function selectOrganization(app: FastifyInstance, request: FastifyRequest, organizationId: string) {
   if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
-  await requireOrganizationMembership(app, request.auth.userId, organizationId);
-  await app.prisma.session.update({ where: { id: request.auth.sessionId }, data: { activeOrganizationId: organizationId } });
+  await app.prisma.$transaction(async (tx) => {
+    const membership = await tx.organizationMember.findUnique({
+      where: { organizationId_userId: { organizationId, userId: request.auth!.userId } },
+      include: { organization: { select: { status: true } } },
+    });
+    if (!membership || membership.status !== 'ACTIVE' || membership.organization.status !== 'ACTIVE' || (membership.accessExpiresAt && membership.accessExpiresAt <= new Date())) {
+      throw new AppError({ code: 'ORGANIZATION_NOT_FOUND', message: 'Рабочее пространство не найдено', statusCode: 404 });
+    }
+    await tx.session.update({ where: { id: request.auth!.sessionId }, data: { activeOrganizationId: organizationId } });
+    await tx.auditLog.create({
+      data: {
+        organizationId,
+        actorUserId: request.auth!.userId,
+        action: 'organization.selected',
+        entityType: 'organization',
+        entityId: organizationId,
+        metadata: { switchedFromAnotherOrganization: request.auth!.organizationId !== null },
+        ipAddress: request.ip,
+        userAgent: String(request.headers['user-agent'] ?? '').slice(0, 2048),
+      },
+    });
+  });
   const user = await app.prisma.user.findUniqueOrThrow({ where: { id: request.auth.userId }, include: publicUserInclude });
   return { ok: true, user: presentUser(user, organizationId) };
 }

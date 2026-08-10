@@ -244,6 +244,6 @@ export async function getReputationAnalytics({ days = 30, signal } = {}) {
       if (error?.name === 'AbortError') throw error;
     }
   }
-  const [reviews, settings] = await Promise.all([getReviews({ signal }), getReviewSettings({ signal })]);
-  return buildReputationAnalytics(reviews, settings, days);
+  const [reviewResult, settings] = await Promise.all([getReviews({ signal, pageSize: 100 }), getReviewSettings({ signal })]);
+  return buildReputationAnalytics(reviewResult.items, settings, days);
 }

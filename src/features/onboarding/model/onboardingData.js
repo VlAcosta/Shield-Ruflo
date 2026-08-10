@@ -42,6 +42,7 @@ export function createDefaultOnboardingDraft() {
       registrationDate: '',
       confirmed: false,
       source: '',
+      lookupEvidence: '',
       demo: false,
     },
     integrations: createDefaultIntegrations(),

@@ -8,7 +8,7 @@ import { getAccountScope, readScopedJson, writeScopedJson } from '../core/dataSc
 import { apiRequest, joinEndpoint } from '../core/apiClient';
 import { isDemoDataEnabled } from '../core/runtimeConfig';
 
-const PROFILE_ENDPOINT = getRuntimeEnv('PROFILE_ENDPOINT');
+const PROFILE_ENDPOINT = String(getRuntimeEnv('PROFILE_ENDPOINT', getRuntimeEnv('API_BASE', '/api/v1'))).replace(/\/$/, '');
 export const PROFILE_CACHE_KEY = 'business-shield:profile:snapshot:v1';
 export const PROFILE_CHANGED_EVENT = 'business-shield:profile-changed';
 
@@ -163,14 +163,12 @@ function normalizeSnapshot(value) {
 export async function getProfileSnapshot({ signal } = {}) {
   let remote = null;
   try {
-    remote = await request('', { signal });
+    remote = await request('/company/profile', { signal });
   } catch (error) {
-    if (error?.name === 'AbortError') throw error;
-    const cachedSnapshot = readCache();
-    if (!cachedSnapshot) throw error;
+    throw error;
   }
   if (remote) {
-    const snapshot = overlayCurrentUserPersonal(normalizeSnapshot(remote));
+    const snapshot = overlayCurrentUserPersonal(normalizeSnapshot({ ...(readCache() || {}), company: remote.company }));
     writeCache(snapshot, { emit: false });
     return snapshot;
   }
@@ -222,13 +220,13 @@ export async function savePersonalProfile(personal, snapshot) {
 }
 
 export async function saveCompanyProfile(company, snapshot) {
-  const remote = await request('/company', {
+  const remote = await request('/company/profile', {
     method: 'PATCH',
     body: JSON.stringify(company),
   });
 
   if (remote) {
-    const normalized = normalizeSnapshot(remote.snapshot || remote);
+    const normalized = normalizeSnapshot({ ...snapshot, company: remote.company || remote.snapshot?.company });
     writeCache(normalized);
     writeOrganizationMirror(normalized.company);
     return normalized;
@@ -265,12 +263,12 @@ export async function syncProfileCompanyFromOnboarding(organization) {
   if (!PROFILE_ENDPOINT) return localSnapshot;
 
   try {
-    const remote = await request('/company', {
+    const remote = await request('/company/profile', {
       method: 'PATCH',
       body: JSON.stringify(company),
     });
     if (!remote) return localSnapshot;
-    const normalized = normalizeSnapshot(remote.snapshot || remote);
+    const normalized = normalizeSnapshot({ ...current, company: remote.company || remote.snapshot?.company });
     writeCache(normalized);
     writeOrganizationMirror(normalized.company);
     return normalized;

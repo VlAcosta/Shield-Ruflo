@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 const booleanFromString = z
@@ -7,6 +8,33 @@ const booleanFromString = z
 
 const optionalUrl = z.union([z.literal(''), z.string().url()]).default('');
 
+function isTrustedProxyEntry(value: string): boolean {
+  if (value === 'loopback') return true;
+  const [address, prefix, ...rest] = value.split('/');
+  if (!address || rest.length > 0) return false;
+  const family = isIP(address);
+  if (family === 0) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d+$/.test(prefix)) return false;
+  const prefixLength = Number(prefix);
+  return prefixLength >= 0 && prefixLength <= (family === 4 ? 32 : 128);
+}
+
+export function parseTrustedProxyConfig(value: string): false | string[] {
+  const entries = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  return entries.length === 0 ? false : entries;
+}
+
+export function isTrustedProxyConfig(value: string): boolean {
+  const parsed = parseTrustedProxyConfig(value);
+  return parsed === false || parsed.every(isTrustedProxyEntry);
+}
+
+const trustedProxySchema = z.string().default('').refine(
+  isTrustedProxyConfig,
+  'TRUST_PROXY must contain only exact IPs, CIDRs, or loopback',
+).transform(parseTrustedProxyConfig);
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -14,6 +42,9 @@ const envSchema = z
     APP_VERSION: z.string().min(1).default('0.5.0'),
     HOST: z.string().min(1).default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).default(8081),
+    // Disabled unless the deployment explicitly identifies its trusted edge.
+    // This keeps request.ip resistant to spoofed forwarding headers.
+    TRUST_PROXY: trustedProxySchema,
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
@@ -37,7 +68,9 @@ const envSchema = z
     AUTH_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default('bs_session'),
     AUTH_COOKIE_DOMAIN: z.string().regex(/^$|^\.?[A-Za-z0-9.-]+$/).default(''),
     AUTH_COOKIE_SECURE: booleanFromString.default(false),
-    AUTH_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+    // Cookie-authenticated mutation routes do not yet have a dedicated CSRF
+    // token mechanism. Cross-site cookies must therefore remain disabled.
+    AUTH_COOKIE_SAME_SITE: z.enum(['lax', 'strict']).default('lax'),
 
     AUTH_OTP_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
     AUTH_OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
@@ -70,14 +103,6 @@ const envSchema = z
         code: 'custom',
         path: ['AUTH_OTP_WEBHOOK_URL'],
         message: 'AUTH_OTP_WEBHOOK_URL is required when AUTH_OTP_PROVIDER=webhook',
-      });
-    }
-
-    if (value.AUTH_COOKIE_SAME_SITE === 'none' && !value.AUTH_COOKIE_SECURE) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['AUTH_COOKIE_SECURE'],
-        message: 'AUTH_COOKIE_SECURE must be true when AUTH_COOKIE_SAME_SITE=none',
       });
     }
 

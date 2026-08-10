@@ -5,6 +5,8 @@ import { AppError } from '../../core/errors/app-error.js';
 import { completeOnboardingSchema, saveOnboardingStateSchema } from './onboarding.schemas.js';
 import { parseRegistrationDate, validateCompanyIdentifiers } from '../../shared/domain/company.js';
 import { presentUser, publicUserInclude } from '../auth/auth.presenter.js';
+import { verifyCompanyLookupEvidence, type CompanyLookupResult } from '../company/company.service.js';
+import { env } from '../../config/env.js';
 
 export async function getOnboardingState(app: FastifyInstance, organizationId: string) {
   const organization = await app.prisma.organization.findUnique({
@@ -83,9 +85,24 @@ export async function completeOnboarding(
   });
 
   const now = new Date();
-  const registryTrusted = Boolean(input.organization.source)
-    && input.organization.source !== 'Ручной ввод'
-    && !input.organization.demo;
+  const evidenceCompany: CompanyLookupResult = {
+    type: input.organization.type,
+    title: input.organization.title,
+    inn: input.organization.inn,
+    ...(input.organization.kpp ? { kpp: input.organization.kpp } : {}),
+    ...(input.organization.ogrn ? { ogrn: input.organization.ogrn } : {}),
+    ...(input.organization.address ? { address: input.organization.address } : {}),
+    ...(input.organization.status ? { status: input.organization.status } : {}),
+    ...(input.organization.registrationDate ? { registrationDate: input.organization.registrationDate } : {}),
+  };
+  const verifiedEvidence = verifyCompanyLookupEvidence(input.organization.lookupEvidence, evidenceCompany, {
+    organizationId,
+    userId: request.auth.userId,
+  }, now.getTime());
+  const registryTrusted = env.COMPANY_LOOKUP_PROVIDER === 'webhook' && verifiedEvidence?.provider === 'webhook';
+  const registrySource = registryTrusted
+    ? verifiedEvidence.source
+    : (verifiedEvidence?.provider === 'mock' ? 'demo' : 'manual');
 
   await app.prisma.$transaction(async (tx) => {
     const membership = await tx.organizationMember.findUnique({
@@ -95,10 +112,13 @@ export async function completeOnboarding(
       throw new AppError({ code: 'ORGANIZATION_NOT_FOUND', message: 'Рабочее пространство не найдено', statusCode: 404 });
     }
 
-    await tx.organization.update({
-      where: { id: organizationId },
+    const completed = await tx.organization.updateMany({
+      where: { id: organizationId, onboardingStatus: { not: 'COMPLETED' } },
       data: {
         name: input.organization.title,
+        legalName: input.organization.title,
+        industry: input.business?.industry || null,
+        website: input.business?.website || null,
         legalType: input.organization.type,
         inn: input.organization.inn,
         kpp: input.organization.kpp || null,
@@ -106,7 +126,7 @@ export async function completeOnboarding(
         legalAddress: input.organization.address || null,
         legalStatus: input.organization.status || null,
         registrationDate: parseRegistrationDate(input.organization.registrationDate),
-        registrySource: input.organization.source || (input.organization.demo ? 'demo' : 'manual'),
+        registrySource,
         registryVerifiedAt: registryTrusted ? now : null,
         onboardingStatus: 'COMPLETED',
         onboardingStep: 2,
@@ -114,6 +134,9 @@ export async function completeOnboarding(
         onboardingCompletedAt: now,
       },
     });
+    if (completed.count !== 1) {
+      throw new AppError({ code: 'ONBOARDING_ALREADY_COMPLETED', message: 'Первичная настройка уже завершена', statusCode: 409 });
+    }
 
     let primary = await tx.business.findFirst({
       where: { organizationId, status: 'ACTIVE', isPrimary: true },

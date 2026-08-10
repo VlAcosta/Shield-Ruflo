@@ -55,7 +55,7 @@ function ReviewInspector({
     );
   }
 
-  const submitLabel = mode.id === 'approval' ? 'На согласование' : mode.id === 'shield' ? 'Передать Бизнес Щит' : isPublished ? 'Обновить ответ' : 'Опубликовать ответ';
+  const submitLabel = 'Сохранить локальный черновик';
 
   return (
     <section className="reviews-intel__inspector" aria-label="Работа с отзывом">
@@ -114,7 +114,7 @@ function ReviewInspector({
           <textarea
             value={reply}
             onChange={(event) => setReply(event.target.value)}
-            placeholder={mode.id === 'shield' ? 'Добавьте комментарий для команды Бизнес Щит…' : 'Подготовьте ответ или создайте AI-черновик…'}
+            placeholder="Подготовьте ответ или создайте AI-черновик…"
             rows={8}
             maxLength={1400}
             readOnly={!canReply || isPublished}
@@ -139,8 +139,7 @@ function ReviewInspector({
         <div className="reviews-copilot__actions">
           {!isPublished && !isApproval && !isApproved ? (
             <>
-              <button type="button" className="is-secondary" onClick={() => onSaveDraft(reply)} disabled={!canReply || !reply.trim() || working.startsWith('draft:')}>Сохранить черновик</button>
-              <button type="button" className="is-primary" onClick={() => onSubmit(reply)} disabled={!canReply || (mode.id !== 'shield' && !reply.trim()) || Boolean(working)}>{submitLabel}</button>
+              <button type="button" className="is-primary" onClick={() => onSubmit(reply)} disabled={!canReply || !reply.trim() || Boolean(working)}>{submitLabel}</button>
             </>
           ) : null}
 
@@ -161,8 +160,8 @@ function ReviewInspector({
 
           {isApproved ? (
             <div className="reviews-copilot__approved">
-              <div><span>✓</span><div><strong>Ответ согласован</strong><small>Можно публиковать на {review.platform}</small></div></div>
-              <button type="button" className="is-primary" onClick={onPublishApproved} disabled={!canApprove || Boolean(working)}>Опубликовать</button>
+              <div><span>✓</span><div><strong>Ответ согласован</strong><small>Готов к публикации после подключения {review.platform}</small></div></div>
+              <button type="button" className="is-primary" disabled title="Публикация через площадку пока не настроена">Ожидает публикации</button>
             </div>
           ) : null}
 

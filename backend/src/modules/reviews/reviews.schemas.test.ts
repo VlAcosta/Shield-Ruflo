@@ -14,6 +14,13 @@ describe('reviews schemas', () => {
     expect(() => replySchema.parse({ text: '   ' })).toThrow();
   });
 
+  it('defaults replies to a truthful local draft', () => {
+    expect(replySchema.parse({ text: 'Спасибо за отзыв' })).toEqual({
+      text: 'Спасибо за отзыв',
+      publish: false,
+    });
+  });
+
   it('accepts the frontend review statuses', () => {
     expect(updateReviewSchema.parse({ status: 'done', workflowStatus: 'published', tags: ['важно'] })).toEqual({
       status: 'done',

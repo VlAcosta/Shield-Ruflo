@@ -191,6 +191,11 @@
   .reviews-settings-layer *, .reviews-legal-layer * { animation:none !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
 
+.reviews-intel-pagination { margin:14px 0 0;display:flex;align-items:center;justify-content:center;gap:14px;color:$color-text-secondary;font-size:12px }
+.reviews-intel-pagination button { min-height:38px;padding:0 14px;border:1px solid $color-border;border-radius:10px;color:inherit;background:#fff;cursor:pointer;font:inherit;font-weight:700 }
+.reviews-intel-pagination button:disabled { opacity:.45;cursor:not-allowed }
+@media (max-width:540px) { .reviews-intel-pagination { align-items:stretch;flex-direction:column;text-align:center }.reviews-intel-pagination button { width:100% } }
+
 .reviews-intel-workspace--loading {
   min-height: 620px;
   grid-template-columns: minmax(315px, .78fr) minmax(480px, 1.32fr) minmax(240px, .62fr);

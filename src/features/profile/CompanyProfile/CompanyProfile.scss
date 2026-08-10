@@ -1,6 +1,8 @@
 @use '../../../styles/tokens' as *;
 @use '../../../styles/mixins' as *;
 
+.company-profile-stack { display: grid; gap: 20px; max-width: 920px; }
+
 .company-profile {
   @include card-surface;
   max-width: 780px;
@@ -121,6 +123,80 @@
     }
   }
 }
+
+.business-manager {
+  @include card-surface;
+  padding: 26px;
+  color: $color-text;
+  header span { color: $color-primary; font-size: 8px; font-weight: 720; letter-spacing: .08em; text-transform: uppercase; }
+  header h2 { margin: 4px 0; font-family: $font-family-display; font-size: 18px; }
+  header p { margin: 0; color: $color-text-muted; font-size: 10px; line-height: 1.55; }
+  &--state { min-height: 150px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 9px; color: $color-text-muted; font-size: 11px; }
+  &--state button, button { @include focus-ring; min-height: 34px; padding: 0 11px; border: 1px solid rgba(102,97,245,.18); border-radius: 10px; color: $color-primary; background: $color-primary-soft; font: inherit; font-size: 9px; font-weight: 680; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: wait; }
+  button.is-danger { color: #ba4054; border-color: rgba(186,64,84,.13); background: rgba(186,64,84,.06); }
+  &__notice { margin: 16px 0; padding: 10px 12px; border-radius: 10px; font-size: 10px; background: rgba(22,191,131,.08); color: #168c68; &.is-error { color: #ba4054; background: rgba(186,64,84,.07); } }
+  &__empty, .location-list__empty { padding: 18px; display: grid; gap: 4px; color: $color-text-muted; font-size: 9px; text-align: center; }
+  &__empty strong { color: $color-text-secondary; font-size: 11px; }
+  &__list { display: grid; gap: 12px; margin-top: 18px; }
+  &__readonly { color: $color-text-muted; font-size: 9px; }
+}
+
+.business-card { padding: 16px; border: 1px solid rgba(223,227,239,.8); border-radius: 15px; background: $color-surface-soft; }
+.business-card__head, .location-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.business-card__head > div:first-child, .location-row > div:first-child { display: grid; gap: 4px; }
+.business-card__head strong { font-size: 12px; }
+.business-card__head span, .location-row span { color: $color-text-muted; font-size: 8px; }
+.business-card__actions, .location-row > div:last-child { display: flex; gap: 7px; }
+.location-list { display: grid; gap: 8px; margin: 14px 0; }
+.location-row { padding: 10px 12px; border-radius: 11px; background: #fff; }
+.location-row strong { font-size: 10px; }
+.location-form, .business-create > div, .entity-edit { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)) auto; gap: 8px; }
+.location-form input, .business-create input, .entity-edit input { min-width: 0; min-height: 38px; padding: 0 10px; border: 1px solid rgba(223,227,239,.9); border-radius: 10px; background: #fff; color: $color-text; font: inherit; font-size: 9px; }
+.entity-edit { margin: 12px 0; }
+.entity-edit--location { padding: 0 12px 10px; }
+.location-row-wrap { border-radius: 11px; background: #fff; }
+.business-create { margin-top: 18px; padding-top: 18px; display: grid; gap: 10px; border-top: 1px solid rgba(231,234,244,.88); strong { font-size: 11px; } }
+
+@media (max-width: 700px) {
+  .business-manager { padding: 18px; }
+  .business-card__head, .location-row { align-items: flex-start; flex-direction: column; }
+  .location-form, .business-create > div, .entity-edit { grid-template-columns: 1fr; }
+}
+
+body.portal-dark-active .business-manager,
+body.portal-dark-active .business-card { color: #edf1ff; background: #111a2b; border-color: rgba(139,151,190,.14); }
+body.portal-dark-active .location-row,
+body.portal-dark-active .location-row-wrap { background: #151f32; }
+body.portal-dark-active :is(.location-form,.business-create,.entity-edit) input { color: #edf1ff; background: #101929; border-color: rgba(139,151,190,.18); }
+
+/* P3 account surfaces use normal browser-readable type at 100% zoom. */
+.company-profile__header p,
+.company-profile__field span,
+.company-profile__verified,
+.company-profile__registry > div p,
+.company-profile__registry :is(dt,dd),
+.business-manager header p,
+.business-manager__notice,
+.business-manager__empty,
+.business-manager__readonly,
+.business-card__head span,
+.location-row span { font-size: 12px; }
+.company-profile__field input,
+.location-form input,
+.business-create input,
+.entity-edit input { font-size: 14px; }
+.business-manager button,
+.company-profile footer button { font-size: 12px; }
+.business-card__head strong { font-size: 15px; }
+.location-row strong,
+.business-create strong { font-size: 14px; }
+.company-profile__field small { color: #ba4054; font-size: 12px; line-height: 1.35; }
+
+body.portal-dark-active .business-manager :is(h2,strong) { color: #edf1ff; }
+body.portal-dark-active .business-manager :is(p,span,.business-manager__readonly) { color: #99a5bf; }
+body.portal-dark-active .business-manager__notice.is-success { color: #63d8ad; background: rgba(50,190,142,.12); }
+body.portal-dark-active .business-manager__notice.is-error { color: #ff9aac; background: rgba(220,78,102,.12); }
 
 @media (max-width: 700px) {
   .company-profile { max-width: none; }

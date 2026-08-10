@@ -310,14 +310,15 @@ export async function buildLocalDashboardOverview(signal) {
       return fallback;
     }
   };
-  const [reviews, tasksSnapshot, reportsSnapshot, profile, subscriptionState, support] = await Promise.all([
-    safe(getReviews({ signal }), []),
+  const [reviewResult, tasksSnapshot, reportsSnapshot, profile, subscriptionState, support] = await Promise.all([
+    safe(getReviews({ signal, pageSize: 100 }), { items: [] }),
     safe(getTasksSnapshot({ signal }), { tasks: [] }),
     safe(getReportsSnapshot({ signal }), { reports: [] }),
     safe(getProfileSnapshot({ signal }), { users: [], personal: {}, sessions: [] }),
     safe(getSubscriptionSnapshot({ signal }), { snapshot: null }),
     safe(getSupportSnapshot({ signal }), { channels: [] }),
   ]);
+  const reviews = Array.isArray(reviewResult?.items) ? reviewResult.items : [];
   const tasks = Array.isArray(tasksSnapshot?.tasks) ? tasksSnapshot.tasks : [];
   const reports = Array.isArray(reportsSnapshot?.reports) ? reportsSnapshot.reports : [];
   const integrations = readConnectedIntegrations();

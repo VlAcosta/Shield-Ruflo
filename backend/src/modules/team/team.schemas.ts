@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { permissions } from '../../core/rbac/permissions.js';
 
 export const invitationTokenParamsSchema = z.object({
   token: z.string().trim().min(20).max(512),
@@ -18,8 +19,8 @@ export const memberSessionParamsSchema = z.object({
 });
 
 const permissionOverridesSchema = z.object({
-  allow: z.array(z.string().trim().min(1).max(120)).max(80).default([]),
-  deny: z.array(z.string().trim().min(1).max(120)).max(80).default([]),
+  allow: z.array(z.enum(permissions)).max(permissions.length).default([]),
+  deny: z.array(z.enum(permissions)).max(permissions.length).default([]),
 }).default({ allow: [], deny: [] });
 
 export const createInvitationSchema = z.object({

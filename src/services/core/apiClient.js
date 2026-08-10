@@ -9,6 +9,15 @@ export class ApiError extends Error {
   }
 }
 
+export const AUTH_SESSION_INVALID_EVENT = 'business-shield:auth-session-invalid';
+
+function notifyInvalidSession(response) {
+  if (response.status !== 401 || typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(AUTH_SESSION_INVALID_EVENT, {
+    detail: { status: response.status, url: response.url },
+  }));
+}
+
 function combineAbortSignals(externalSignal, controller) {
   if (!externalSignal) return () => {};
   if (externalSignal.aborted) {
@@ -87,13 +96,15 @@ async function executeRequest(url, {
     });
 
     if (!response.ok) {
+      notifyInvalidSession(response);
       const payload = await readErrorBody(response);
-      const message = typeof payload === 'object' && payload
-        ? payload.message || payload.error || `API request failed with ${response.status}`
+      const errorPayload = typeof payload?.error === 'object' ? payload.error : payload;
+      const message = typeof errorPayload === 'object' && errorPayload
+        ? errorPayload.message || `API request failed with ${response.status}`
         : payload || `API request failed with ${response.status}`;
       throw new ApiError(message, {
         status: response.status,
-        code: typeof payload === 'object' && payload ? payload.code || '' : '',
+        code: typeof errorPayload === 'object' && errorPayload ? errorPayload.code || '' : '',
         details: payload,
         url,
       });
@@ -152,6 +163,7 @@ export function joinEndpoint(base, path = '') {
   const cleanBase = String(base || '').replace(/\/$/, '');
   const cleanPath = String(path || '');
   if (!cleanPath) return cleanBase;
+  if (cleanPath.startsWith('?')) return `${cleanBase}${cleanPath}`;
   return `${cleanBase}${cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`}`;
 }
 

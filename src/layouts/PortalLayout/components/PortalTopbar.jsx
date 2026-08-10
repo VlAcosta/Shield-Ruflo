@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import useNotificationBadge from '../../../hooks/useNotificationBadge';
 import useReviewsBadge from '../../../hooks/useReviewsBadge';
 import usePortalProfile from '../hooks/usePortalProfile';
@@ -36,6 +36,7 @@ function PortalTopbar({
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileTriggerRef = useRef(null);
 
   const closeFloatingMenus = useCallback(() => {
     setNotificationsOpen(false);
@@ -160,10 +161,13 @@ function PortalTopbar({
 
           <div className="portal__topbarSlot">
             <button
+              ref={profileTriggerRef}
               type="button"
               className={`portal__profileTrigger ${profileOpen ? 'is-active' : ''} ${navigationLocked ? 'is-disabled' : ''}`}
               aria-label={navigationLocked ? 'Профиль будет доступен после завершения настройки' : 'Открыть меню профиля'}
               aria-expanded={!navigationLocked && profileOpen}
+              aria-controls="portal-profile-menu"
+              aria-haspopup="dialog"
               disabled={navigationLocked}
               onClick={() => {
                 if (navigationLocked) return;
@@ -185,6 +189,7 @@ function PortalTopbar({
                 open={profileOpen}
                 onClose={() => setProfileOpen(false)}
                 onLock={onLock}
+                triggerRef={profileTriggerRef}
               />
             ) : null}
           </div>

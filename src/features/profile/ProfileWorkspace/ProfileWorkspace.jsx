@@ -78,7 +78,7 @@ export default function ProfileWorkspace() {
         ) : null}
 
         {activeTab === 'company' ? (
-          <CompanyProfile value={profile.snapshot.company} busy={profile.busy.company} onSave={access.can('company.edit') ? profile.saveCompany : undefined} readOnly={!access.can('company.edit')} />
+          <CompanyProfile value={profile.snapshot.company} busy={profile.busy.company} onSave={access.can('company.edit') ? profile.saveCompany : undefined} readOnly={!access.can('company.edit')} canViewBusinesses={access.can('business.view')} canManageBusinesses={access.can('business.manage')} canManageLocations={access.can('locations.manage')} />
         ) : null}
 
         {activeTab === 'security' ? (

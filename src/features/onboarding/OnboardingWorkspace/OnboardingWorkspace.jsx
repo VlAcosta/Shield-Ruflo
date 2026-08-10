@@ -7,9 +7,11 @@ import {
 import {
   applyOnboardingConfiguration,
   clearOnboardingDraft,
+  loadOnboardingState,
   lookupOrganizationByInn,
   readOnboardingDraft,
-  saveOnboardingDraft,
+  saveOnboardingState,
+  startOnboarding,
 } from '../../../services/onboarding/onboardingService';
 import './OnboardingWorkspace.scss';
 
@@ -100,7 +102,7 @@ function OrganizationResult({ organization, onConfirm, onEdit }) {
         <div><dt>ОГРН</dt><dd>{organization.ogrn || '—'}</dd></div>
         <div><dt>Адрес</dt><dd>{organization.address || '—'}</dd></div>
         <div><dt>Регистрация</dt><dd>{organization.registrationDate || '—'}</dd></div>
-        <div><dt>Источник</dt><dd>{organization.demo ? 'Демо-режим' : 'ЕГРЮЛ / ФНС'}</dd></div>
+        <div><dt>Источник</dt><dd>{organization.source || (organization.demo ? 'Демо-режим' : 'Не указан')}</dd></div>
       </dl>
 
       {organization.demo ? (
@@ -135,6 +137,7 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
         ...patch,
         confirmed: false,
         source: '',
+        lookupEvidence: '',
         demo: false,
       },
     }));
@@ -160,6 +163,7 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
           registrationDate: found.registrationDate || '',
           confirmed: false,
           source: result.source || '',
+          lookupEvidence: result.lookupEvidence || '',
           demo: Boolean(result.demo),
         },
       }));
@@ -261,7 +265,7 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
               <span className="organization-searchBtn__icon"><Icon name="search" size={19} /></span>
               <span>
                 <strong>{lookupState.loading ? 'Ищем организацию…' : 'Найти организацию'}</strong>
-                <small>Поиск через подключённый backend ЕГРЮЛ</small>
+                <small>Поиск через настроенный серверный источник</small>
               </span>
               <Icon name="arrow" size={18} />
             </button>
@@ -314,8 +318,8 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
           </ul>
           <div className="organization-aside__source">
             <span><Icon name="building" size={16} /> Источник данных</span>
-            <strong>ЕГРЮЛ / сервис ФНС</strong>
-            <small>Frontend не обращается к ФНС напрямую: запрос проходит через ваш backend.</small>
+            <strong>Настроенный провайдер</strong>
+            <small>Источник и тестовый режим будут показаны именно так, как их вернул сервер.</small>
           </div>
         </aside>
       </div>
@@ -341,8 +345,8 @@ function IntegrationStep({ draft, setDraft, onBack, onContinue }) {
       <div className="onboarding-step__heading onboarding-step__heading--split">
         <div>
           <span className="onboarding-kicker">Шаг 2 · интеграции</span>
-          <h2>Подключите площадки</h2>
-          <p>Начните с каналов, где уже есть отзывы. Остальные можно подключить позже в настройках.</p>
+          <h2>Выберите площадки для настройки</h2>
+          <p>Выбор сохранит план подключения. Он не означает, что площадка уже авторизована или синхронизирована.</p>
         </div>
         <div className="integration-summary"><strong>{enabledCount}</strong><span>выбрано</span></div>
       </div>
@@ -363,6 +367,7 @@ function IntegrationStep({ draft, setDraft, onBack, onContinue }) {
                   className={`integration-switch ${value.enabled ? 'is-on' : ''}`}
                   role="switch"
                   aria-checked={value.enabled}
+                  aria-label={`Выбрать ${item.name} для последующей настройки`}
                   onClick={() => update(item.id, { enabled: !value.enabled })}
                 ><span /></button>
               </div>
@@ -396,7 +401,7 @@ function PinDots({ value }) {
   return <div className="security-pinDots">{Array.from({ length: 4 }).map((_, index) => <span key={index} className={index < value.length ? 'is-filled' : ''} />)}</div>;
 }
 
-function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
+function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishError, canFinish }) {
   const [pin, setPin] = useState('');
   const [repeat, setRepeat] = useState('');
   const [error, setError] = useState('');
@@ -428,20 +433,15 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
         removeDigit();
       } else if (event.key === 'Enter' && complete) {
         event.preventDefault();
-        if (ready) setConfirmed(true);
+        if (ready && canFinish) setConfirmed(true);
+        else if (ready) setError('Сначала сохраните текущий прогресс на сервере');
         else setError('PIN-коды не совпадают');
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pin, repeat, complete, ready, finishing, confirmed]);
-
-  useEffect(() => {
-    if (!ready || confirmed || finishing) return;
-    setError('');
-    setConfirmed(true);
-  }, [ready, confirmed, finishing]);
+  }, [pin, repeat, complete, ready, finishing, confirmed, canFinish]);
 
   useEffect(() => {
     if (!confirmed || finishing) return undefined;
@@ -449,7 +449,17 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
     return () => window.clearTimeout(timer);
   }, [confirmed, finishing, onFinish, pin]);
 
+  useEffect(() => {
+    if (!finishError) return;
+    setConfirmed(false);
+    setError(finishError);
+  }, [finishError]);
+
   const finish = () => {
+    if (!canFinish) {
+      setError('Сначала сохраните текущий прогресс на сервере');
+      return;
+    }
     if (!ready) {
       setError(pin !== repeat && repeat.length === 4 ? 'PIN-коды не совпадают' : 'Введите и повторите PIN из 4 цифр');
       return;
@@ -462,8 +472,8 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
     <div className="onboarding-step security-step">
       <div className="onboarding-step__heading">
         <span className="onboarding-kicker">Шаг 3 · безопасность</span>
-        <h2>Создайте PIN для кабинета</h2>
-        <p>PIN защищает рабочее пространство при блокировке и возвращении к компьютеру.</p>
+        <h2>Создайте локальный PIN</h2>
+        <p>PIN действует только в этом браузере на этом устройстве. Это локальная блокировка интерфейса, а не серверная защита аккаунта.</p>
       </div>
 
       <div className="security-layout">
@@ -471,8 +481,8 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
           {confirmed ? (
             <div className="security-card__confirmed">
               <span className="security-card__confirmedIcon"><Icon name="check" size={31} /></span>
-              <h3>PIN подтверждён</h3>
-              <p>Защита кабинета активирована. Завершаем первичную настройку…</p>
+              <h3>PIN-коды совпадают</h3>
+              <p>Настройка кабинета сохраняется на сервере, а PIN останется только в этом браузере.</p>
             </div>
           ) : (
             <>
@@ -494,8 +504,8 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
 
         <aside className={`security-options ${confirmed ? 'is-locked' : ''}`}>
           <span className="onboarding-kicker">Политика блокировки</span>
-          <h3>Защита уже настроена</h3>
-          <p>Мы применим безопасные значения по умолчанию. Изменить их можно будет в профиле.</p>
+          <h3>Локальная автоблокировка</h3>
+          <p>Эти параметры действуют только в текущем браузере и не заменяют серверную сессию и контроль доступа.</p>
 
           <label className="security-option">
             <div><strong>Автоблокировка</strong><span>Блокировать кабинет при бездействии</span></div>
@@ -503,6 +513,7 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
               type="button"
               role="switch"
               aria-checked={draft.security.autoLock}
+              aria-label="Включить автоблокировку кабинета"
               className={`integration-switch ${draft.security.autoLock ? 'is-on' : ''}`}
               disabled={confirmed || finishing}
               onClick={() => setDraft((prev) => ({ ...prev, security: { ...prev.security, autoLock: !prev.security.autoLock } }))}
@@ -530,14 +541,14 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing }) {
       {confirmed ? (
         <div className="onboarding-pinToast" role="status">
           <span><Icon name="check" size={16} /></span>
-          <div><strong>PIN успешно создан</strong><small>Защита рабочего пространства включена</small></div>
+          <div><strong>PIN-коды совпадают</strong><small>Локальный PIN будет сохранён только в этом браузере</small></div>
         </div>
       ) : null}
 
       <div className="onboarding-actions">
         <button type="button" className="onboarding-btn onboarding-btn--ghost" onClick={onBack} disabled={finishing || confirmed}><Icon name="back" size={17} /> Назад</button>
         <button type="button" className="onboarding-btn onboarding-btn--primary" onClick={finish} disabled={!complete || finishing || confirmed}>
-          {confirmed ? 'PIN подтверждён' : (finishing ? 'Открываем кабинет…' : 'Завершить настройку')} {!finishing && !confirmed ? <Icon name="arrow" size={17} /> : null}
+          {confirmed ? 'Сохраняем настройку…' : (finishing ? 'Открываем кабинет…' : 'Завершить настройку')} {!finishing && !confirmed ? <Icon name="arrow" size={17} /> : null}
         </button>
       </div>
     </div>
@@ -549,24 +560,76 @@ export default function OnboardingWorkspace() {
   const [draft, setDraft] = useState(() => readOnboardingDraft());
   const [finishing, setFinishing] = useState(false);
   const [configuration, setConfiguration] = useState(null);
+  const [initialState, setInitialState] = useState('loading');
+  const [loadError, setLoadError] = useState('');
+  const [saveState, setSaveState] = useState('idle');
+  const [savedDraft, setSavedDraft] = useState('');
+  const [finishError, setFinishError] = useState('');
   const step = Math.max(0, Math.min(2, Number(draft.step) || 0));
 
+  const hydrate = useCallback(async () => {
+    setInitialState('loading');
+    setLoadError('');
+    try {
+      const { onboarding, draft: serverDraft } = await loadOnboardingState();
+      if (onboarding.onboardingStatus === 'NOT_STARTED') await startOnboarding();
+      setDraft(serverDraft);
+      setInitialState('ready');
+    } catch (error) {
+      setLoadError(error?.message || 'Не удалось загрузить настройку');
+      setInitialState('error');
+    }
+  }, []);
+
+  useEffect(() => { hydrate(); }, [hydrate]);
+
+  const persistDraft = useCallback(async (value) => {
+    setSaveState('saving');
+    try {
+      await saveOnboardingState(value);
+      setSavedDraft(JSON.stringify(value));
+      setSaveState('saved');
+      return true;
+    } catch {
+      setSaveState('error');
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
-    saveOnboardingDraft({ ...draft, step });
-  }, [draft, step]);
+    if (initialState !== 'ready' || finishing) return undefined;
+    setSaveState('saving');
+    const value = { ...draft, step };
+    const timer = window.setTimeout(() => {
+      persistDraft(value);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [draft, step, initialState, finishing, persistDraft]);
 
   const setStep = (nextStep) => setDraft((prev) => ({ ...prev, step: nextStep }));
   const progressLabel = useMemo(() => `${step + 1} из ${ONBOARDING_STEPS.length}`, [step]);
 
   const finishOnboarding = useCallback(async (pin) => {
+    if (saveState !== 'saved' || savedDraft !== JSON.stringify({ ...draft, step })) {
+      setFinishError('Текущий прогресс ещё не сохранён. Повторите сохранение.');
+      return;
+    }
     setFinishing(true);
-    const applied = await applyOnboardingConfiguration({ draft, pin });
-    setConfiguration(applied);
-    clearOnboardingDraft();
+    setFinishError('');
+    try {
+      const applied = await applyOnboardingConfiguration({ draft, pin });
+      setConfiguration(applied.configuration);
+      clearOnboardingDraft();
+      await new Promise((resolve) => window.setTimeout(resolve, 720));
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      setFinishError(error?.message || 'Не удалось завершить настройку');
+      setFinishing(false);
+    }
+  }, [draft, navigate, saveState, savedDraft, step]);
 
-    await new Promise((resolve) => window.setTimeout(resolve, 720));
-    navigate('/dashboard', { replace: true });
-  }, [draft, navigate]);
+  if (initialState === 'loading') return <div className="onboarding-state" role="status"><span className="onboarding-state__spinner" /><strong>Загружаем настройку…</strong><p>Получаем сохранённый прогресс с сервера.</p></div>;
+  if (initialState === 'error') return <div className="onboarding-state onboarding-state--error" role="alert"><strong>Настройка временно недоступна</strong><p>{loadError}</p><button type="button" onClick={hydrate}>Повторить</button></div>;
 
   return (
     <div className={`onboarding ${finishing ? 'is-finishing' : ''}`}>
@@ -581,6 +644,11 @@ export default function OnboardingWorkspace() {
 
       <StepRail step={step} onStep={setStep} />
 
+      <div className={`onboarding-saveState is-${saveState}`} role="status" aria-live="polite">
+        {saveState === 'saving' ? 'Сохраняем прогресс…' : saveState === 'error' ? 'Не удалось сохранить прогресс' : saveState === 'saved' ? 'Прогресс сохранён' : ''}
+        {saveState === 'error' ? <button type="button" onClick={() => persistDraft({ ...draft, step })}>Повторить</button> : null}
+      </div>
+
       <section className="onboarding-panel" aria-label={`Этап ${progressLabel}`}>
         {step === 0 ? (
           <OrganizationStep draft={draft} setDraft={setDraft} onContinue={() => setStep(1)} />
@@ -589,18 +657,18 @@ export default function OnboardingWorkspace() {
           <IntegrationStep draft={draft} setDraft={setDraft} onBack={() => setStep(0)} onContinue={() => setStep(2)} />
         ) : null}
         {step === 2 ? (
-          <SecurityStep draft={draft} setDraft={setDraft} onBack={() => setStep(1)} onFinish={finishOnboarding} finishing={finishing} />
+          <SecurityStep draft={draft} setDraft={setDraft} onBack={() => setStep(1)} onFinish={finishOnboarding} finishing={finishing} finishError={finishError} canFinish={saveState === 'saved' && savedDraft === JSON.stringify({ ...draft, step })} />
         ) : null}
       </section>
 
       {finishing ? (
         <div className="onboarding-complete" role="status" aria-live="polite">
           <span className="onboarding-complete__icon"><Icon name="check" size={28} /></span>
-          <strong>{configuration ? 'Кабинет настроен' : 'Применяем настройки'}</strong>
+          <strong>{configuration ? 'Кабинет настроен' : 'Сохраняем настройки на сервере'}</strong>
           <span>{configuration ? 'Открываем рабочее пространство…' : 'Связываем организацию, площадки и защиту'}</span>
           <div className="onboarding-complete__sync">
             <span className={configuration ? 'is-done' : ''}><i>{configuration ? '✓' : '1'}</i> Профиль компании</span>
-            <span className={configuration ? 'is-done' : ''}><i>{configuration ? '✓' : '2'}</i> Интеграции</span>
+            <span className={configuration ? 'is-done' : ''}><i>{configuration ? '✓' : '2'}</i> План площадок</span>
             <span className={configuration ? 'is-done' : ''}><i>{configuration ? '✓' : '3'}</i> Автоблокировка</span>
           </div>
         </div>

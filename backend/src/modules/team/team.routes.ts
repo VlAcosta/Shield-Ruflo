@@ -48,7 +48,7 @@ export const teamRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/team/invitations', {
-    preHandler: [app.authenticate, app.authorize('team.invite')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const body = createInvitationSchema.parse(request.body);
     const accessExpiresAt = body.accessExpiresAt ?? body.access_expires_at;
@@ -96,14 +96,14 @@ export const teamRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.delete('/team/invitations/:invitationId', {
-    preHandler: [app.authenticate, app.authorize('team.invite')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const { invitationId } = invitationIdParamsSchema.parse(request.params);
     return revokeInvitation(app, request, invitationId);
   });
 
   app.patch('/team/members/:memberId', {
-    preHandler: [app.authenticate, app.authorize('team.manage_roles')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const { memberId } = memberIdParamsSchema.parse(request.params);
     const body = updateMemberSchema.parse(request.body);
@@ -120,14 +120,16 @@ export const teamRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/team/members/:memberId/security', {
-    preHandler: [app.authenticate, app.authorize('team.manage_security')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const { memberId } = memberIdParamsSchema.parse(request.params);
     const body = updateMemberSecuritySchema.parse(request.body);
+    const permissionOverrides = body.permissionOverrides ?? body.permission_overrides;
     const result = await updateTeamMember(app, request, memberId, {
       ...(body.status !== undefined ? { securityStatus: body.status } : {}),
       ...(body.accessExpiresAt !== undefined ? { accessExpiresAt: body.accessExpiresAt } : {}),
       ...(body.frozenReason !== undefined ? { frozenReason: body.frozenReason } : {}),
+      ...(permissionOverrides !== undefined ? { permissionOverrides } : {}),
     });
     const member = result.member;
     return {
@@ -146,21 +148,21 @@ export const teamRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.delete('/team/members/:memberId/sessions', {
-    preHandler: [app.authenticate, app.authorize('team.manage_security')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const { memberId } = memberIdParamsSchema.parse(request.params);
     return revokeMemberSessions(app, request, memberId);
   });
 
   app.delete('/team/members/:memberId/sessions/:sessionId', {
-    preHandler: [app.authenticate, app.authorize('team.manage_security')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const { memberId, sessionId } = memberSessionParamsSchema.parse(request.params);
     return revokeMemberSessions(app, request, memberId, sessionId);
   });
 
   app.delete('/team/members/:memberId', {
-    preHandler: [app.authenticate, app.authorize('team.remove')],
+    preHandler: [app.authenticate, app.authorize('team.manage')],
   }, async (request) => {
     const { memberId } = memberIdParamsSchema.parse(request.params);
     return removeTeamMember(app, request, memberId);

@@ -42,7 +42,9 @@ function membershipIsUsable(membership: UserWithMemberships['memberships'][numbe
 export function presentUser(user: UserWithMemberships, activeOrganizationId?: string | null): PublicUser {
   const now = new Date();
   const usable = user.memberships.filter((item) => membershipIsUsable(item, now));
-  const membership = usable.find((item) => item.organizationId === activeOrganizationId) ?? usable[0];
+  const membership = activeOrganizationId === null
+    ? undefined
+    : usable.find((item) => item.organizationId === activeOrganizationId) ?? usable[0];
 
   return {
     id: user.id,

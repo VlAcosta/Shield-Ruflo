@@ -43,7 +43,7 @@ export const updateReviewSchema = z.object({
 
 export const replySchema = z.object({
   text: z.string().trim().min(1).max(8000),
-  publish: z.boolean().default(true),
+  publish: z.boolean().default(false),
 });
 
 export const assignReviewSchema = z.object({

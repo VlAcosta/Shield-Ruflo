@@ -8,13 +8,19 @@ const optionalUrl = z.union([z.string().trim().url().max(2048), z.literal('')]).
 
 export const createOrganizationSchema = z.object({
   name: z.string().trim().min(2).max(180),
+  legal_name: z.string().trim().max(240).optional(),
   business_name: z.string().trim().min(2).max(180).optional(),
+  industry: z.string().trim().max(120).optional(),
+  website: optionalUrl,
   timezone: z.string().trim().min(1).max(80).default('Europe/Moscow'),
   locale: z.string().trim().min(2).max(16).default('ru-RU'),
 });
 
 export const updateOrganizationSchema = z.object({
   name: z.string().trim().min(2).max(180).optional(),
+  legal_name: z.string().trim().max(240).optional(),
+  industry: z.string().trim().max(120).optional(),
+  website: optionalUrl,
   timezone: z.string().trim().min(1).max(80).optional(),
   locale: z.string().trim().min(2).max(16).optional(),
   legal_type: z.enum(['ul', 'ip']).nullable().optional(),
@@ -55,12 +61,16 @@ export const createLocationSchema = z.object({
   address_line_1: z.string().trim().max(240).optional(),
   address_line_2: z.string().trim().max(240).optional(),
   postal_code: z.string().trim().max(32).optional(),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
   timezone: z.string().trim().max(80).optional(),
 });
 
-export const updateLocationSchema = createLocationSchema.partial().refine(
+export const updateLocationSchema = createLocationSchema
+  .omit({ is_primary: true })
+  .partial()
+  .extend({ is_primary: z.boolean().optional() })
+  .refine(
   (value) => Object.keys(value).length > 0,
   'At least one field is required',
 );

@@ -1,23 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import RoleEditorModal from '../RoleEditorModal';
 import useAccessControl from '../../access/hooks/useAccessControl';
 import useTeamActivity from '../../access/hooks/useTeamActivity';
 import useTeamSecurity from '../../access/hooks/useTeamSecurity';
 import {
   PERMISSION_GROUPS,
   PRESET_ROLES,
-  RBAC_CHANGED_EVENT,
   buildPermissionOverride,
-  createCustomRole,
-  deleteCustomRole,
   getAvailableRoles,
   getRoleById,
   getRoleLabel,
   permissionStateForMember,
   permissionsForMember,
-  updateCustomRole,
 } from '../../../services/access/rbacService';
-import { recordCompanyActivity } from '../../../services/activity/companyActivityService';
 import { getSecurityStatusLabel, isAccessExpired } from '../../../services/security/teamSecurityService';
 import './UsersProfile.scss';
 
@@ -37,6 +31,7 @@ function ExitIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d
 function SnowIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9 5l3 2 3-2M9 19l3-2 3 2M5.4 10.5l.2 3.6-3.2 1.6M18.6 13.5l-.2-3.6 3.2-1.6" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 
 const initialsFromName = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'БЩ';
+export const canonicalRoleId = (value) => String(value || 'MEMBER').trim().toUpperCase();
 
 function formatRelative(value) {
   if (!value) return 'ещё не входил';
@@ -103,7 +98,8 @@ function MemberInspector({
   const role = getRoleById(user.accessRoleId || user.role);
   const effective = new Set(permissionsForMember(user));
   const group = PERMISSION_GROUPS.find((item) => item.id === permissionGroup) || PERMISSION_GROUPS[0];
-  const owner = user.role === 'owner' || user.accessRoleId === 'owner' || user.syntheticOwner;
+  const memberRoleId = canonicalRoleId(user.accessRoleId || user.role);
+  const owner = memberRoleId === 'OWNER' || user.syntheticOwner;
   const status = getSecurityStatusLabel(user, security);
   const liveSessions = sessions.filter((session) => !session.revokedAt);
 
@@ -158,8 +154,8 @@ function MemberInspector({
         <section className="users-profile__inspector-role">
           <div><span>Роль</span><strong>{getRoleLabel(user.accessRoleId || user.role)}</strong></div>
           {!owner ? (
-            <select value={user.accessRoleId || user.role} onChange={(event) => onUpdateUser(user.id, { role: event.target.value, accessRoleId: event.target.value })} disabled={!canManageRoles || busy.userId === user.id}>
-              {roles.filter((item) => item.id !== 'owner').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            <select aria-label="Роль участника" value={memberRoleId} onChange={(event) => onUpdateUser(user.id, { role: canonicalRoleId(event.target.value), accessRoleId: canonicalRoleId(event.target.value) })} disabled={!canManageRoles || busy.userId === user.id}>
+              {roles.filter((item) => canonicalRoleId(item.id) !== 'OWNER').map((item) => <option key={item.id} value={canonicalRoleId(item.id)}>{item.label}</option>)}
             </select>
           ) : <span className="users-profile__owner-chip"><ShieldIcon/> Владелец</span>}
         </section>
@@ -279,17 +275,9 @@ export default function UsersProfile({
 }) {
   const access = useAccessControl();
   const [tab, setTab] = useState('members');
-  const [roles, setRoles] = useState(getAvailableRoles);
+  const roles = useMemo(() => getAvailableRoles().filter((role) => role.system), []);
   const [selectedId, setSelectedId] = useState(null);
-  const [roleEditor, setRoleEditor] = useState(null);
-  const [roleBusy, setRoleBusy] = useState(false);
   const [menuId, setMenuId] = useState(null);
-
-  useEffect(() => {
-    const refresh = () => setRoles(getAvailableRoles());
-    window.addEventListener(RBAC_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(RBAC_CHANGED_EVENT, refresh);
-  }, []);
 
   const ownerMember = useMemo(() => owner ? {
     id: 'current-owner',
@@ -297,8 +285,8 @@ export default function UsersProfile({
     initials: initialsFromName(`${owner.firstName || ''} ${owner.lastName || ''}`),
     name: `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || 'Владелец компании',
     email: owner.email || '',
-    role: 'owner',
-    accessRoleId: 'owner',
+    role: 'OWNER',
+    accessRoleId: 'OWNER',
     active: true,
     tone: 'violet',
   } : null, [owner]);
@@ -314,7 +302,6 @@ export default function UsersProfile({
   const selectedSessions = selectedUser ? securityApi.getSessions(selectedUser) : [];
   const onlineCount = members.filter((user) => user.online).length;
   const pendingCount = members.filter((user) => user.invitationStatus === 'pending').length;
-  const customRoles = roles.filter((role) => !role.system);
   const securityRiskCount = members.filter((user) => {
     const security = securityApi.getSecurity(user);
     return security.status === 'frozen' || isAccessExpired(security.accessExpiresAt);
@@ -323,25 +310,6 @@ export default function UsersProfile({
   const canManageRoles = access.can('team.manage_roles');
   const canManageSecurity = access.can('team.manage_security');
   const canRemove = access.can('team.remove');
-
-  const saveRole = async (payload) => {
-    if (!canManageRoles || roleBusy) return false;
-    setRoleBusy(true);
-    try {
-      const saved = roleEditor?.id ? updateCustomRole(roleEditor.id, payload) : createCustomRole(payload);
-      setRoles(getAvailableRoles());
-      recordCompanyActivity({ type: roleEditor?.id ? 'role_updated' : 'role_created', title: `${roleEditor?.id ? 'Изменена' : 'Создана'} роль «${saved.label}»`, tone: 'violet' });
-      return true;
-    } finally { setRoleBusy(false); }
-  };
-
-  const removeRole = (role) => {
-    if (!canManageRoles) return;
-    if (users.some((user) => (user.accessRoleId || user.role) === role.id)) return;
-    deleteCustomRole(role.id);
-    setRoles(getAvailableRoles());
-    recordCompanyActivity({ type: 'role_deleted', title: `Удалена роль «${role.label}»`, tone: 'danger' });
-  };
 
   return (
     <section className="users-profile">
@@ -352,7 +320,7 @@ export default function UsersProfile({
           <p>Управляйте полномочиями, устройствами и сроком доступа без удаления рабочих профилей.</p>
         </div>
         <div className="users-profile__hero-actions">
-          {canManageRoles ? <button type="button" className="users-profile__role-create" onClick={() => setRoleEditor({})}><ShieldIcon/> Новая роль</button> : null}
+          {canManageRoles ? <button type="button" className="users-profile__role-create" disabled title="Пользовательские роли станут доступны после подключения серверного управления ролями"><ShieldIcon/> Свои роли недоступны</button> : null}
           {canInvite ? <button type="button" className="users-profile__invite" onClick={onInvite}><PlusIcon/> Пригласить</button> : null}
         </div>
       </header>
@@ -362,7 +330,7 @@ export default function UsersProfile({
         <div className="is-live"><span>Онлайн</span><strong>{onlineCount}</strong><small>активны сейчас</small></div>
         <div><span>Ожидают</span><strong>{pendingCount}</strong><small>приглашений</small></div>
         <div className={securityRiskCount ? 'is-risk' : ''}><span>Контроль</span><strong>{securityRiskCount}</strong><small>{securityRiskCount ? 'требует внимания' : 'рисков нет'}</small></div>
-        <div><span>Свои роли</span><strong>{customRoles.length}</strong><small>{roles.length} всего</small></div>
+        <div><span>Свои роли</span><strong>—</strong><small>нужен серверный API</small></div>
       </div>
 
       <nav className="users-profile__tabs">{TABS.map((item) => <button type="button" key={item.id} className={tab === item.id ? 'is-active' : ''} onClick={() => { setTab(item.id); setSelectedId(null); }}>{item.label}{item.id === 'activity' && team.activity.length ? <em>{Math.min(team.activity.length, 99)}</em> : item.id === 'security' && securityRiskCount ? <em className="is-risk">{securityRiskCount}</em> : null}</button>)}</nav>
@@ -396,8 +364,9 @@ export default function UsersProfile({
 
       {tab === 'roles' ? (
         <div className="users-profile__roles-view">
+          <p>Пользовательские роли пока недоступны: для безопасного создания и изменения требуется серверное хранение и проверка разрешений.</p>
           <div className="users-profile__role-grid">
-            {roles.map((role, index) => <article className={`users-profile__role-card is-${role.tone || 'violet'}`} key={role.id} style={{ '--role-index': index }}><header><span className="users-profile__role-symbol"><ShieldIcon/></span><div><span>{role.system ? 'Системная роль' : 'Своя роль'}</span><h3>{role.label}</h3></div></header><p>{role.description}</p><div className="users-profile__role-stats"><span><strong>{role.permissions.length}</strong> разрешений</span><span><strong>{members.filter((member) => (member.accessRoleId || member.role) === role.id).length}</strong> участников</span></div><footer>{!role.system && canManageRoles ? <><button type="button" onClick={() => setRoleEditor(role)}>Настроить</button><button type="button" className="is-danger" disabled={users.some((user) => (user.accessRoleId || user.role) === role.id)} onClick={() => removeRole(role)}>Удалить</button></> : <span>{role.id === 'owner' ? 'Полный контроль' : 'Предустановленная политика'}</span>}</footer></article>)}
+            {roles.map((role, index) => <article className={`users-profile__role-card is-${role.tone || 'violet'}`} key={role.id} style={{ '--role-index': index }}><header><span className="users-profile__role-symbol"><ShieldIcon/></span><div><span>Системная роль</span><h3>{role.label}</h3></div></header><p>{role.description}</p><div className="users-profile__role-stats"><span><strong>{role.permissions.length}</strong> разрешений</span><span><strong>{members.filter((member) => canonicalRoleId(member.accessRoleId || member.role) === canonicalRoleId(role.id)).length}</strong> участников</span></div><footer><span>{canonicalRoleId(role.id) === 'OWNER' ? 'Полный контроль' : 'Предустановленная политика'}</span></footer></article>)}
           </div>
 
           <section className="users-profile__matrix">
@@ -416,7 +385,6 @@ export default function UsersProfile({
 
       {tab === 'security' ? <SecurityCenter members={members} securityApi={securityApi} canManageSecurity={canManageSecurity} onSelect={(id) => { setSelectedId(id); setTab('members'); }} /> : null}
 
-      <RoleEditorModal open={Boolean(roleEditor)} role={roleEditor?.id ? roleEditor : null} busy={roleBusy} onClose={() => setRoleEditor(null)} onSave={saveRole}/>
     </section>
   );
 }

@@ -5,9 +5,10 @@ import { getAvailableRoles } from '../../../services/access/rbacService';
 import './InviteUserModal.scss';
 
 const ROLE_COPY = {
-  admin: 'Управление командой, компанией и рабочими разделами.',
-  moderator: 'Работа с задачами, отзывами и основными инструментами.',
-  guest: 'Просмотр доступных данных без административных действий.',
+  ADMIN: 'Управление командой, компанией и рабочими разделами.',
+  MANAGER: 'Работа с задачами, отзывами и основными инструментами.',
+  ANALYST: 'Просмотр доступных данных без административных действий.',
+  MEMBER: 'Работа с отзывами и задачами без административного доступа.',
 };
 
 function CopyIcon() {
@@ -20,11 +21,19 @@ function CheckIcon() {
 
 export default function InviteUserModal({ open, busy, onClose, onInvite }) {
   const cardRef = useRef(null);
-  const [form, setForm] = useState({ name: '', email: '', role: 'guest', temporary: false, accessExpiresAt: '' });
+  const previousFocusRef = useRef(null);
+  const nameRef = useRef(null);
+  const emailRef = useRef(null);
+  const expiryRef = useRef(null);
+  const [form, setForm] = useState({ name: '', email: '', role: 'MEMBER', temporary: false, accessExpiresAt: '' });
   const [error, setError] = useState('');
+  const [errorField, setErrorField] = useState('');
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
-  const roles = useMemo(() => getAvailableRoles().filter((role) => role.id !== 'owner'), [open]);
+  const [clipboardError, setClipboardError] = useState('');
+  const roles = useMemo(() => getAvailableRoles().filter((role) => (
+    role.system && String(role.id).toUpperCase() !== 'OWNER'
+  )), []);
 
   const selectedRole = useMemo(
     () => roles.find((role) => role.id === form.role) || roles[roles.length - 1],
@@ -34,11 +43,19 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
   useEffect(() => {
     if (!open) return undefined;
     const previousOverflow = document.body.style.overflow;
+    previousFocusRef.current = document.activeElement;
     document.body.style.overflow = 'hidden';
     document.body.classList.add('portal-modal-open');
     const timer = window.setTimeout(() => cardRef.current?.querySelector('input')?.focus(), 40);
     const handleKey = (event) => {
       if (event.key === 'Escape' && !busy) onClose();
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(cardRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])') || []);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     window.addEventListener('keydown', handleKey);
     return () => {
@@ -46,17 +63,26 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
       document.body.classList.remove('portal-modal-open');
       window.clearTimeout(timer);
       window.removeEventListener('keydown', handleKey);
+      const previousFocus = previousFocusRef.current;
+      if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
     };
   }, [busy, onClose, open]);
 
   useEffect(() => {
     if (!open) {
-      setForm({ name: '', email: '', role: 'guest', temporary: false, accessExpiresAt: '' });
+      setForm({ name: '', email: '', role: 'MEMBER', temporary: false, accessExpiresAt: '' });
       setError('');
+      setErrorField('');
       setResult(null);
       setCopied(false);
+      setClipboardError('');
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!result) return;
+    window.requestAnimationFrame(() => cardRef.current?.focus());
+  }, [result]);
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -65,16 +91,23 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     const normalizedEmail = form.email.trim().toLowerCase();
     if (form.name.trim().length < 2) {
       setError('Укажите имя пользователя');
+      setErrorField('name');
+      nameRef.current?.focus();
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setError('Проверьте email пользователя');
+      setErrorField('email');
+      emailRef.current?.focus();
       return;
     }
 
     setError('');
+    setErrorField('');
     if (form.temporary && !form.accessExpiresAt) {
       setError('Укажите дату окончания временного доступа');
+      setErrorField('accessExpiresAt');
+      expiryRef.current?.focus();
       return;
     }
     const response = await onInvite({
@@ -95,9 +128,11 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     try {
       await navigator.clipboard.writeText(result.inviteUrl);
       setCopied(true);
+      setClipboardError('');
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
+      setClipboardError('Не удалось скопировать ссылку. Выделите и скопируйте её вручную.');
     }
   };
 
@@ -129,12 +164,12 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
             <div className="invite-user-modal__fields">
               <label>
                 <span>Имя пользователя</span>
-                <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Анна Петрова" autoComplete="off" />
+                <input ref={nameRef} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Анна Петрова" autoComplete="off" aria-invalid={errorField === 'name'} aria-describedby={errorField === 'name' ? 'invite-user-error' : undefined} />
               </label>
 
               <label>
                 <span>Рабочий email</span>
-                <input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="anna@company.ru" autoComplete="off" />
+                <input ref={emailRef} type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="anna@company.ru" autoComplete="off" aria-invalid={errorField === 'email'} aria-describedby={errorField === 'email' ? 'invite-user-error' : undefined} />
               </label>
             </div>
 
@@ -161,11 +196,11 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
                 <strong>Ограничить срок участия</strong>
                 <small>После указанной даты вход в компанию автоматически заблокируется.</small>
               </div>
-              <button type="button" className={`invite-user-modal__switch ${form.temporary ? 'is-on' : ''}`} role="switch" aria-checked={form.temporary} onClick={() => setForm((current) => ({ ...current, temporary: !current.temporary, accessExpiresAt: current.temporary ? '' : current.accessExpiresAt }))}><span /></button>
-              {form.temporary ? <label className="invite-user-modal__expiry"><span>Доступ до</span><input type="date" min={new Date().toISOString().slice(0, 10)} value={form.accessExpiresAt} onChange={(event) => setForm((current) => ({ ...current, accessExpiresAt: event.target.value }))} /></label> : null}
+              <button type="button" className={`invite-user-modal__switch ${form.temporary ? 'is-on' : ''}`} role="switch" aria-label="Ограничить срок участия" aria-checked={form.temporary} onClick={() => setForm((current) => ({ ...current, temporary: !current.temporary, accessExpiresAt: current.temporary ? '' : current.accessExpiresAt }))}><span /></button>
+              {form.temporary ? <label className="invite-user-modal__expiry"><span>Доступ до</span><input ref={expiryRef} type="date" min={new Date().toISOString().slice(0, 10)} value={form.accessExpiresAt} onChange={(event) => setForm((current) => ({ ...current, accessExpiresAt: event.target.value }))} aria-invalid={errorField === 'accessExpiresAt'} aria-describedby={errorField === 'accessExpiresAt' ? 'invite-user-error' : undefined} /></label> : null}
             </section>
 
-            {error ? <p className="invite-user-modal__error">{error}</p> : null}
+            {error ? <p id="invite-user-error" className="invite-user-modal__error" role="alert">{error}</p> : null}
 
             <footer>
               <button type="button" className="invite-user-modal__cancel" onClick={onClose} disabled={busy}>Отмена</button>
@@ -176,7 +211,7 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
             </footer>
           </form>
         ) : (
-          <section ref={cardRef} className="invite-user-modal__card invite-user-modal__card--success">
+          <section ref={cardRef} className="invite-user-modal__card invite-user-modal__card--success" tabIndex="-1" role="status" aria-live="polite">
             <button type="button" className="invite-user-modal__close" onClick={onClose} aria-label="Закрыть">×</button>
             <div className="invite-user-modal__success-mark"><CheckIcon /></div>
             <span className="invite-user-modal__success-eyebrow">Доступ подготовлен</span>
@@ -198,6 +233,7 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
             ) : (
               <div className="invite-user-modal__sent-note">Email будет отправлен сервисом приглашений. Пользователь появится активным после принятия доступа.</div>
             )}
+            {clipboardError ? <p className="invite-user-modal__error" role="alert">{clipboardError}</p> : null}
 
             <div className="invite-user-modal__success-flow">
               <span>Ссылка</span><i>→</i><span>SMS</span><i>→</i><span>PIN</span><i>→</i><span>Кабинет компании</span>

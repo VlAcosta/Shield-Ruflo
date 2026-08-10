@@ -18,6 +18,13 @@ describe('company domain helpers', () => {
     expect(formatRegistrationDate(parseRegistrationDate('2025-08-17'))).toBe('17.08.2025');
   });
 
+  it('accepts leap day and rejects impossible calendar dates', () => {
+    expect(formatRegistrationDate(parseRegistrationDate('29.02.2024'))).toBe('29.02.2024');
+    expect(() => parseRegistrationDate('29.02.2023')).toThrow();
+    expect(() => parseRegistrationDate('2025-02-30')).toThrow();
+    expect(() => parseRegistrationDate('31.04.2025')).toThrow();
+  });
+
   it('rejects mismatched IP identifiers', () => {
     expect(() => validateCompanyIdentifiers({
       legalType: 'ip',

@@ -1,8 +1,14 @@
+import { createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { z } from 'zod';
 import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
-import { updateCompanyProfileSchema } from './company.schemas.js';
+import {
+  companyLookupResultSchema,
+  companyLookupWebhookResponseSchema,
+  updateCompanyProfileSchema,
+} from './company.schemas.js';
+import { secureHashEquals } from '../../shared/security/tokens.js';
 import {
   formatRegistrationDate,
   inferLegalType,
@@ -10,17 +16,88 @@ import {
   validateCompanyIdentifiers,
 } from '../../shared/domain/company.js';
 
-type CompanyLookupResult = {
-  type: 'ul' | 'ip';
-  title: string;
-  shortTitle?: string;
-  inn: string;
-  kpp?: string;
-  ogrn?: string;
-  address?: string;
-  status?: string;
-  registrationDate?: string;
+export type CompanyLookupResult = z.infer<typeof companyLookupResultSchema>;
+
+type LookupEvidencePayload = {
+  version: 1;
+  expiresAt: number;
+  source: string;
+  provider: 'mock' | 'webhook';
+  organizationId: string;
+  userId: string;
+  company: CompanyLookupResult;
 };
+
+export type CompanyLookupContext = {
+  organizationId: string;
+  userId: string;
+};
+
+const LOOKUP_EVIDENCE_TTL_MS = 10 * 60 * 1000;
+
+function evidenceSignature(encodedPayload: string): string {
+  return createHmac('sha256', env.AUTH_SECRET).update(`company-lookup:${encodedPayload}`, 'utf8').digest('hex');
+}
+
+function evidenceCompany(company: CompanyLookupResult): CompanyLookupResult {
+  return {
+    type: company.type,
+    title: company.title,
+    inn: company.inn,
+    ...(company.kpp !== undefined ? { kpp: company.kpp } : {}),
+    ...(company.ogrn !== undefined ? { ogrn: company.ogrn } : {}),
+    ...(company.address !== undefined ? { address: company.address } : {}),
+    ...(company.status !== undefined ? { status: company.status } : {}),
+    ...(company.registrationDate !== undefined ? { registrationDate: company.registrationDate } : {}),
+  };
+}
+
+export function createCompanyLookupEvidence(
+  company: CompanyLookupResult,
+  source: string,
+  provider: 'mock' | 'webhook',
+  context: CompanyLookupContext,
+  now = Date.now(),
+): string {
+  const payload: LookupEvidencePayload = {
+    version: 1,
+    expiresAt: now + LOOKUP_EVIDENCE_TTL_MS,
+    source,
+    provider,
+    organizationId: context.organizationId,
+    userId: context.userId,
+    company: evidenceCompany(company),
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  return `${encodedPayload}.${evidenceSignature(encodedPayload)}`;
+}
+
+export function verifyCompanyLookupEvidence(
+  evidence: string | undefined,
+  expectedCompany: CompanyLookupResult,
+  context: CompanyLookupContext,
+  now = Date.now(),
+): { source: string; provider: 'mock' | 'webhook' } | null {
+  if (!evidence) return null;
+  const [encodedPayload, suppliedSignature, ...rest] = evidence.split('.');
+  if (!encodedPayload || !suppliedSignature || rest.length > 0) return null;
+  if (!secureHashEquals(evidenceSignature(encodedPayload), suppliedSignature)) return null;
+
+  try {
+    const rawPayload: unknown = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    if (!rawPayload || typeof rawPayload !== 'object') return null;
+    const payload = rawPayload as Partial<LookupEvidencePayload>;
+    if (payload.version !== 1 || typeof payload.expiresAt !== 'number' || payload.expiresAt < now || typeof payload.source !== 'string') return null;
+    if (payload.provider !== 'mock' && payload.provider !== 'webhook') return null;
+    if (payload.organizationId !== context.organizationId || payload.userId !== context.userId) return null;
+    const company = companyLookupResultSchema.safeParse(payload.company);
+    const expected = companyLookupResultSchema.safeParse(expectedCompany);
+    if (!company.success || !expected.success || JSON.stringify(evidenceCompany(company.data)) !== JSON.stringify(evidenceCompany(expected.data))) return null;
+    return { source: payload.source, provider: payload.provider };
+  } catch {
+    return null;
+  }
+}
 
 const DEV_COMPANIES: Record<string, CompanyLookupResult> = {
   '7701234567': {
@@ -46,7 +123,10 @@ const DEV_COMPANIES: Record<string, CompanyLookupResult> = {
   },
 };
 
-export async function lookupCompanyByInn(inn: string): Promise<{ company: CompanyLookupResult; source: string; demo: boolean }> {
+export async function lookupCompanyByInn(
+  inn: string,
+  context: CompanyLookupContext,
+): Promise<{ company: CompanyLookupResult; source: string; demo: boolean; lookupEvidence: string }> {
   if (env.COMPANY_LOOKUP_PROVIDER === 'disabled') {
     throw new AppError({
       code: 'COMPANY_LOOKUP_UNAVAILABLE',
@@ -64,7 +144,8 @@ export async function lookupCompanyByInn(inn: string): Promise<{ company: Compan
         statusCode: 404,
       });
     }
-    return { company, source: 'B4 dev registry', demo: true };
+    const source = 'B4 dev registry';
+    return { company, source, demo: true, lookupEvidence: createCompanyLookupEvidence(company, source, 'mock', context) };
   }
 
   const controller = new AbortController();
@@ -85,12 +166,29 @@ export async function lookupCompanyByInn(inn: string): Promise<{ company: Compan
     if (!response.ok) {
       throw new AppError({ code: 'COMPANY_LOOKUP_FAILED', message: 'Сервис поиска организаций временно недоступен', statusCode: 502 });
     }
-    const payload = await response.json() as { company?: CompanyLookupResult; source?: string } & Partial<CompanyLookupResult>;
-    const company = payload.company ?? payload;
-    if (!company.inn || !company.title) {
+    const parsedPayload = companyLookupWebhookResponseSchema.safeParse(await response.json());
+    if (!parsedPayload.success) {
       throw new AppError({ code: 'COMPANY_LOOKUP_INVALID_RESPONSE', message: 'Сервис поиска вернул неполные данные', statusCode: 502 });
     }
-    return { company: company as CompanyLookupResult, source: payload.source || 'registry-webhook', demo: false };
+    const company = 'company' in parsedPayload.data ? parsedPayload.data.company : parsedPayload.data;
+    if (company.inn !== inn) {
+      throw new AppError({ code: 'COMPANY_LOOKUP_INN_MISMATCH', message: 'Сервис поиска вернул данные другой организации', statusCode: 502 });
+    }
+    try {
+      validateCompanyIdentifiers({
+        inn: company.inn,
+        ...(company.kpp !== undefined ? { kpp: company.kpp } : {}),
+        ...(company.ogrn !== undefined ? { ogrn: company.ogrn } : {}),
+        legalType: company.type,
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw new AppError({ code: 'COMPANY_LOOKUP_INVALID_RESPONSE', message: 'Сервис поиска вернул противоречивые данные', statusCode: 502 });
+      }
+      throw error;
+    }
+    const source = 'company' in parsedPayload.data ? parsedPayload.data.source || 'registry-webhook' : 'registry-webhook';
+    return { company, source, demo: false, lookupEvidence: createCompanyLookupEvidence(company, source, 'webhook', context) };
   } catch (error) {
     if (error instanceof AppError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
@@ -123,8 +221,8 @@ export async function getCompanyProfile(app: FastifyInstance, organizationId: st
       registryStatus: organization.legalStatus ?? '',
       registrySource: organization.registrySource ?? '',
       verified: Boolean(organization.registryVerifiedAt),
-      website: business?.website ?? '',
-      industry: business?.industry ?? '',
+      website: organization.website ?? business?.website ?? '',
+      industry: organization.industry ?? business?.industry ?? '',
     },
     organization,
     business,
@@ -159,6 +257,9 @@ export async function updateCompanyProfile(
       where: { id: organizationId },
       data: {
         ...(input.title !== undefined ? { name: input.title } : {}),
+        ...(input.title !== undefined ? { legalName: input.title } : {}),
+        ...(input.website !== undefined ? { website: input.website || null } : {}),
+        ...(input.industry !== undefined ? { industry: input.industry || null } : {}),
         ...(input.inn !== undefined ? { inn: input.inn || null, legalType } : {}),
         ...(input.kpp !== undefined ? { kpp: input.kpp || null } : {}),
         ...(input.ogrn !== undefined ? { ogrn: input.ogrn || null } : {}),
