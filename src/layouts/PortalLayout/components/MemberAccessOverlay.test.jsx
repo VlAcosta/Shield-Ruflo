@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { authService } from '../../../services/auth/authService';
 import MemberAccessOverlay from './MemberAccessOverlay';
 
@@ -10,16 +10,22 @@ describe('MemberAccessOverlay logout', () => {
   beforeEach(() => authService.logout.mockReset());
 
   test('keeps the user on screen and explains a server logout failure', async () => {
+    let rejectLogout;
     authService.logout.mockImplementation(() => new Promise((_, reject) => {
-      window.setTimeout(() => reject(new Error('Сервис авторизации недоступен')), 0);
+      rejectLogout = reject;
     }));
     render(<MemberAccessOverlay reason="revoked" />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Войти снова' }));
+    expect(authService.logout).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rejectLogout(new Error('Сервис авторизации недоступен'));
+      await Promise.resolve();
+    });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Сервис авторизации недоступен');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Войти снова' })).toBeEnabled());
-    expect(authService.logout).toHaveBeenCalledTimes(1);
   });
 
   test('moves focus into the modal and restores prior focus after unmount', () => {
