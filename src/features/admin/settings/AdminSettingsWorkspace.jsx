@@ -28,7 +28,7 @@ function NotificationsTab({ data, onSave, onTest, saving }) {
 }
 
 function IntegrationsTab({ integrations,onToggle,saving }) {
-  return <div className="admin-settings-integrations">{integrations.map((item,index)=><article key={item.id} className={`is-${item.status}`} style={{'--item-index':index}}><div className={`admin-settings-integrations__logo is-${item.tone}`}>{item.glyph}</div><div><div className="admin-settings-integrations__title"><strong>{item.name}</strong><span><i />{item.status==='connected'?'Подключено':'Не подключено'}</span></div><small>{item.description}</small></div><button type="button" disabled={saving} onClick={()=>onToggle(item.id)}>{item.status==='connected'?'Отключить':'Подключить'}</button></article>)}</div>;
+  return <div className="admin-settings-integrations">{integrations.map((item,index)=><article key={item.id} className={`is-${item.status}`} style={{'--item-index':index}}><div className={`admin-settings-integrations__logo is-${item.tone}`}>{item.glyph}</div><div><div className="admin-settings-integrations__title"><strong>{item.name}</strong><span><i />{item.status==='connected'?'Подключено':'Не подключено'}</span></div><small>{item.description}</small></div><button type="button" disabled={saving} onClick={()=>onToggle(item.id,item.status!=='connected')}>{item.status==='connected'?'Отключить':'Подключить'}</button></article>)}</div>;
 }
 
 function TemplatesTab({ templates,onSave,onDelete,saving }) {
@@ -62,7 +62,7 @@ export default function AdminSettingsWorkspace({ onRefreshReady }) {
     if(!data)return null;
     if(tab==='plans')return <PlansTab plans={data.plans} saving={saving} savePlan={(id,patch)=>run(()=>savePlan(id,patch),'Тариф обновлён')}/>;
     if(tab==='notifications')return <NotificationsTab data={data} saving={saving} onSave={(section,value)=>run(()=>saveSection(section,value),'Настройки сохранены')} onTest={testSmtp}/>;
-    if(tab==='integrations')return <IntegrationsTab integrations={data.integrations} saving={saving} onToggle={(id)=>run(()=>toggleIntegration(id),'Статус интеграции обновлён')}/>;
+    if(tab==='integrations')return <IntegrationsTab integrations={data.integrations} saving={saving} onToggle={(id,enabled)=>run(()=>toggleIntegration(id,enabled),'Статус интеграции обновлён')}/>;
     if(tab==='templates')return <TemplatesTab templates={data.templates} saving={saving} onSave={(template)=>run(()=>saveTemplate(template),'Шаблон сохранён')} onDelete={(id)=>run(()=>deleteTemplate(id),'Шаблон удалён')}/>;
     return <SecurityTab data={data} saving={saving} onSave={(section,value)=>run(()=>saveSection(section,value),'Политика безопасности обновлена')}/>;
   },[data,tab,saving,savePlan,saveSection,testSmtp,toggleIntegration,saveTemplate,deleteTemplate]);
