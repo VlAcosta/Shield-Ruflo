@@ -36,6 +36,21 @@ async function registerWorkspace(api, phone, firstName) {
   };
 }
 
+async function markOnboardingCompleted(workspace) {
+  const pool = new Pool({ connectionString: process.env.E2E_DATABASE_URL });
+  try {
+    await pool.query(
+      `UPDATE organizations
+       SET onboarding_status = 'COMPLETED',
+           onboarding_completed_at = COALESCE(onboarding_completed_at, NOW())
+       WHERE id = $1::uuid`,
+      [workspace.organizationId],
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
 async function cleanupWorkspaces(workspaces) {
   const ids = workspaces.filter(Boolean);
   if (!ids.length) return;
@@ -88,6 +103,9 @@ test('F5 restores the HttpOnly session, backend organization and PostgreSQL Revi
     get: (url, options) => page.request.get(url, options),
   };
   workspaceA = await registerWorkspace(browserApi, `+7998${String(Date.now()).slice(-7)}`, aMarker);
+  // The P0 test exercises authenticated Reviews/F5 restoration, not onboarding itself.
+  // Complete onboarding as fixture state so the real route guard admits /reviews.
+  await markOnboardingCompleted(workspaceA);
   await importReview(browserApi, workspaceA, aMarker);
   await page.evaluate(() => {
     localStorage.setItem('portal_pin_code', '7391');
