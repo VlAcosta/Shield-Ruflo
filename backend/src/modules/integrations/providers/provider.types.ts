@@ -1,0 +1,68 @@
+export type ProviderCapability =
+  | 'oauth'
+  | 'accounts.read'
+  | 'locations.read'
+  | 'profile.read'
+  | 'reviews.read'
+  | 'reviews.reply';
+
+export type ProviderAvailability = {
+  configured: boolean;
+  connectable: boolean;
+  reasonCode?: string | undefined;
+  reasonMessage?: string | undefined;
+};
+
+export type ProviderConnectionContext = {
+  organizationId: string;
+  accountId: string;
+  provider: string;
+  externalAccountId: string | null;
+  configuration: Record<string, unknown>;
+  credentials: Readonly<Record<string, string>>;
+};
+
+export type ProviderConnectResult = {
+  verified: true;
+  health: 'CONNECTED' | 'DEGRADED';
+  externalAccountId?: string | undefined;
+  configuration?: Record<string, unknown> | undefined;
+  validatedAt?: Date | undefined;
+};
+
+export type ProviderDisconnectResult = {
+  confirmed: boolean;
+};
+
+export type ProviderReviewRecord = {
+  externalId: string;
+  rating: number;
+  text?: string | undefined;
+  authorName?: string | undefined;
+  authorExternalId?: string | undefined;
+  publishedAt: Date;
+  raw?: Record<string, unknown> | undefined;
+};
+
+export type ProviderReviewSyncResult = {
+  reviews: ProviderReviewRecord[];
+  nextCursor?: string | undefined;
+  hasMore: boolean;
+};
+
+export interface ProviderAdapter {
+  readonly id: string;
+  readonly displayName: string;
+  readonly capabilities: readonly ProviderCapability[];
+  availability(): ProviderAvailability;
+  connect(context: ProviderConnectionContext): Promise<ProviderConnectResult>;
+  disconnect?(context: ProviderConnectionContext): Promise<ProviderDisconnectResult>;
+  syncReviews?(context: ProviderConnectionContext, cursor?: string): Promise<ProviderReviewSyncResult>;
+}
+
+export type ProviderCatalogItem = {
+  id: string;
+  displayName: string;
+  capabilities: readonly ProviderCapability[];
+  availability: ProviderAvailability;
+};

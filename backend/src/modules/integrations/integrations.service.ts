@@ -1,20 +1,9 @@
-import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
-import { env } from '../../config/env.js';
-
-function encryptionKey(): Buffer {
-  return crypto.createHash('sha256').update(env.INTEGRATION_CREDENTIALS_KEY, 'utf8').digest();
-}
-
-function encryptSecret(value: string): string {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `v1:${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
-}
+import { encryptIntegrationSecret } from './providers/credential-vault.js';
+import { connectProviderAccount, disconnectProviderAccount } from './providers/provider-runtime.js';
+import { providerRegistry } from './providers/provider.registry.js';
 
 function toJson(value: Record<string, unknown>): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -61,6 +50,10 @@ export async function listIntegrationAccounts(app: FastifyInstance, organization
   return accounts.map(publicAccount);
 }
 
+export function listProviderCatalog() {
+  return providerRegistry.list();
+}
+
 export type CreateIntegrationAccountInput = {
   provider: string;
   name: string;
@@ -102,8 +95,8 @@ export async function saveIntegrationCredentials(
     Object.entries(credentials).map(([key, value]) =>
       app.prisma.integrationCredential.upsert({
         where: { accountId_key: { accountId, key } },
-        update: { encryptedValue: encryptSecret(value), keyVersion: 1 },
-        create: { accountId, key, encryptedValue: encryptSecret(value), keyVersion: 1 },
+        update: { encryptedValue: encryptIntegrationSecret(value), keyVersion: 1 },
+        create: { accountId, key, encryptedValue: encryptIntegrationSecret(value), keyVersion: 1 },
       }),
     ),
   );
@@ -118,42 +111,40 @@ export async function requestIntegrationConnect(app: FastifyInstance, organizati
   const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
   if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
 
-  await app.prisma.integrationAccount.update({
-    where: { id: account.id },
-    data: {
-      status: 'ERROR',
-      lastErrorCode: 'PROVIDER_ADAPTER_NOT_CONFIGURED',
-      lastErrorMessage: 'Для этого провайдера ещё не настроен production adapter',
-    },
-  });
-  await app.prisma.integrationEvent.create({
-    data: { organizationId, accountId, type: 'connection.rejected', payload: { reason: 'PROVIDER_ADAPTER_NOT_CONFIGURED' } },
-  });
-
-  throw new AppError({
-    code: 'PROVIDER_ADAPTER_NOT_CONFIGURED',
-    message: 'Подключение провайдера недоступно: production adapter не настроен',
-    statusCode: 422,
-  });
+  const connected = await connectProviderAccount(app, organizationId, account);
+  return { integration: publicAccount(connected) };
 }
 
 export async function disconnectIntegration(app: FastifyInstance, organizationId: string, accountId: string) {
-  const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId }, select: { id: true } });
+  const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
   if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
-  const updated = await app.prisma.integrationAccount.update({
-    where: { id: account.id },
-    data: { status: 'DISCONNECTED', lastErrorCode: null, lastErrorMessage: null },
-    include: { credentials: { select: { key: true } } },
-  });
-  await app.prisma.integrationEvent.create({ data: { organizationId, accountId, type: 'connection.disconnected' } });
+
+  const updated = await disconnectProviderAccount(app, organizationId, account);
   return publicAccount(updated);
 }
 
 export async function queueIntegrationSync(app: FastifyInstance, organizationId: string, accountId: string) {
   const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
   if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
-  if (account.status !== 'CONNECTED') {
+  if (!['CONNECTED', 'DEGRADED'].includes(account.status)) {
     throw new AppError({ code: 'INTEGRATION_NOT_CONNECTED', message: 'Интеграция не подключена', statusCode: 409 });
+  }
+
+  const adapter = providerRegistry.get(account.provider);
+  const availability = adapter?.availability();
+  if (!adapter || !availability?.configured || !availability.connectable) {
+    throw new AppError({
+      code: availability?.reasonCode || 'PROVIDER_ADAPTER_NOT_CONFIGURED',
+      message: availability?.reasonMessage || 'Production provider adapter не настроен',
+      statusCode: 422,
+    });
+  }
+  if (!adapter.capabilities.includes('reviews.read') || !adapter.syncReviews) {
+    throw new AppError({
+      code: 'PROVIDER_CAPABILITY_UNAVAILABLE',
+      message: 'Провайдер не поддерживает синхронизацию отзывов',
+      statusCode: 422,
+    });
   }
 
   const active = await app.prisma.integrationSyncRun.findFirst({
