@@ -175,12 +175,15 @@ export async function createSubscriptionCheckout(payload) {
     return result;
   }
 
-  await delay(650);
+  await delay(120);
+
   return {
-    ok: true,
-    paymentId: `demo-${Date.now()}`,
-    amount: payload.total,
+    ok: false,
+    status: 'payment_unavailable',
+    paymentId: null,
+    amount: Number(payload?.total || 0),
     redirectUrl: null,
+    message: 'Платёжный backend не подключён',
   };
 }
 
