@@ -1,18 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackspaceIcon } from '../icons';
 import BrandMark from '../../../components/brand/BrandMark';
 
 const PIN_LENGTH = 4;
-const DEFAULT_PIN = '4321';
 
 export default function AdminPinOverlay({ onUnlock }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const cardRef = useRef(null);
-  const expectedPin = localStorage.getItem('business-shield:admin-pin') || process.env.REACT_APP_ADMIN_PIN || DEFAULT_PIN;
+  const expectedPin = localStorage.getItem('business-shield:admin-pin') || process.env.REACT_APP_ADMIN_PIN || '';
 
-  const verify = (nextValue) => {
+  const verify = useCallback((nextValue) => {
     if (nextValue.length !== PIN_LENGTH) return;
+    if (!expectedPin) {
+      setError('Администраторский PIN не настроен');
+      setValue('');
+      return;
+    }
     if (nextValue === expectedPin) {
       setError('');
       onUnlock();
@@ -24,9 +28,9 @@ export default function AdminPinOverlay({ onUnlock }) {
       [{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(7px)' }, { transform: 'translateX(0)' }],
       { duration: 260, easing: 'ease-out' }
     );
-  };
+  }, [expectedPin, onUnlock]);
 
-  const addDigit = (digit) => {
+  const addDigit = useCallback((digit) => {
     setError('');
     setValue((current) => {
       if (current.length >= PIN_LENGTH) return current;
@@ -34,7 +38,7 @@ export default function AdminPinOverlay({ onUnlock }) {
       window.setTimeout(() => verify(next), 0);
       return next;
     });
-  };
+  }, [verify]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -56,7 +60,7 @@ export default function AdminPinOverlay({ onUnlock }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [value]);
+  }, [addDigit, value, verify]);
 
   return (
     <div className="admin-pin" role="dialog" aria-modal="true" aria-labelledby="admin-pin-title">
