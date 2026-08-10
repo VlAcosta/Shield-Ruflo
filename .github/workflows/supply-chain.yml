@@ -1,0 +1,116 @@
+name: Business Shield Supply Chain
+
+on:
+  push:
+    branches:
+      - main
+      - feat/product-v2-p13-p26
+      - feat/product-v2-p13-security
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '41 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  lock-integrity:
+    name: Lockfile integrity (${{ matrix.package }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: frontend
+            directory: .
+            lockfile: package-lock.json
+          - package: backend
+            directory: backend
+            lockfile: backend/package-lock.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: ${{ matrix.lockfile }}
+      - name: Verify reproducible install
+        working-directory: ${{ matrix.directory }}
+        run: npm ci --ignore-scripts
+
+  production-audit:
+    name: Production dependency audit (${{ matrix.package }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: frontend
+            directory: .
+          - package: backend
+            directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+      - name: Audit production dependency graph
+        working-directory: ${{ matrix.directory }}
+        run: npm audit --omit=dev --audit-level=high
+
+  full-audit-report:
+    name: Development/build audit report (${{ matrix.package }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: frontend
+            directory: .
+          - package: backend
+            directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+      - name: Generate audit JSON
+        shell: bash
+        run: |
+          cd "${{ matrix.directory }}"
+          npm audit --json > "$GITHUB_WORKSPACE/audit-${{ matrix.package }}.json" || true
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ matrix.package }}
+          path: audit-${{ matrix.package }}.json
+          if-no-files-found: error
+
+  secret-scan:
+    name: Gitleaks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sbom:
+    name: SBOM
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate repository SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: business-shield-sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: business-shield-sbom
+          path: business-shield-sbom.cdx.json
