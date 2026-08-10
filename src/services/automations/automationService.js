@@ -7,17 +7,19 @@ import { isDemoDataEnabled } from '../core/runtimeConfig';
 const AUTOMATIONS_ENDPOINT = String(getRuntimeEnv('AUTOMATIONS_ENDPOINT', '/api/v1/automations')).replace(/\/$/, '');
 const RULES_KEY = 'business-shield:automations:rules:v2';
 const LOG_KEY = 'business-shield:automations:log:v2';
+const DESCRIPTION_KEY = '__description';
 export const AUTOMATIONS_CHANGED_EVENT = 'business-shield:automations-changed';
 export const AUTOMATIONS_LOG_EVENT = 'business-shield:automations-log';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function normalizeRule(rule = {}) {
-  const conditions = rule.conditions && typeof rule.conditions === 'object' ? rule.conditions : {};
+  const rawConditions = rule.conditions && typeof rule.conditions === 'object' ? rule.conditions : {};
+  const { [DESCRIPTION_KEY]: storedDescription, ...conditions } = rawConditions;
   return {
     id: rule.id || `automation-${Date.now().toString(36)}`,
     name: String(rule.name || 'Новая автоматизация').slice(0, 180),
-    description: String(rule.description || '').slice(0, 500),
+    description: String(rule.description || storedDescription || '').slice(0, 500),
     enabled: rule.enabled !== false,
     trigger: rule.trigger || 'review.received',
     conditions: {
