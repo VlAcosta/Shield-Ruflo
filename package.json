@@ -18,7 +18,7 @@
     "test:ci": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings=0",
-    "test:e2e:p0": "playwright test e2e/p0-session-reload.spec.js"
+    "test:e2e:p0": "playwright test e2e/p0-session-reload.spec.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",
