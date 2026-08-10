@@ -62,7 +62,7 @@ export default function useTeamSecurity(users = []) {
   );
 
   const getSecurity = useMemo(() => (user) => securityById[user?.id] || getMemberSecurity(user, state), [securityById, state]);
-  const getSessions = useMemo(() => (user) => getMemberSessions(user), [state]);
+  const getSessions = (user) => getMemberSessions(user);
   const getSecurityActivity = useMemo(() => (user) => securityEvents.filter((item) => item.targetId === user?.id || String(item.actor?.email || '').toLowerCase() === String(user?.email || '').toLowerCase()), [securityEvents]);
 
   return { state, securityEvents, getSecurity, getSessions, getSecurityActivity };
