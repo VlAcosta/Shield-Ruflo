@@ -16,7 +16,7 @@ export function asProviderAdapterError(error: unknown): ProviderAdapterError {
   if (error instanceof ProviderAdapterError) return error;
   return new ProviderAdapterError({
     code: 'PROVIDER_REQUEST_FAILED',
-    message: error instanceof Error ? error.message : 'Provider request failed',
+    message: 'Не удалось выполнить запрос к внешнему провайдеру',
     retryable: true,
     statusCode: 502,
     cause: error,
