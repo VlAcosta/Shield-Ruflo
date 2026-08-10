@@ -1,8 +1,8 @@
 import { apiRequest } from '../core/apiClient';
 import { organizationContextService } from './organizationContextService';
 
-jest.mock('../core/apiClient', () => ({
-  apiRequest: jest.fn(),
+vi.mock('../core/apiClient', () => ({
+  apiRequest: vi.fn(),
   joinEndpoint: (base, path) => `${base}${path}`,
 }));
 
@@ -30,4 +30,3 @@ describe('organizationContextService', () => {
     await expect(organizationContextService.select('org-b')).rejects.toThrow('активное рабочее пространство');
   });
 });
-
