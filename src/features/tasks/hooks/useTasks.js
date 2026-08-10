@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  addTaskChecklistItem,
+  addTaskComment,
   createTask as createTaskRequest,
   getTasksSnapshot,
   moveTask as moveTaskRequest,
   saveTaskPreferences,
+  setTaskChecklistItem,
   updateTask as updateTaskRequest,
 } from '../../../services/tasks/taskService';
 import { TASK_STATUS_ORDER } from '../model/taskData';
@@ -39,7 +42,6 @@ export default function useTasks() {
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-
     try {
       const data = await getTasksSnapshot();
       if (mountedRef.current) setSnapshot(data);
@@ -50,25 +52,19 @@ export default function useTasks() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const view = snapshot?.preferences?.view || 'board';
 
   const setView = useCallback(async (nextView) => {
     if (!snapshot || nextView === view) return;
-
-    const optimistic = {
-      ...snapshot,
-      preferences: { ...(snapshot.preferences || {}), view: nextView },
-    };
+    const optimistic = { ...snapshot, preferences: { ...(snapshot.preferences || {}), view: nextView } };
     setSnapshot(optimistic);
-
     try {
       const result = await saveTaskPreferences({ view: nextView }, optimistic);
       if (mountedRef.current && result?.snapshot) setSnapshot(result.snapshot);
     } catch {
+      setSnapshot(snapshot);
       showNotice('Не удалось сохранить вид отображения', 'error');
     }
   }, [showNotice, snapshot, view]);
@@ -76,11 +72,10 @@ export default function useTasks() {
   const filteredTasks = useMemo(() => {
     if (!snapshot) return [];
     const normalized = query.trim().toLowerCase();
-
     return snapshot.tasks.filter((task) => {
       const matchesQuery = !normalized || [task.title, task.type, task.description]
         .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(normalized));
+        .some((value) => String(value).toLowerCase().includes(normalized));
       const matchesPriority = priority === 'all' || task.priority === priority;
       const matchesType = type === 'all' || task.type === type;
       return matchesQuery && matchesPriority && matchesType;
@@ -100,7 +95,6 @@ export default function useTasks() {
   const createTask = useCallback(async (payload) => {
     if (!snapshot || busy.create) return null;
     setBusy((current) => ({ ...current, create: true }));
-
     try {
       const result = await createTaskRequest(payload, snapshot);
       if (mountedRef.current && result?.snapshot) setSnapshot(result.snapshot);
@@ -119,14 +113,9 @@ export default function useTasks() {
   const updateTask = useCallback(async (taskId, patch, successMessage = '') => {
     if (!snapshot || busy.taskId) return null;
     setBusy((current) => ({ ...current, taskId }));
-
     const previous = snapshot;
-    const optimistic = {
-      ...snapshot,
-      tasks: snapshot.tasks.map((task) => task.id === taskId ? { ...task, ...patch } : task),
-    };
+    const optimistic = { ...snapshot, tasks: snapshot.tasks.map((task) => task.id === taskId ? { ...task, ...patch } : task) };
     setSnapshot(optimistic);
-
     try {
       const result = await updateTaskRequest(taskId, patch, optimistic);
       if (mountedRef.current && result?.snapshot) setSnapshot(result.snapshot);
@@ -147,25 +136,20 @@ export default function useTasks() {
 
   const moveTask = useCallback(async (taskId, status, beforeTaskId = null) => {
     if (!snapshot) return;
-
     const previous = snapshot;
     const source = snapshot.tasks.find((task) => task.id === taskId);
     if (!source) return;
-
     const remaining = snapshot.tasks.filter((task) => task.id !== taskId);
     const moved = { ...source, status };
     let insertAt = beforeTaskId ? remaining.findIndex((task) => task.id === beforeTaskId) : -1;
-
     if (insertAt < 0) {
       const lastStatusIndex = remaining.reduce((last, task, index) => task.status === status ? index : last, -1);
       insertAt = lastStatusIndex >= 0 ? lastStatusIndex + 1 : remaining.length;
     }
-
     const tasks = [...remaining];
     tasks.splice(insertAt, 0, moved);
     const optimistic = { ...snapshot, tasks };
     setSnapshot(optimistic);
-
     try {
       const result = await moveTaskRequest(taskId, status, beforeTaskId, optimistic);
       if (mountedRef.current && result?.snapshot) setSnapshot(result.snapshot);
@@ -176,46 +160,45 @@ export default function useTasks() {
     }
   }, [showNotice, snapshot]);
 
-  const toggleChecklist = useCallback((taskId, checklistId) => {
+  const toggleChecklist = useCallback(async (taskId, checklistId) => {
     const task = snapshot?.tasks.find((item) => item.id === taskId);
-    if (!task) return;
+    const item = task?.checklist?.find((entry) => entry.id === checklistId);
+    if (!task || !item) return;
+    try {
+      await setTaskChecklistItem(taskId, checklistId, !item.done);
+      await load();
+    } catch {
+      showNotice('Не удалось обновить чек-лист', 'error');
+    }
+  }, [load, showNotice, snapshot]);
 
-    const checklist = task.checklist.map((item) => item.id === checklistId ? { ...item, done: !item.done } : item);
-    updateTask(taskId, { checklist });
-  }, [snapshot, updateTask]);
-
-  const addComment = useCallback((taskId, text) => {
-    const task = snapshot?.tasks.find((item) => item.id === taskId);
+  const addComment = useCallback(async (taskId, text) => {
     const trimmed = text.trim();
-    if (!task || !trimmed) return;
+    if (!trimmed) return;
+    try {
+      await addTaskComment(taskId, trimmed);
+      await load();
+      showNotice('Комментарий добавлен');
+    } catch {
+      showNotice('Не удалось добавить комментарий', 'error');
+    }
+  }, [load, showNotice]);
 
-    const comments = [
-      ...(task.comments || []),
-      {
-        id: `comment-${Date.now()}`,
-        author: 'Вы',
-        initials: 'ВЫ',
-        text: trimmed,
-        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-      },
-    ];
-    updateTask(taskId, { comments }, 'Комментарий добавлен');
-  }, [snapshot, updateTask]);
+  const addChecklist = useCallback(async (taskId, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    try {
+      await addTaskChecklistItem(taskId, trimmed);
+      await load();
+      showNotice('Пункт добавлен');
+    } catch {
+      showNotice('Не удалось добавить пункт', 'error');
+    }
+  }, [load, showNotice]);
 
-  const addAttachments = useCallback((taskId, files) => {
-    const task = snapshot?.tasks.find((item) => item.id === taskId);
-    if (!task || !files.length) return;
-
-    const attachments = [
-      ...(task.attachments || []),
-      ...files.map((file, index) => ({
-        id: `file-${Date.now()}-${index}`,
-        name: file.name,
-        kind: file.name.split('.').pop()?.toLowerCase() || 'file',
-      })),
-    ];
-    updateTask(taskId, { attachments }, 'Файлы добавлены');
-  }, [snapshot, updateTask]);
+  const addAttachments = useCallback(() => {
+    showNotice('Хранилище файлов ещё не подключено — файл не был загружен', 'warning');
+  }, [showNotice]);
 
   return {
     snapshot,
@@ -239,6 +222,7 @@ export default function useTasks() {
     updateTask,
     moveTask,
     toggleChecklist,
+    addChecklist,
     addComment,
     addAttachments,
     busy,
