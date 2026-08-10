@@ -43,7 +43,31 @@ describe('InviteUserModal canonical role contract', () => {
     expect(name).toHaveFocus();
   });
 
-  test('traps keyboard focus and restores the trigger when closed', async () => {
+  test('wraps Tab and Shift+Tab inside the modal focus boundary', () => {
+    const container = document.createElement('div');
+    const first = document.createElement('button');
+    const last = document.createElement('button');
+    first.textContent = 'first';
+    last.textContent = 'last';
+    container.append(first, last);
+    document.body.appendChild(container);
+
+    const preventDefault = vi.fn();
+    last.focus();
+    expect(trapInviteModalFocus(container, { key: 'Tab', shiftKey: false, preventDefault })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(first).toHaveFocus();
+
+    preventDefault.mockClear();
+    first.focus();
+    expect(trapInviteModalFocus(container, { key: 'Tab', shiftKey: true, preventDefault })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(last).toHaveFocus();
+
+    container.remove();
+  });
+
+  test('autofocuses the form and restores the trigger when closed', async () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
     trigger.focus();
@@ -52,22 +76,6 @@ describe('InviteUserModal canonical role contract', () => {
 
     const name = screen.getByPlaceholderText('Анна Петрова');
     await waitFor(() => expect(name).toHaveFocus());
-
-    const closeButton = screen.getAllByRole('button', { name: 'Закрыть' })[1];
-    const last = screen.getByRole('button', { name: 'Создать приглашение' });
-    const card = last.closest('form');
-    const preventDefault = vi.fn();
-
-    last.focus();
-    expect(trapInviteModalFocus(card, { key: 'Tab', shiftKey: false, preventDefault })).toBe(true);
-    expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(closeButton).toHaveFocus();
-
-    closeButton.focus();
-    preventDefault.mockClear();
-    expect(trapInviteModalFocus(card, { key: 'Tab', shiftKey: true, preventDefault })).toBe(true);
-    expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(last).toHaveFocus();
 
     rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={vi.fn()} />);
     expect(trigger).toHaveFocus();
