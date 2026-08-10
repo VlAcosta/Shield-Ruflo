@@ -29,6 +29,8 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    exclude: ['node_modules/**', 'build/**', 'backend/**', 'e2e/**'],
     css: true,
     sequence: {
       hooks: 'list',
