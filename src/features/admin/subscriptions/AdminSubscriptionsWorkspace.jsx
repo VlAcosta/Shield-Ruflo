@@ -20,7 +20,7 @@ function Skeleton() {
 
 export default function AdminSubscriptionsWorkspace({ onRefreshReady }) {
   const navigate = useNavigate();
-  const { data, error, refreshing, saving, refresh, updatePlan, createPlan, updateSubscription, toggleAutoRenew } = useAdminSubscriptions();
+  const { data, error, refreshing, saving, refresh, updatePlan, createPlan, toggleAutoRenew } = useAdminSubscriptions();
   const [tab, setTab] = useState('subscriptions');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
@@ -59,7 +59,7 @@ export default function AdminSubscriptionsWorkspace({ onRefreshReady }) {
     <div className={`admin-billing ${refreshing ? 'is-refreshing' : ''}`}>
       <section className="admin-billing__intro">
         <div><span>BILLING CONTROL</span><h2>Доход и подписки без слепых зон</h2><p>Управляйте тарифами, продлениями и риском оттока из единого финансового центра.</p></div>
-        <div className="admin-billing__pulse"><span><i />MRR</span><strong>{formatAdminMoney(data.metrics.mrr)}</strong><small>+3.2% к прошлому периоду</small></div>
+        <div className="admin-billing__pulse"><span><i />MRR</span><strong>{formatAdminMoney(data.metrics.mrr)}</strong><small>рассчитано по активным подпискам</small></div>
       </section>
 
       <div className="admin-billing__metrics">{metrics.map(([label, value, delta, tone, caption], index) => <BillingMetricCard key={label} label={label} value={value} delta={delta} tone={tone} index={index} caption={caption} />)}</div>
@@ -84,9 +84,7 @@ export default function AdminSubscriptionsWorkspace({ onRefreshReady }) {
             <div className="admin-billing-toolbar"><label><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по клиенту, тарифу, менеджеру…" /></label><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Все статусы</option><option value="active">Активен</option><option value="trial">Пробный</option><option value="expired">Истёк</option><option value="cancelled">Отменён</option></select><span>{filtered.length} записей</span></div>
             <SubscriptionTable
               subscriptions={filtered}
-              plans={data.plans}
               onOpenClient={(id) => navigate(`/admin/clients/${id}`)}
-              onChangePlan={(id, planId) => updateSubscription(id, { planId })}
               onToggleAutoRenew={toggleAutoRenew}
             />
           </div>
@@ -115,7 +113,7 @@ export default function AdminSubscriptionsWorkspace({ onRefreshReady }) {
       </section>
 
       <section className="admin-billing-card admin-billing-events">
-        <header><div><span>LIVE FEED</span><h2>Финансовые события</h2></div><small>обновляется автоматически</small></header>
+        <header><div><span>LIVE FEED</span><h2>Финансовые события</h2></div><small>из серверных событий</small></header>
         <div>{data.events.map((event, index) => <article key={event.id} style={{ '--event-index': index }}><i className={`is-${event.tone}`} /><span><strong>{event.title}</strong><small>{event.description}</small></span><time>{event.time}</time></article>)}</div>
       </section>
 
