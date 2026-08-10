@@ -62,6 +62,18 @@ async function request(path = '', options = {}) {
   return apiRequest(joinEndpoint(ENDPOINT, path), { ...options, timeout: 10000 });
 }
 
+function paymentUnavailable(payload, error = null) {
+  return {
+    ok: false,
+    status: 'payment_unavailable',
+    paymentId: null,
+    amount: Number(payload?.total || 0),
+    redirectUrl: null,
+    message: error?.message || 'Онлайн-оплата сейчас недоступна',
+    errorCode: error?.code || 'PAYMENT_PROVIDER_NOT_CONFIGURED',
+  };
+}
+
 export async function getSubscriptionSnapshot({ signal } = {}) {
   if (ENDPOINT) {
     try {
@@ -170,21 +182,21 @@ export async function validatePromoCode(code, subtotal) {
 
 export async function createSubscriptionCheckout(payload) {
   if (ENDPOINT) {
-    const result = await request('/checkout', { method: 'POST', body: JSON.stringify(payload), idempotencyKey: createIdempotencyKey('subscription-checkout') });
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SUBSCRIPTION_CHANGED_EVENT, { detail: result }));
-    return result;
+    try {
+      const result = await request('/checkout', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        idempotencyKey: createIdempotencyKey('subscription-checkout'),
+      });
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SUBSCRIPTION_CHANGED_EVENT, { detail: result }));
+      return result;
+    } catch (error) {
+      return paymentUnavailable(payload, error);
+    }
   }
 
   await delay(120);
-
-  return {
-    ok: false,
-    status: 'payment_unavailable',
-    paymentId: null,
-    amount: Number(payload?.total || 0),
-    redirectUrl: null,
-    message: 'Платёжный backend не подключён',
-  };
+  return paymentUnavailable(payload);
 }
 
 export async function downloadPaymentReceipt(payment) {
