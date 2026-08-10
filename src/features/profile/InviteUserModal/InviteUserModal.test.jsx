@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import InviteUserModal from './InviteUserModal';
 import { getAvailableRoles } from '../../../services/access/rbacService';
 
@@ -57,7 +56,7 @@ describe('InviteUserModal canonical role contract', () => {
     const closeButtons = screen.getAllByRole('button', { name: 'Закрыть' });
     const last = screen.getByRole('button', { name: 'Создать приглашение' });
     last.focus();
-    await userEvent.tab();
+    fireEvent.keyDown(last, { key: 'Tab', code: 'Tab' });
     expect(closeButtons[1]).toHaveFocus();
 
     rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={vi.fn()} />);
