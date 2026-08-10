@@ -18,6 +18,11 @@ import { systemRoutes } from './modules/system/system.routes.js';
 import { profileRoutes } from './modules/profile/profile.routes.js';
 import { teamRoutes } from './modules/team/team.routes.js';
 import { reviewsRoutes } from './modules/reviews/reviews.routes.js';
+import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
+import { tasksRoutes } from './modules/tasks/tasks.routes.js';
+import { integrationsRoutes } from './modules/integrations/integrations.routes.js';
+import { operationsRoutes } from './modules/operations/operations.routes.js';
+import { billingRoutes } from './modules/billing/billing.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -31,9 +36,12 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.password',
           '*.token',
           '*.code',
+          '*.credentials',
+          '*.encryptedValue',
           '*.AUTH_SECRET',
           '*.AUTH_OTP_WEBHOOK_TOKEN',
           '*.COMPANY_LOOKUP_WEBHOOK_TOKEN',
+          '*.INTEGRATION_CREDENTIALS_KEY',
         ],
         censor: '[REDACTED]',
       },
@@ -61,6 +69,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(profileRoutes, { prefix: '/api/v1' });
   await app.register(teamRoutes, { prefix: '/api/v1' });
   await app.register(reviewsRoutes, { prefix: '/api/v1' });
+  await app.register(dashboardRoutes, { prefix: '/api/v1' });
+  await app.register(tasksRoutes, { prefix: '/api/v1' });
+  await app.register(integrationsRoutes, { prefix: '/api/v1' });
+  await app.register(operationsRoutes, { prefix: '/api/v1' });
+  await app.register(billingRoutes, { prefix: '/api/v1' });
 
   return app;
 }
