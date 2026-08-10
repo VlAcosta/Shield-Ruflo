@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 type AutomationEvent = {
-  type: 'new_review' | 'negative_review' | 'rating_at_most' | 'unanswered_age';
+  type: 'new_review' | 'unanswered_age';
   organizationId: string;
   dedupeKey: string;
   actorUserId?: string | null;
@@ -26,21 +26,38 @@ type AutomationRecord = {
   actions: unknown;
 };
 
-function objectValue(value: unknown, key: string): unknown {
+function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)[key]
-    : undefined;
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function matchesAutomation(automation: AutomationRecord, event: AutomationEvent): boolean {
   if (!automation.enabled) return false;
-  if (automation.trigger === 'new_review') return event.type === 'new_review';
-  if (automation.trigger === 'negative_review') return event.type === 'new_review' && Number(event.review?.rating ?? 5) <= 2;
-  if (automation.trigger === 'rating_at_most') {
-    if (event.type !== 'new_review') return false;
-    const threshold = Number(objectValue(automation.conditions, 'rating') ?? objectValue(automation.conditions, 'ratingMax') ?? 2);
-    return Number(event.review?.rating ?? 5) <= threshold;
+  const conditions = asObject(automation.conditions);
+
+  if (['review.received', 'new_review', 'negative_review', 'rating_at_most'].includes(automation.trigger)) {
+    if (event.type !== 'new_review' || !event.review) return false;
+    const rating = Number(event.review.rating);
+    let min = Number(conditions.ratingMin ?? 1);
+    let max = Number(conditions.ratingMax ?? conditions.rating ?? 5);
+    if (automation.trigger === 'negative_review') max = Math.min(max, 2);
+    if (automation.trigger === 'rating_at_most') max = Number(conditions.rating ?? conditions.ratingMax ?? 2);
+    if (!Number.isFinite(min)) min = 1;
+    if (!Number.isFinite(max)) max = 5;
+    if (rating < min || rating > max) return false;
+
+    const platforms = stringArray(conditions.platforms).map((item) => item.toLowerCase());
+    if (platforms.length && event.review.provider && !platforms.includes(event.review.provider.toLowerCase())) return false;
+    return true;
   }
+
+  if (automation.trigger === 'review.sla_at_risk') return event.type === 'unanswered_age' && conditions.state === 'at_risk';
+  if (automation.trigger === 'review.sla_breached') return event.type === 'unanswered_age' && conditions.state === 'breached';
   return false;
 }
 
@@ -63,7 +80,7 @@ async function resolveActorUserId(app: FastifyInstance, event: AutomationEvent):
   }
   const member = await app.prisma.organizationMember.findFirst({
     where: { organizationId: event.organizationId, status: 'ACTIVE' },
-    orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    orderBy: { createdAt: 'asc' },
     select: { userId: true },
   });
   return member?.userId ?? null;
@@ -103,7 +120,7 @@ async function executeAction(
     return { type: action.type, taskId: task.id };
   }
 
-  if (action.type === 'assign_manager' && review) {
+  if ((action.type === 'assign_manager' || action.type === 'assign_shield') && review) {
     const member = await app.prisma.organizationMember.findFirst({
       where: {
         organizationId: event.organizationId,
@@ -127,6 +144,19 @@ async function executeAction(
       update: { status: 'ACTIVE', completedAt: null, note: `Автоматизация: ${automation.name}` },
     });
     return { type: action.type, memberId: member.id };
+  }
+
+  if (action.type === 'send_for_approval' && review) {
+    const draft = await app.prisma.reviewReply.findFirst({
+      where: { organizationId: event.organizationId, reviewId: review.id, status: 'DRAFT' },
+      orderBy: { version: 'desc' },
+    });
+    if (!draft) return { type: action.type, skipped: 'NO_DRAFT_REPLY' };
+    await app.prisma.$transaction([
+      app.prisma.reviewReply.update({ where: { id: draft.id }, data: { status: 'PENDING' } }),
+      app.prisma.review.update({ where: { id: review.id }, data: { workflowStatus: 'AWAITING_APPROVAL' } }),
+    ]);
+    return { type: action.type, replyId: draft.id };
   }
 
   if (action.type === 'notify') {
