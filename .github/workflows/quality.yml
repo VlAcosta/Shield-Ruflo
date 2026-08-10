@@ -44,7 +44,7 @@ jobs:
       AUTH_EXPOSE_DEBUG_CODE: "false"
       COMPANY_LOOKUP_PROVIDER: disabled
       INTEGRATION_CREDENTIALS_KEY: ci-only-integration-credential-key-0123456789
-      PLATFORM_ADMIN_IDENTITIES: ci-platform-admin@example.test
+      PLATFORM_ADMIN_IDENTITIES: ci-platform-admin@example.test,ci-platform-data-admin@example.test
       SWAGGER_ENABLED: "false"
       CORS_ORIGINS: http://localhost:3000
 
