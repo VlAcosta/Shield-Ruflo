@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../../../components/ui/DashboardCard';
 import PeriodMenu from '../../../components/ui/PeriodMenu';
