@@ -99,12 +99,12 @@ function metadataSyncMarker(value: unknown): { runId?: string; disposition?: Ing
   const metadata = jsonObject(value);
   const sync = jsonObject(metadata.providerSync);
   const disposition = sync.disposition;
-  return {
-    runId: typeof sync.runId === 'string' ? sync.runId : undefined,
-    disposition: ['imported', 'updated', 'skipped'].includes(String(disposition))
-      ? disposition as IngestionDisposition
-      : undefined,
-  };
+  const marker: { runId?: string; disposition?: IngestionDisposition } = {};
+  if (typeof sync.runId === 'string') marker.runId = sync.runId;
+  if (['imported', 'updated', 'skipped'].includes(String(disposition))) {
+    marker.disposition = disposition as IngestionDisposition;
+  }
+  return marker;
 }
 
 function providerMetadata(
@@ -469,22 +469,18 @@ export async function processIntegrationReviewSync(
         if (seenReviews.has(identity)) continue;
         seenReviews.add(identity);
 
-        try {
-          const result = await ingestReviewRecord(
-            prisma,
-            syncAccount,
-            run.id,
-            business.id,
-            selectedProviderLocationCount(account.configuration),
-            record,
-          );
-          touchedSourceIds.add(result.sourceId);
-          if (result.disposition === 'imported') counters.imported += 1;
-          else if (result.disposition === 'updated') counters.updated += 1;
-          else counters.skipped += 1;
-        } catch {
-          counters.errors += 1;
-        }
+        const result = await ingestReviewRecord(
+          prisma,
+          syncAccount,
+          run.id,
+          business.id,
+          selectedProviderLocationCount(account.configuration),
+          record,
+        );
+        touchedSourceIds.add(result.sourceId);
+        if (result.disposition === 'imported') counters.imported += 1;
+        else if (result.disposition === 'updated') counters.updated += 1;
+        else counters.skipped += 1;
       }
 
       const nextCursor = page.nextCursor;

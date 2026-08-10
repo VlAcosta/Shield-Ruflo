@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import GoogleBusinessProfileSetup from './GoogleBusinessProfileSetup';
 import {
   googleBusinessAccounts,
@@ -125,11 +125,13 @@ describe('P17 Google Business Profile setup and review sync', () => {
     fireEvent.click(syncButton);
 
     await waitFor(() => expect(providerSync).toHaveBeenCalledWith('google'));
-    await waitFor(() => expect(screen.getByText('Синхронизировано')).toBeInTheDocument());
-    expect(screen.getByText('7')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('11')).toBeInTheDocument();
-    expect(screen.getByText('0')).toBeInTheDocument();
+    const syncLabels = await screen.findAllByText('Синхронизировано');
+    const syncPanel = syncLabels.map((node) => node.closest('.google-business-setup__sync')).find(Boolean);
+    expect(syncPanel).toBeTruthy();
+    expect(within(syncPanel).getByText('7')).toBeInTheDocument();
+    expect(within(syncPanel).getByText('2')).toBeInTheDocument();
+    expect(within(syncPanel).getByText('11')).toBeInTheDocument();
+    expect(within(syncPanel).getByText('0')).toBeInTheDocument();
     expect(screen.getByText(/Синхронизация отзывов поставлена в очередь/)).toBeInTheDocument();
   });
 });
