@@ -1,7 +1,7 @@
 import React from "react";
 import "../../scss/footer.scss";
 
-import logo from "../../assets/main-site/shield.svg"; 
+import logo from "../../assets/main-site/shield.svg";
 
 export default function Footer() {
   return (
@@ -22,13 +22,9 @@ export default function Footer() {
         <div className="siteFooter__right">
           <div className="siteFooter__title">Контакты</div>
 
-          <div className="siteFooter__links">
-            <a className="siteFooter__link" href="#">
-              Instagram
-            </a>
-            <a className="siteFooter__link" href="#">
-              Facebook
-            </a>
+          <div className="siteFooter__links" aria-label="Социальные сети">
+            <span className="siteFooter__link">Instagram</span>
+            <span className="siteFooter__link">Facebook</span>
           </div>
         </div>
       </div>
