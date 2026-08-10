@@ -1,12 +1,12 @@
 import { apiRequest } from '../core/apiClient';
 import { createSubscriptionCheckout } from './subscriptionService';
 
-jest.mock('../core/apiClient', () => {
-  const actual = jest.requireActual('../core/apiClient');
+vi.mock('../core/apiClient', async () => {
+  const actual = await vi.importActual('../core/apiClient');
   return {
     ...actual,
-    apiRequest: jest.fn(),
-    createIdempotencyKey: jest.fn(() => 'subscription-test-idempotency-key'),
+    apiRequest: vi.fn(),
+    createIdempotencyKey: vi.fn(() => 'subscription-test-idempotency-key'),
   };
 });
 
