@@ -3,6 +3,12 @@ import { AppError } from '../../core/errors/app-error.js';
 import { getCompanyProfile } from '../company/company.service.js';
 import { listTeamMembers } from '../team/team.service.js';
 
+type NotificationPreferences = {
+  email?: boolean;
+  telegram?: boolean;
+  push?: boolean;
+};
+
 function sessionDevice(userAgent: string | null) {
   const ua = userAgent || '';
   const browser = /Edg\//.test(ua) ? 'Edge'
@@ -40,6 +46,17 @@ async function currentUser(app: FastifyInstance, userId: string) {
   return user;
 }
 
+function normalizedNotificationPreferences(value: unknown): Required<NotificationPreferences> {
+  const defaults = { email: true, telegram: false, push: false };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
+  const raw = value as Record<string, unknown>;
+  return {
+    email: typeof raw.email === 'boolean' ? raw.email : defaults.email,
+    telegram: typeof raw.telegram === 'boolean' ? raw.telegram : defaults.telegram,
+    push: typeof raw.push === 'boolean' ? raw.push : defaults.push,
+  };
+}
+
 export async function getProfileSnapshot(app: FastifyInstance, request: FastifyRequest) {
   if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
   const user = await currentUser(app, request.auth.userId);
@@ -66,7 +83,7 @@ export async function getProfileSnapshot(app: FastifyInstance, request: FastifyR
         telegram: user.telegram || '',
         avatar: user.avatarUrl || '',
         stats: { reports: 0, score: 0, days: Math.max(1, Math.floor((Date.now() - user.createdAt.getTime()) / 86_400_000) + 1) },
-        notifications: user.notificationPreferences || { email: true, telegram: false, push: false },
+        notifications: normalizedNotificationPreferences(user.notificationPreferences),
       },
       company: companyPayload?.company || {},
       sessions: sessions.map((session) => {
@@ -100,6 +117,7 @@ export async function updatePersonalProfile(
     position?: string;
     telegram?: string;
     avatar?: string;
+    notifications?: NotificationPreferences;
   },
 ) {
   if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
@@ -124,6 +142,9 @@ export async function updatePersonalProfile(
   const lastName = input.lastName !== undefined ? input.lastName.trim() : existing.lastName;
   const displayName = `${firstName || ''} ${lastName || ''}`.trim() || existing.displayName;
   const emailChanged = email !== undefined && email !== existing.email;
+  const notificationPreferences = input.notifications !== undefined
+    ? { ...normalizedNotificationPreferences(existing.notificationPreferences), ...input.notifications }
+    : undefined;
 
   await app.prisma.$transaction(async (tx) => {
     await tx.user.update({
@@ -136,6 +157,7 @@ export async function updatePersonalProfile(
         ...(input.position !== undefined ? { position: input.position.trim() || null } : {}),
         ...(input.telegram !== undefined ? { telegram: input.telegram.trim() || null } : {}),
         ...(input.avatar !== undefined ? { avatarUrl: input.avatar || null } : {}),
+        ...(notificationPreferences !== undefined ? { notificationPreferences } : {}),
       },
     });
     await tx.auditLog.create({
