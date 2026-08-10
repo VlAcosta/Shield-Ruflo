@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import CompanyProfile from './CompanyProfile';
 
-vi.mock('./BusinessLocationsManager', () => () => null);
+vi.mock('./BusinessLocationsManager', () => ({ default: () => null }));
 
 const value = {
   title: 'ООО Север', inn: '7701234567', kpp: '770101001', ogrn: '1027700123456',
