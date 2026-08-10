@@ -42,6 +42,37 @@ function bodyAsConfiguration(body: unknown): Record<string, unknown> {
     : {};
 }
 
+function publicSyncRun(run: {
+  id: string;
+  status: string;
+  trigger: string;
+  importedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+} | null) {
+  if (!run) return null;
+  return {
+    id: run.id,
+    status: run.status,
+    trigger: run.trigger,
+    importedCount: run.importedCount,
+    updatedCount: run.updatedCount,
+    skippedCount: run.skippedCount,
+    errorCount: run.errorCount,
+    errorCode: run.errorCode,
+    errorMessage: run.errorMessage,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    createdAt: run.createdAt,
+  };
+}
+
 export const integrationsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/integrations', { preHandler: [app.authenticate, app.authorize('integrations.view')] }, async (request) => ({
     integrations: await listIntegrationAccounts(app, orgId(request)),
@@ -98,6 +129,25 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  app.get('/integrations/providers/:providerId/sync-status', { preHandler: [app.authenticate, app.authorize('integrations.view')] }, async (request) => {
+    const organizationId = orgId(request);
+    const { providerId } = providerParams.parse(request.params);
+    const account = await findProviderAccount(app, organizationId, providerId);
+    if (!account) {
+      return { providerId, accountId: null, lastSyncedAt: null, run: null };
+    }
+    const run = await app.prisma.integrationSyncRun.findFirst({
+      where: { organizationId, accountId: account.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      providerId,
+      accountId: account.id,
+      lastSyncedAt: account.lastSyncedAt,
+      run: publicSyncRun(run),
+    };
+  });
+
   const connectProvider = async (request: FastifyRequest) => {
     const organizationId = orgId(request);
     const { providerId } = providerParams.parse(request.params);
@@ -131,6 +181,6 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     const account = await findProviderAccount(app, organizationId, providerId);
     if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
     const run = await queueIntegrationSync(app, organizationId, account.id);
-    return reply.code(202).send({ providerId, status: 'syncing', run });
+    return reply.code(202).send({ providerId, status: 'syncing', run: publicSyncRun(run) });
   });
 };
