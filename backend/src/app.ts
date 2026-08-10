@@ -23,6 +23,7 @@ import { tasksRoutes } from './modules/tasks/tasks.routes.js';
 import { integrationsRoutes } from './modules/integrations/integrations.routes.js';
 import { operationsRoutes } from './modules/operations/operations.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
+import { adminRoutes } from './modules/admin/admin.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -74,6 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });
   await app.register(billingRoutes, { prefix: '/api/v1' });
+  await app.register(adminRoutes, { prefix: '/api/v1' });
 
   return app;
 }
