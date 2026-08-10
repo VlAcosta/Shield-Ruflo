@@ -91,6 +91,13 @@ const envSchema = z
     COMPANY_LOOKUP_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
 
     INTEGRATION_CREDENTIALS_KEY: z.string().min(32).default('development-integration-credential-key-change-me'),
+
+    GOOGLE_BUSINESS_ENABLED: booleanFromString.default(false),
+    GOOGLE_BUSINESS_CLIENT_ID: z.string().default(''),
+    GOOGLE_BUSINESS_CLIENT_SECRET: z.string().default(''),
+    GOOGLE_BUSINESS_REDIRECT_URI: optionalUrl,
+    GOOGLE_BUSINESS_RETURN_URL: optionalUrl,
+    GOOGLE_BUSINESS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
   })
   .superRefine((value, ctx) => {
     if (value.COMPANY_LOOKUP_PROVIDER === 'webhook' && !value.COMPANY_LOOKUP_WEBHOOK_URL) {
@@ -107,6 +114,21 @@ const envSchema = z
         path: ['AUTH_OTP_WEBHOOK_URL'],
         message: 'AUTH_OTP_WEBHOOK_URL is required when AUTH_OTP_PROVIDER=webhook',
       });
+    }
+
+    if (value.GOOGLE_BUSINESS_ENABLED) {
+      if (!value.GOOGLE_BUSINESS_CLIENT_ID) {
+        ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_CLIENT_ID'], message: 'Google Business Profile requires an OAuth client id' });
+      }
+      if (!value.GOOGLE_BUSINESS_CLIENT_SECRET) {
+        ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_CLIENT_SECRET'], message: 'Google Business Profile requires an OAuth client secret' });
+      }
+      if (!value.GOOGLE_BUSINESS_REDIRECT_URI) {
+        ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_REDIRECT_URI'], message: 'Google Business Profile requires an OAuth redirect URI' });
+      }
+      if (!value.GOOGLE_BUSINESS_RETURN_URL) {
+        ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_RETURN_URL'], message: 'Google Business Profile requires a frontend return URL' });
+      }
     }
 
     if (value.NODE_ENV === 'production') {
@@ -136,6 +158,12 @@ const envSchema = z
       }
       if (value.INTEGRATION_CREDENTIALS_KEY === 'development-integration-credential-key-change-me') {
         ctx.addIssue({ code: 'custom', path: ['INTEGRATION_CREDENTIALS_KEY'], message: 'Production requires a unique integration credential encryption key' });
+      }
+      if (value.GOOGLE_BUSINESS_ENABLED && !value.GOOGLE_BUSINESS_REDIRECT_URI.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_REDIRECT_URI'], message: 'Production Google OAuth redirect URI must use HTTPS' });
+      }
+      if (value.GOOGLE_BUSINESS_ENABLED && !value.GOOGLE_BUSINESS_RETURN_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_RETURN_URL'], message: 'Production Google OAuth return URL must use HTTPS' });
       }
     }
   });
