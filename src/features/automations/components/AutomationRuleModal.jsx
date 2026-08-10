@@ -7,17 +7,84 @@ const REASONS = ['качество', 'персонал', 'цена', 'доста
 
 export default function AutomationRuleModal({ rule, open, onClose, onSave }) {
   const [form, setForm] = useState(rule);
-  useEffect(() => { if (open) setForm(rule); }, [open, rule]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setForm(rule);
+      setSaving(false);
+      setError('');
+    }
+  }, [open, rule]);
+
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (event) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey); document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
-  }, [onClose, open]);
+    const onKey = (event) => { if (event.key === 'Escape' && !saving) onClose(); };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose, open, saving]);
+
   const valid = useMemo(() => form?.name?.trim() && form?.trigger && form?.actions?.length, [form]);
   if (!open || !form) return null;
+
   const patchConditions = (patch) => setForm((current) => ({ ...current, conditions: { ...current.conditions, ...patch } }));
   const toggleIn = (key, value) => patchConditions({ [key]: form.conditions[key].includes(value) ? form.conditions[key].filter((item) => item !== value) : [...form.conditions[key], value] });
   const toggleAction = (id) => setForm((current) => ({ ...current, actions: current.actions.includes(id) ? current.actions.filter((item) => item !== id) : [...current.actions, id] }));
-  return createPortal(<div className="automation-modal" role="presentation"><button className="automation-modal__backdrop" type="button" onClick={onClose} aria-label="Закрыть" /><section role="dialog" aria-modal="true" aria-labelledby="automation-modal-title" className="automation-modal__dialog"><header><div><span>NO-CODE RULE</span><h2 id="automation-modal-title">{form.id ? 'Настроить автоматизацию' : 'Новая автоматизация'}</h2><p>Событие → условия → действия. Без ручного контроля каждого отзыва.</p></div><button type="button" onClick={onClose}>×</button></header><div className="automation-modal__content"><label className="automation-field"><span>Название правила</span><input autoFocus value={form.name || ''} maxLength={72} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label className="automation-field"><span>Когда запускать</span><select value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value })}>{AUTOMATION_TRIGGERS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><small>{AUTOMATION_TRIGGERS.find((item) => item.id === form.trigger)?.description}</small></label><div className="automation-modal__section"><h3>Условия</h3><div className="automation-rating-range"><label><span>От</span><select value={form.conditions.ratingMin} onChange={(e) => patchConditions({ ratingMin: Number(e.target.value) })}>{[1,2,3,4,5].map((n)=><option key={n}>{n}</option>)}</select></label><strong>★</strong><label><span>До</span><select value={form.conditions.ratingMax} onChange={(e) => patchConditions({ ratingMax: Number(e.target.value) })}>{[1,2,3,4,5].map((n)=><option key={n}>{n}</option>)}</select></label></div><span className="automation-caption">Площадки · пусто означает «все»</span><div className="automation-chips">{PLATFORMS.map((item)=><button type="button" key={item} className={form.conditions.platforms.includes(item)?'is-active':''} onClick={()=>toggleIn('platforms',item)}>{item}</button>)}</div><span className="automation-caption">Причины негатива · необязательно</span><div className="automation-chips automation-chips--reasons">{REASONS.map((item)=><button type="button" key={item} className={form.conditions.reasons.includes(item)?'is-active':''} onClick={()=>toggleIn('reasons',item)}>{item}</button>)}</div></div><div className="automation-modal__section"><h3>Действия</h3><div className="automation-actions-grid">{AUTOMATION_ACTIONS.map((item)=><button type="button" key={item.id} className={form.actions.includes(item.id)?'is-active':''} onClick={()=>toggleAction(item.id)}><i>{form.actions.includes(item.id)?'✓':'+'}</i><div><strong>{item.label}</strong><span>{item.description}</span></div></button>)}</div>{form.actions.includes('create_task')?<label className="automation-field automation-field--inline"><span>Приоритет создаваемой задачи</span><select value={form.priority} onChange={(e)=>setForm({...form,priority:e.target.value})}><option value="critical">Критический</option><option value="high">Высокий</option><option value="medium">Средний</option><option value="low">Низкий</option></select></label>:null}</div></div><footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={!valid} onClick={()=>{onSave(form);onClose();}}>Сохранить правило</button></footer></section></div>,document.body);
+
+  const handleSave = async () => {
+    if (!valid || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(form);
+      onClose();
+    } catch (saveError) {
+      setError(saveError?.message || 'Не удалось сохранить правило');
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="automation-modal" role="presentation">
+      <button className="automation-modal__backdrop" type="button" onClick={saving ? undefined : onClose} aria-label="Закрыть" />
+      <section role="dialog" aria-modal="true" aria-labelledby="automation-modal-title" className="automation-modal__dialog">
+        <header>
+          <div>
+            <span>NO-CODE RULE</span>
+            <h2 id="automation-modal-title">{form.id ? 'Настроить автоматизацию' : 'Новая автоматизация'}</h2>
+            <p>Событие → условия → действия. Без ручного контроля каждого отзыва.</p>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving}>×</button>
+        </header>
+        <div className="automation-modal__content">
+          {error ? <div className="automation-modal__error" role="alert">{error}</div> : null}
+          <label className="automation-field"><span>Название правила</span><input autoFocus value={form.name || ''} maxLength={72} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label className="automation-field"><span>Когда запускать</span><select value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value })}>{AUTOMATION_TRIGGERS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><small>{AUTOMATION_TRIGGERS.find((item) => item.id === form.trigger)?.description}</small></label>
+          <div className="automation-modal__section">
+            <h3>Условия</h3>
+            <div className="automation-rating-range"><label><span>От</span><select value={form.conditions.ratingMin} onChange={(e) => patchConditions({ ratingMin: Number(e.target.value) })}>{[1,2,3,4,5].map((n)=><option key={n}>{n}</option>)}</select></label><strong>★</strong><label><span>До</span><select value={form.conditions.ratingMax} onChange={(e) => patchConditions({ ratingMax: Number(e.target.value) })}>{[1,2,3,4,5].map((n)=><option key={n}>{n}</option>)}</select></label></div>
+            <span className="automation-caption">Площадки · пусто означает «все»</span>
+            <div className="automation-chips">{PLATFORMS.map((item)=><button type="button" key={item} className={form.conditions.platforms.includes(item)?'is-active':''} onClick={()=>toggleIn('platforms',item)}>{item}</button>)}</div>
+            <span className="automation-caption">Причины негатива · необязательно</span>
+            <div className="automation-chips automation-chips--reasons">{REASONS.map((item)=><button type="button" key={item} className={form.conditions.reasons.includes(item)?'is-active':''} onClick={()=>toggleIn('reasons',item)}>{item}</button>)}</div>
+          </div>
+          <div className="automation-modal__section">
+            <h3>Действия</h3>
+            <div className="automation-actions-grid">{AUTOMATION_ACTIONS.map((item)=><button type="button" key={item.id} className={form.actions.includes(item.id)?'is-active':''} onClick={()=>toggleAction(item.id)}><i>{form.actions.includes(item.id)?'✓':'+'}</i><div><strong>{item.label}</strong><span>{item.description}</span></div></button>)}</div>
+            {form.actions.includes('create_task')?<label className="automation-field automation-field--inline"><span>Приоритет создаваемой задачи</span><select value={form.priority} onChange={(e)=>setForm({...form,priority:e.target.value})}><option value="critical">Критический</option><option value="high">Высокий</option><option value="medium">Средний</option><option value="low">Низкий</option></select></label>:null}
+          </div>
+        </div>
+        <footer>
+          <button type="button" onClick={onClose} disabled={saving}>Отмена</button>
+          <button type="button" className="is-primary" disabled={!valid || saving} onClick={handleSave}>{saving ? 'Сохраняем…' : 'Сохранить правило'}</button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
+  );
 }
