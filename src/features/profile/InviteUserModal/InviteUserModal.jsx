@@ -40,6 +40,32 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     [form.role, roles],
   );
 
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      if (!busy) onClose();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = Array.from(cardRef.current?.querySelectorAll(
+      'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) || []);
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     const previousOverflow = document.body.style.overflow;
@@ -47,26 +73,15 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     document.body.style.overflow = 'hidden';
     document.body.classList.add('portal-modal-open');
     const timer = window.setTimeout(() => cardRef.current?.querySelector('input')?.focus(), 40);
-    const handleKey = (event) => {
-      if (event.key === 'Escape' && !busy) onClose();
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(cardRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])') || []);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener('keydown', handleKey);
+
     return () => {
       document.body.style.overflow = previousOverflow;
       document.body.classList.remove('portal-modal-open');
       window.clearTimeout(timer);
-      window.removeEventListener('keydown', handleKey);
       const previousFocus = previousFocusRef.current;
       if (previousFocus instanceof HTMLElement && document.contains(previousFocus)) previousFocus.focus();
     };
-  }, [busy, onClose, open]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -141,8 +156,8 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
     : 'в течение 7 дней';
 
   return createPortal(
-    <div className="invite-user-modal" role="dialog" aria-modal="true" aria-labelledby="invite-user-title">
-      <button type="button" className="invite-user-modal__backdrop" onClick={busy ? undefined : onClose} aria-label="Закрыть" />
+    <div className="invite-user-modal" role="dialog" aria-modal="true" aria-labelledby="invite-user-title" onKeyDown={handleDialogKeyDown}>
+      <button type="button" className="invite-user-modal__backdrop" onClick={busy ? undefined : onClose} aria-label="Закрыть" tabIndex={-1} />
       <div className="invite-user-modal__stage">
         {!result ? (
           <form ref={cardRef} className="invite-user-modal__card" onSubmit={submit}>
