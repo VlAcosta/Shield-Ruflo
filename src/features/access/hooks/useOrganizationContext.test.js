@@ -3,13 +3,13 @@ import { authService } from '../../../services/auth/authService';
 import { organizationContextService } from '../../../services/organizations/organizationContextService';
 import useOrganizationContext, { ORGANIZATION_CONTEXT_CHANGED_EVENT } from './useOrganizationContext';
 
-jest.mock('../../../services/auth/authService', () => ({
+vi.mock('../../../services/auth/authService', () => ({
   SESSION_CHANGED_EVENT: 'business-shield:auth-session-changed',
-  authService: { persistSession: jest.fn() },
+  authService: { persistSession: vi.fn() },
 }));
 
-jest.mock('../../../services/organizations/organizationContextService', () => ({
-  organizationContextService: { list: jest.fn(), select: jest.fn() },
+vi.mock('../../../services/organizations/organizationContextService', () => ({
+  organizationContextService: { list: vi.fn(), select: vi.fn() },
 }));
 
 describe('useOrganizationContext', () => {
@@ -45,7 +45,7 @@ describe('useOrganizationContext', () => {
       },
     };
     organizationContextService.select.mockResolvedValue(user);
-    const onChanged = jest.fn();
+    const onChanged = vi.fn();
     window.addEventListener(ORGANIZATION_CONTEXT_CHANGED_EVENT, onChanged);
     const { result } = renderHook(() => useOrganizationContext());
     await waitFor(() => expect(result.current.state).toBe('ready'));
