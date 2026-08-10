@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import InviteUserModal from './InviteUserModal';
+import InviteUserModal, { trapInviteModalFocus } from './InviteUserModal';
 import { getAvailableRoles } from '../../../services/access/rbacService';
 
 vi.mock('../../../services/access/rbacService', () => ({
@@ -53,11 +53,21 @@ describe('InviteUserModal canonical role contract', () => {
     const name = screen.getByPlaceholderText('Анна Петрова');
     await waitFor(() => expect(name).toHaveFocus());
 
-    const closeButtons = screen.getAllByRole('button', { name: 'Закрыть' });
+    const closeButton = screen.getAllByRole('button', { name: 'Закрыть' })[1];
     const last = screen.getByRole('button', { name: 'Создать приглашение' });
+    const card = last.closest('form');
+    const preventDefault = vi.fn();
+
     last.focus();
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab', code: 'Tab' });
-    expect(closeButtons[1]).toHaveFocus();
+    expect(trapInviteModalFocus(card, { key: 'Tab', shiftKey: false, preventDefault })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(closeButton).toHaveFocus();
+
+    closeButton.focus();
+    preventDefault.mockClear();
+    expect(trapInviteModalFocus(card, { key: 'Tab', shiftKey: true, preventDefault })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(last).toHaveFocus();
 
     rerender(<InviteUserModal open={false} busy={false} onClose={onClose} onInvite={vi.fn()} />);
     expect(trigger).toHaveFocus();
