@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
 import {
@@ -20,18 +20,24 @@ const createSchema = z.object({
 });
 const credentialsSchema = z.object({ credentials: z.record(z.string().min(1).max(120), z.string().min(1).max(20_000)) });
 
-function orgId(request: { auth?: { organizationId?: string | null } }): string {
+function orgId(request: FastifyRequest): string {
   if (!request.auth?.organizationId) {
     throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
   }
   return request.auth.organizationId;
 }
 
-async function findProviderAccount(app: Parameters<FastifyPluginAsync>[0], organizationId: string, providerId: string) {
+async function findProviderAccount(app: FastifyInstance, organizationId: string, providerId: string) {
   return app.prisma.integrationAccount.findFirst({
     where: { organizationId, provider: providerId.toLowerCase() },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+function bodyAsConfiguration(body: unknown): Record<string, unknown> {
+  return body && typeof body === 'object' && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
 }
 
 export const integrationsRoutes: FastifyPluginAsync = async (app) => {
@@ -40,7 +46,8 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
   }));
 
   app.post('/integrations', { preHandler: [app.authenticate, app.authorize('integrations.manage')] }, async (request, reply) => {
-    const integration = await createIntegrationAccount(app, orgId(request), createSchema.parse(request.body));
+    const body = createSchema.parse(request.body);
+    const integration = await createIntegrationAccount(app, orgId(request), body);
     return reply.code(201).send({ integration });
   });
 
@@ -66,9 +73,6 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(202).send({ run });
   });
 
-  // Compatibility contract for the existing frontend provider registry.
-  // It maps provider cards to durable IntegrationAccount rows while keeping
-  // provider connection truth on the backend.
   app.get('/integrations/providers/:providerId/diagnostics', { preHandler: [app.authenticate, app.authorize('integrations.view')] }, async (request) => {
     const { providerId } = providerParams.parse(request.params);
     const account = await findProviderAccount(app, orgId(request), providerId);
@@ -84,7 +88,7 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  const connectProvider = async (request: any) => {
+  const connectProvider = async (request: FastifyRequest) => {
     const organizationId = orgId(request);
     const { providerId } = providerParams.parse(request.params);
     let account = await findProviderAccount(app, organizationId, providerId);
@@ -92,7 +96,7 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
       const created = await createIntegrationAccount(app, organizationId, {
         provider: providerId,
         name: providerId,
-        configuration: request.body && typeof request.body === 'object' ? request.body : {},
+        configuration: bodyAsConfiguration(request.body),
       });
       account = await app.prisma.integrationAccount.findFirst({ where: { id: created.id, organizationId } });
     }
