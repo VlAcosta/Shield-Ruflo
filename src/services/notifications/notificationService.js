@@ -4,37 +4,57 @@ import { apiRequest, joinEndpoint } from '../core/apiClient';
 import { getAccountScope, readScopedJson, writeScopedJson } from '../core/dataScope';
 import { isDemoDataEnabled } from '../core/runtimeConfig';
 
-const NOTIFICATIONS_ENDPOINT = getRuntimeEnv('NOTIFICATIONS_ENDPOINT');
-const CACHE_KEY = 'business-shield:notifications:snapshot:v1';
+const NOTIFICATIONS_ENDPOINT = String(getRuntimeEnv('NOTIFICATIONS_ENDPOINT', '/api/v1/notifications')).replace(/\/$/, '');
+const CACHE_KEY = 'business-shield:notifications:snapshot:v2';
 export const NOTIFICATION_BADGE_EVENT = 'business-shield:notifications-badge';
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function createLocalFallback() {
-  const base = clone(DEFAULT_NOTIFICATIONS_SNAPSHOT);
-  if (isDemoDataEnabled()) return base;
-  return { ...base, notifications: [] };
+function createEmptySnapshot() {
+  if (isDemoDataEnabled()) return clone(DEFAULT_NOTIFICATIONS_SNAPSHOT);
+  return { notifications: [], preferences: {}, settings: {}, source: 'api' };
 }
 
 function readCache() {
   return readScopedJson(CACHE_KEY, { scope: getAccountScope(), legacy: true, fallback: null });
 }
 
+function normalizeNotification(item = {}) {
+  return {
+    ...item,
+    text: item.text ?? item.body ?? '',
+    unread: item.unread ?? String(item.status || '').toUpperCase() === 'UNREAD',
+    createdAt: item.createdAt || Date.now(),
+    actionLabel: item.actionLabel || item.payload?.actionLabel || '',
+    actionRoute: item.actionRoute || item.payload?.actionRoute || '',
+    tone: item.tone || item.payload?.tone || 'violet',
+  };
+}
+
+function normalizeSnapshot(payload) {
+  const source = payload?.snapshot || payload || {};
+  const notifications = Array.isArray(source.notifications)
+    ? source.notifications.map(normalizeNotification)
+    : [];
+  return {
+    ...source,
+    notifications,
+    preferences: source.preferences || {},
+    settings: source.settings || {},
+  };
+}
+
 function writeCache(snapshot) {
   if (typeof window === 'undefined') return;
-  const previousUnread = getUnreadCount(readCache() || createLocalFallback());
+  const previousUnread = getUnreadCount(readCache() || createEmptySnapshot());
   const nextUnread = getUnreadCount(snapshot);
   writeScopedJson(CACHE_KEY, snapshot, { scope: getAccountScope() });
-
-  // Badge listeners only need a signal when the counter actually changed.
-  // This avoids feedback loops when a popover reads the same snapshot again.
   if (previousUnread !== nextUnread) emitNotificationBadge(snapshot);
 }
 
 async function request(path = '', options = {}) {
-  if (!NOTIFICATIONS_ENDPOINT) return null;
   return apiRequest(joinEndpoint(NOTIFICATIONS_ENDPOINT, path), { ...options, timeout: 8000 });
 }
 
@@ -43,7 +63,7 @@ export function getUnreadCount(snapshot) {
 }
 
 export function getCachedUnreadCount() {
-  return getUnreadCount(readCache() || createLocalFallback());
+  return getUnreadCount(readCache() || createEmptySnapshot());
 }
 
 export function emitNotificationBadge(snapshot) {
@@ -54,30 +74,34 @@ export function emitNotificationBadge(snapshot) {
 }
 
 export async function getNotificationsSnapshot() {
-  let remote = null;
-  try { remote = await request(); } catch (error) {
+  try {
+    const remote = normalizeSnapshot(await request());
+    writeCache(remote);
+    return remote;
+  } catch (error) {
     const cached = readCache();
-    if (!cached) throw error;
+    if (cached) return { ...cached, stale: true, error };
+    if (isDemoDataEnabled()) return createEmptySnapshot();
+    throw error;
   }
-  const snapshot = remote || readCache() || createLocalFallback();
-  writeCache(snapshot);
-  return snapshot;
 }
 
-
+// Kept only for explicit local/demo UX signals. Persisted production
+// notifications are created by backend automation/business events.
 export function pushLocalNotification(payload = {}) {
-  const snapshot = readCache() || createLocalFallback();
-  const notification = {
-    id: payload.id || `notification-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+  const snapshot = readCache() || createEmptySnapshot();
+  const notification = normalizeNotification({
+    id: payload.id || `local-notification-${Date.now().toString(36)}`,
     type: payload.type || 'system',
     title: payload.title || 'Новое событие',
-    text: payload.text || '',
-    createdAt: payload.createdAt || Date.now(),
-    unread: payload.unread !== false,
+    body: payload.text || '',
+    createdAt: payload.createdAt || new Date().toISOString(),
+    status: 'UNREAD',
     tone: payload.tone || 'violet',
     actionLabel: payload.actionLabel || '',
     actionRoute: payload.actionRoute || '',
-  };
+    localOnly: true,
+  });
   const next = { ...snapshot, notifications: [notification, ...(snapshot.notifications || [])].slice(0, 120) };
   writeCache(next);
   return notification;
@@ -85,74 +109,35 @@ export function pushLocalNotification(payload = {}) {
 
 export async function markNotificationRead(notificationId, snapshot) {
   const remote = await request(`/${notificationId}/read`, { method: 'PATCH' });
-  if (remote) {
-    writeCache(remote.snapshot || remote);
-    return remote;
-  }
-
+  const updated = normalizeNotification(remote?.notification || remote);
   const nextSnapshot = {
     ...snapshot,
-    notifications: snapshot.notifications.map((item) => (
-      item.id === notificationId ? { ...item, unread: false } : item
-    )),
+    notifications: (snapshot?.notifications || []).map((item) => item.id === notificationId ? updated : item),
   };
   writeCache(nextSnapshot);
-  return { snapshot: nextSnapshot };
+  return { ...remote, snapshot: nextSnapshot };
 }
 
 export async function markAllNotificationsRead(snapshot) {
-  const remote = await request('/read-all', { method: 'PATCH' });
-  if (remote) {
-    writeCache(remote.snapshot || remote);
-    return remote;
-  }
-
+  await request('/read-all', { method: 'PATCH' });
   const nextSnapshot = {
     ...snapshot,
-    notifications: snapshot.notifications.map((item) => ({ ...item, unread: false })),
+    notifications: (snapshot?.notifications || []).map((item) => ({ ...item, unread: false, status: 'READ' })),
   };
   writeCache(nextSnapshot);
   return { snapshot: nextSnapshot };
 }
 
 export async function saveNotificationPreferences(preferences, snapshot) {
-  const remote = await request('/preferences', {
-    method: 'PATCH',
-    body: JSON.stringify(preferences),
-  });
-  if (remote) {
-    writeCache(remote.snapshot || remote);
-    return remote;
-  }
-
-  const nextSnapshot = {
-    ...snapshot,
-    preferences: { ...(snapshot.preferences || {}), ...preferences },
-  };
+  const remote = await request('/preferences', { method: 'PATCH', body: preferences });
+  const nextSnapshot = { ...snapshot, preferences: remote?.preferences || preferences };
   writeCache(nextSnapshot);
-  return { snapshot: nextSnapshot };
+  return { ...remote, snapshot: nextSnapshot };
 }
 
 export async function saveNotificationSettings(settings, snapshot) {
-  const remote = await request('/settings', {
-    method: 'PATCH',
-    body: JSON.stringify(settings),
-  });
-  if (remote) {
-    writeCache(remote.snapshot || remote);
-    return remote;
-  }
-
-  const nextSnapshot = {
-    ...snapshot,
-    settings: {
-      ...snapshot.settings,
-      ...settings,
-      channels: { ...snapshot.settings.channels, ...(settings.channels || {}) },
-      events: { ...snapshot.settings.events, ...(settings.events || {}) },
-      quietHours: { ...snapshot.settings.quietHours, ...(settings.quietHours || {}) },
-    },
-  };
+  const remote = await request('/settings', { method: 'PATCH', body: settings });
+  const nextSnapshot = { ...snapshot, settings: remote?.settings || settings };
   writeCache(nextSnapshot);
-  return { snapshot: nextSnapshot };
+  return { ...remote, snapshot: nextSnapshot };
 }
