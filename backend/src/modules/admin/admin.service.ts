@@ -167,17 +167,22 @@ export async function getAdminAnalytics(app: FastifyInstance, period: string) {
     _avg: { rating: true },
   });
   const sourceIds = sourceRows.map((row) => row.sourceId);
-  const sources = sourceIds.length ? await app.prisma.reviewSource.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true, provider: true } }) : [];
+  const sources = sourceIds.length
+    ? await app.prisma.reviewSource.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true, provider: true } })
+    : [];
   const sourceById = new Map(sources.map((item) => [item.id, item]));
-  const publishedBySource = sourceIds.length ? await app.prisma.reviewReply.groupBy({
-    by: ['reviewId'],
-    where: { status: 'PUBLISHED', review: { sourceId: { in: sourceIds } } },
-    _count: { _all: true },
-  }) : [];
-  const answeredReviewIds = new Set(publishedBySource.map((item) => item.reviewId));
-  const reviewSourcePairs = answeredReviewIds.size ? await app.prisma.review.findMany({ where: { id: { in: [...answeredReviewIds] } }, select: { id: true, sourceId: true } }) : [];
+  const publishedReplies = sourceIds.length
+    ? await app.prisma.reviewReply.findMany({
+        where: { status: 'PUBLISHED', review: { sourceId: { in: sourceIds } } },
+        select: { reviewId: true, review: { select: { sourceId: true } } },
+        distinct: ['reviewId'],
+      })
+    : [];
   const answeredCountBySource = new Map<string, number>();
-  for (const review of reviewSourcePairs) answeredCountBySource.set(review.sourceId, (answeredCountBySource.get(review.sourceId) || 0) + 1);
+  for (const item of publishedReplies) {
+    const sourceId = item.review.sourceId;
+    answeredCountBySource.set(sourceId, (answeredCountBySource.get(sourceId) || 0) + 1);
+  }
 
   return {
     period,
@@ -241,7 +246,9 @@ export async function getAdminSubscriptions(app: FastifyInstance) {
   }));
 
   const currentByOrganization = new Map<string, typeof subscriptionRows[number]>();
-  for (const row of subscriptionRows) if (!currentByOrganization.has(row.clientId)) currentByOrganization.set(row.clientId, row);
+  for (const row of subscriptionRows) {
+    if (!currentByOrganization.has(row.clientId)) currentByOrganization.set(row.clientId, row);
+  }
   const current = [...currentByOrganization.values()];
   const active = current.filter((item) => item.status === 'active');
   const renewable = current.filter((item) => ['active', 'trial'].includes(item.status));
@@ -269,15 +276,22 @@ export async function getAdminSubscriptions(app: FastifyInstance) {
       active: active.length,
       expiringSoon: renewable.filter((item) => item.expiryDate !== '—').length,
       manualRenewals: renewable.filter((item) => !item.autoRenew).length,
-      atRisk: current.filter((item) => item.status === 'past_due' || (item.rating !== null && Number(item.rating) < 3.5)).length,
+      atRisk: current.filter((item) => item.rating !== null && Number(item.rating) < 3.5).length,
       renewalRate: renewable.length ? Math.round((renewable.filter((item) => item.autoRenew).length / renewable.length) * 100) : null,
     },
     paymentHistoryConfigured: false,
   };
 }
 
-export async function updateAdminPlan(app: FastifyInstance, planCode: string, patch: { name?: string; price?: number; active?: boolean }) {
-  const plan = await app.prisma.plan.findFirst({ where: { OR: [{ id: planCode }, { code: planCode.toUpperCase() }] } });
+export async function updateAdminPlan(
+  app: FastifyInstance,
+  planCode: string,
+  patch: { name?: string | undefined; price?: number | undefined; active?: boolean | undefined },
+) {
+  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planCode);
+  const plan = looksLikeUuid
+    ? await app.prisma.plan.findFirst({ where: { OR: [{ id: planCode }, { code: planCode.toUpperCase() }] } })
+    : await app.prisma.plan.findFirst({ where: { code: planCode.toUpperCase() } });
   if (!plan) throw new AppError({ code: 'PLAN_NOT_FOUND', message: 'Тариф не найден', statusCode: 404 });
   return app.prisma.plan.update({
     where: { id: plan.id },
@@ -289,7 +303,10 @@ export async function updateAdminPlan(app: FastifyInstance, planCode: string, pa
   });
 }
 
-export async function createAdminPlan(app: FastifyInstance, input: { code: string; name: string; price: number; currency?: string }) {
+export async function createAdminPlan(
+  app: FastifyInstance,
+  input: { code: string; name: string; price: number; currency?: string | undefined },
+) {
   return app.prisma.plan.create({
     data: {
       code: input.code.toUpperCase(),
@@ -301,7 +318,11 @@ export async function createAdminPlan(app: FastifyInstance, input: { code: strin
   });
 }
 
-export async function updateAdminSubscription(app: FastifyInstance, organizationId: string, patch: { autoRenew?: boolean }) {
+export async function updateAdminSubscription(
+  app: FastifyInstance,
+  organizationId: string,
+  patch: { autoRenew?: boolean | undefined },
+) {
   const subscription = await app.prisma.subscription.findFirst({ where: { organizationId }, orderBy: { createdAt: 'desc' } });
   if (!subscription) throw new AppError({ code: 'SUBSCRIPTION_NOT_FOUND', message: 'Подписка не найдена', statusCode: 404 });
   return app.prisma.subscription.update({
