@@ -40,7 +40,13 @@ export type ProviderReviewRecord = {
   text?: string | undefined;
   authorName?: string | undefined;
   authorExternalId?: string | undefined;
+  authorAvatarUrl?: string | undefined;
+  authorProfileUrl?: string | undefined;
   publishedAt: Date;
+  providerUpdatedAt?: Date | undefined;
+  providerLocationId?: string | undefined;
+  providerLocationName?: string | undefined;
+  sourceUrl?: string | undefined;
   raw?: Record<string, unknown> | undefined;
 };
 

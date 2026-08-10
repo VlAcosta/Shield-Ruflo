@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type { PrismaClient } from '../../../generated/prisma/client.js';
 import { env } from '../../../config/env.js';
 import { AppError } from '../../../core/errors/app-error.js';
 
@@ -41,12 +42,14 @@ export function decryptIntegrationSecret(value: string): string {
   }
 }
 
-export async function loadIntegrationCredentials(
-  app: FastifyInstance,
+type CredentialPrisma = Pick<PrismaClient, 'integrationAccount'>;
+
+export async function loadIntegrationCredentialsFromPrisma(
+  prisma: CredentialPrisma,
   organizationId: string,
   accountId: string,
 ): Promise<Record<string, string>> {
-  const account = await app.prisma.integrationAccount.findFirst({
+  const account = await prisma.integrationAccount.findFirst({
     where: { id: accountId, organizationId },
     select: {
       credentials: {
@@ -61,4 +64,12 @@ export async function loadIntegrationCredentials(
   return Object.fromEntries(
     account.credentials.map((credential) => [credential.key, decryptIntegrationSecret(credential.encryptedValue)]),
   );
+}
+
+export async function loadIntegrationCredentials(
+  app: FastifyInstance,
+  organizationId: string,
+  accountId: string,
+): Promise<Record<string, string>> {
+  return loadIntegrationCredentialsFromPrisma(app.prisma, organizationId, accountId);
 }

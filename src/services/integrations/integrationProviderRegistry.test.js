@@ -5,6 +5,8 @@ import {
   googleBusinessLocations,
   googleBusinessOAuthStart,
   googleBusinessSelect,
+  providerSync,
+  providerSyncStatus,
 } from './integrationProviderRegistry';
 import { apiRequest } from '../core/apiClient';
 
@@ -18,13 +20,12 @@ vi.mock('../core/apiClient', () => ({
   joinEndpoint: (base, path) => `${String(base).replace(/\/$/, '')}/${String(path).replace(/^\//, '')}`,
 }));
 
-describe('P16 Google Business Profile frontend provider contract', () => {
+describe('P17 Google Business Profile frontend provider contract', () => {
   beforeEach(() => apiRequest.mockReset());
 
-  test('maps the legacy UI id to the production backend provider and does not claim P17 capabilities', () => {
+  test('maps the legacy UI id to the production backend provider and claims only implemented review capability', () => {
     expect(getBackendProviderId('google')).toBe('google-business-profile');
-    expect(getProviderCapabilities('google')).toEqual(['oauth', 'accounts.read', 'locations.read', 'profile.read']);
-    expect(getProviderCapabilities('google')).not.toContain('reviews.read');
+    expect(getProviderCapabilities('google')).toEqual(['oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read']);
     expect(getProviderCapabilities('google')).not.toContain('replies.write');
   });
 
@@ -58,6 +59,22 @@ describe('P16 Google Business Profile frontend provider contract', () => {
     expect(apiRequest).toHaveBeenLastCalledWith(
       '/api/v1/integrations/providers/google-business-profile/selection',
       expect.objectContaining({ method: 'PUT', body: selection, idempotencyKey: 'idem:google-business-selection' }),
+    );
+  });
+
+  test('queues review sync and reads authoritative worker status from dedicated endpoints', async () => {
+    apiRequest.mockResolvedValueOnce({ providerId: 'google-business-profile', run: { id: 'run-1', status: 'QUEUED' } });
+    await providerSync('google');
+    expect(apiRequest).toHaveBeenLastCalledWith(
+      '/api/v1/integrations/providers/google-business-profile/sync',
+      expect.objectContaining({ method: 'POST', idempotencyKey: 'idem:integration-sync-google' }),
+    );
+
+    apiRequest.mockResolvedValueOnce({ providerId: 'google-business-profile', run: { id: 'run-1', status: 'SUCCESS', importedCount: 4 } });
+    await providerSyncStatus('google');
+    expect(apiRequest).toHaveBeenLastCalledWith(
+      '/api/v1/integrations/providers/google-business-profile/sync-status',
+      expect.objectContaining({ retries: 0 }),
     );
   });
 });

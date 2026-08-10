@@ -2,6 +2,10 @@ import crypto from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.js';
 import { env } from './config/env.js';
+import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
+import { registerGoogleBusinessProfileProvider } from './modules/integrations/providers/google/index.js';
+
+registerGoogleBusinessProfileProvider();
 
 const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -16,43 +20,7 @@ async function processIntegrationSync(payload: any) {
   const syncRunId = String(payload?.syncRunId || '');
   const accountId = String(payload?.accountId || '');
   if (!syncRunId || !accountId) throw new Error('INVALID_INTEGRATION_SYNC_JOB');
-
-  const run = await prisma.integrationSyncRun.findFirst({ where: { id: syncRunId, accountId } });
-  if (!run) throw new Error('INTEGRATION_SYNC_RUN_NOT_FOUND');
-
-  await prisma.integrationSyncRun.update({
-    where: { id: run.id },
-    data: { status: 'RUNNING', startedAt: new Date(), finishedAt: null, errorCode: null, errorMessage: null },
-  });
-
-  const account = await prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId: run.organizationId } });
-  if (!account || account.status !== 'CONNECTED') {
-    await prisma.integrationSyncRun.update({
-      where: { id: run.id },
-      data: {
-        status: 'FAILED',
-        finishedAt: new Date(),
-        errorCount: 1,
-        errorCode: 'INTEGRATION_NOT_CONNECTED',
-        errorMessage: 'Интеграция не подключена к production provider adapter',
-      },
-    });
-    throw new Error('INTEGRATION_NOT_CONNECTED');
-  }
-
-  // No provider is silently simulated. A future provider adapter owns the real
-  // transport and must update this branch only after provider confirmation.
-  await prisma.integrationSyncRun.update({
-    where: { id: run.id },
-    data: {
-      status: 'FAILED',
-      finishedAt: new Date(),
-      errorCount: 1,
-      errorCode: 'PROVIDER_ADAPTER_NOT_CONFIGURED',
-      errorMessage: 'Production provider adapter is not configured',
-    },
-  });
-  throw new Error('PROVIDER_ADAPTER_NOT_CONFIGURED');
+  return processIntegrationReviewSync(prisma, { syncRunId, accountId });
 }
 
 async function processReport(payload: any) {
