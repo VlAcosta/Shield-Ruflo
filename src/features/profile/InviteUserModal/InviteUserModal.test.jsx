@@ -43,12 +43,16 @@ describe('InviteUserModal canonical role contract', () => {
     expect(name).toHaveFocus();
   });
 
-  test('traps keyboard focus and restores the trigger when closed', () => {
+  test('traps keyboard focus and restores the trigger when closed', async () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
     trigger.focus();
     const onClose = vi.fn();
     const { rerender } = render(<InviteUserModal open busy={false} onClose={onClose} onInvite={vi.fn()} />);
+
+    const name = screen.getByPlaceholderText('Анна Петрова');
+    await waitFor(() => expect(name).toHaveFocus());
+
     const closeButtons = screen.getAllByRole('button', { name: 'Закрыть' });
     const last = screen.getByRole('button', { name: 'Создать приглашение' });
     last.focus();
