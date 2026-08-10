@@ -185,7 +185,9 @@ describeWithPostgres('P17 canonical review ingestion', () => {
       url: `/api/v1/integrations/${accountId}/sync`,
       headers: { cookie },
     });
-    expect(response.statusCode).toBe(202);
+    if (response.statusCode !== 202) {
+      throw new Error(`P17 queue sync failed (${response.statusCode}): ${response.body}`);
+    }
     return response.json().run as { id: string; status: string };
   }
 
