@@ -1,4 +1,4 @@
-const { defineConfig } = require('@playwright/test');
+import { defineConfig } from '@playwright/test';
 
 const frontendUrl = process.env.E2E_FRONTEND_URL || 'http://127.0.0.1:3000';
 const backendUrl = process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8081';
@@ -8,7 +8,7 @@ if (!e2eDatabaseUrl || !/(?:test|p0|e2e)/.test(new URL(e2eDatabaseUrl).pathname.
   throw new Error('E2E_DATABASE_URL must name an explicitly isolated test database');
 }
 
-module.exports = defineConfig({
+export default defineConfig({
   testDir: './e2e',
   timeout: 90_000,
   expect: { timeout: 30_000 },
