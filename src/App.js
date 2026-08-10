@@ -9,6 +9,7 @@ import { AccessDenied, useAccessControl } from './features/access';
 import { findFirstAllowedRoute, getRoutePermission } from './services/access/rbacService';
 import PortalLayout from './layouts/PortalLayout';
 import { authService } from './services/auth/authService';
+import { adminAccessService } from './services/admin/adminAccessService';
 import { AUTH_SESSION_INVALID_EVENT } from './services/core/apiClient';
 import { ORGANIZATION_CONTEXT_CHANGED_EVENT } from './features/access/hooks/useOrganizationContext';
 
@@ -49,7 +50,6 @@ function LazyRoute({ children, tone = 'portal' }) {
   return <Suspense fallback={<RouteFallback tone={tone} />}>{children}</Suspense>;
 }
 
-
 function PortalAccessDeniedPage() {
   return (
     <PortalLayout title="Доступ ограничен" subtitle="Безопасность">
@@ -58,23 +58,39 @@ function PortalAccessDeniedPage() {
   );
 }
 
+function AdminAccessState({ type }) {
+  const denied = type === 'denied';
+  return (
+    <main className="route-loader route-loader--admin" role="alert">
+      <strong>{denied ? 'Доступ к админ-панели запрещён' : 'Не удалось проверить доступ администратора'}</strong>
+      <span>{denied ? 'Эта учётная запись не входит в серверный список администраторов платформы.' : 'Сервер авторизации временно недоступен. Доступ к админ-панели не предоставлен.'}</span>
+      {!denied ? <button type="button" onClick={() => window.location.reload()}>Повторить</button> : null}
+    </main>
+  );
+}
+
 function App() {
   const location = useLocation();
   const access = useAccessControl();
   const [sessionState, setSessionState] = useState('checking');
+  const [adminAccessState, setAdminAccessState] = useState('idle');
   const [organizationVersion, setOrganizationVersion] = useState(0);
+
   useEffect(() => { initScrollReveal(); }, []);
+
   const isAdmin = location.pathname.startsWith('/admin');
-  const isPortal = ['/onboarding', ...protectedPortalPaths].includes(location.pathname);
-  const onboardingCompleted = access.membership?.organization?.onboardingStatus === 'COMPLETED';
   const protectedPortalRoute = protectedPortalPaths.some((path) => (
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   ));
+  const isPortal = protectedPortalRoute;
+  const requiresSession = protectedPortalRoute || isAdmin;
+  const onboardingCompleted = access.membership?.organization?.onboardingStatus === 'COMPLETED';
 
   useEffect(() => {
     const invalidateSession = () => {
       authService.clearLocalSession();
       setSessionState('unauthenticated');
+      setAdminAccessState('idle');
     };
     window.addEventListener(AUTH_SESSION_INVALID_EVENT, invalidateSession);
     return () => window.removeEventListener(AUTH_SESSION_INVALID_EVENT, invalidateSession);
@@ -87,7 +103,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!protectedPortalRoute) {
+    if (!requiresSession) {
       setSessionState('idle');
       return undefined;
     }
@@ -101,25 +117,58 @@ function App() {
         }
       });
     return () => controller.abort();
-  }, [protectedPortalRoute]);
+  }, [requiresSession]);
 
-  if (protectedPortalRoute && sessionState === 'checking') {
-    return <RouteFallback />;
+  useEffect(() => {
+    if (!isAdmin) {
+      setAdminAccessState('idle');
+      return undefined;
+    }
+    if (sessionState !== 'authenticated') {
+      setAdminAccessState('idle');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setAdminAccessState('checking');
+    adminAccessService.check({ signal: controller.signal })
+      .then((allowed) => setAdminAccessState(allowed ? 'allowed' : 'denied'))
+      .catch((error) => {
+        if (error?.name === 'AbortError') return;
+        setAdminAccessState(error?.status === 403 ? 'denied' : 'unavailable');
+      });
+    return () => controller.abort();
+  }, [isAdmin, sessionState]);
+
+  if (requiresSession && sessionState === 'checking') {
+    return <RouteFallback tone={isAdmin ? 'admin' : 'portal'} />;
   }
 
-  if (protectedPortalRoute && sessionState === 'unauthenticated') {
+  if (requiresSession && sessionState === 'unauthenticated') {
     const next = encodeURIComponent(`${location.pathname}${location.search || ''}`);
     return <Navigate to={`/auth?mode=login&next=${next}`} replace />;
   }
 
-  if (protectedPortalRoute && sessionState === 'unavailable') {
+  if (requiresSession && sessionState === 'unavailable') {
     return (
-      <main className="route-loader route-loader--portal" role="alert">
+      <main className={`route-loader route-loader--${isAdmin ? 'admin' : 'portal'}`} role="alert">
         <strong>Сервис временно недоступен</strong>
         <span>Не удалось проверить сессию. Проверьте соединение и повторите попытку.</span>
         <button type="button" onClick={() => window.location.reload()}>Повторить</button>
       </main>
     );
+  }
+
+  if (isAdmin && sessionState === 'authenticated' && ['idle', 'checking'].includes(adminAccessState)) {
+    return <RouteFallback tone="admin" />;
+  }
+
+  if (isAdmin && adminAccessState === 'denied') {
+    return <AdminAccessState type="denied" />;
+  }
+
+  if (isAdmin && adminAccessState === 'unavailable') {
+    return <AdminAccessState type="unavailable" />;
   }
 
   if (protectedPortalRoute && location.pathname !== '/onboarding' && !onboardingCompleted) {
@@ -160,17 +209,17 @@ function App() {
         <Route path="/faq" element={<LazyRoute><FaqPage /></LazyRoute>} />
         <Route path="/access-denied" element={<PortalAccessDeniedPage />} />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="/admin/dashboard" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminDashboardPage /></Suspense>} />
-        <Route path="/admin/clients" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminClientsPage /></Suspense>} />
-        <Route path="/admin/clients/:clientId" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminClientDetailsPage /></Suspense>} />
-        <Route path="/admin/managers" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminManagersPage /></Suspense>} />
-        <Route path="/admin/tickets" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminTicketsPage /></Suspense>} />
-        <Route path="/admin/subscriptions" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminSubscriptionsPage /></Suspense>} />
-        <Route path="/admin/analytics" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminAnalyticsPage /></Suspense>} />
-        <Route path="/admin/settings" element={<Suspense fallback={<div style={{minHeight:'100vh',background:'#f1f2fb'}} />}><AdminSettingsPage /></Suspense>} />
+        <Route path="/admin/dashboard" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminDashboardPage /></Suspense>} />
+        <Route path="/admin/clients" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminClientsPage /></Suspense>} />
+        <Route path="/admin/clients/:clientId" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminClientDetailsPage /></Suspense>} />
+        <Route path="/admin/managers" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminManagersPage /></Suspense>} />
+        <Route path="/admin/tickets" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminTicketsPage /></Suspense>} />
+        <Route path="/admin/subscriptions" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminSubscriptionsPage /></Suspense>} />
+        <Route path="/admin/analytics" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminAnalyticsPage /></Suspense>} />
+        <Route path="/admin/settings" element={<Suspense fallback={<RouteFallback tone="admin" />}><AdminSettingsPage /></Suspense>} />
         <Route path="/help" element={<Navigate to="/faq" replace />} />
-        <Route path="*" element={<Navigate to={findFirstAllowedRoute(access)} replace />} />
         <Route path="/analytick_block" element={<HeaderAnalytick to="/analytick_block" replace/>} />
+        <Route path="*" element={<Navigate to={findFirstAllowedRoute(access)} replace />} />
       </Routes>
     </div>
   );
