@@ -43,3 +43,22 @@ logs/p0p12/
 # Generated backend artifacts (created by Prisma/TypeScript builds)
 backend/src/generated/
 backend/dist/
+
+# ==================================================
+# Deployment / generated artifacts
+# ==================================================
+build/
+test-results/
+playwright-report/
+coverage/
+
+backend/.postgres-volume
+
+# Additional Ruflo runtime state
+.claude-flow/swarm/
+.claude-flow/*.tmp*
+.swarm/*.index
+.swarm/state.json
+
+# Temporary editor/server backups
+*.bak
