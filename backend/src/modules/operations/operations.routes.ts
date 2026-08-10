@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
 import { assertEntitlement } from '../billing/billing.service.js';
@@ -34,6 +35,16 @@ function authContext(request: FastifyRequest) {
     throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
   }
   return { organizationId: request.auth.organizationId, userId: request.auth.userId };
+}
+
+function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 async function createQueuedReport(app: FastifyInstance, organizationId: string, body: z.infer<typeof reportSchema>) {
@@ -80,8 +91,8 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
         organizationId,
         name: body.name,
         trigger: body.trigger,
-        conditions: body.conditions,
-        actions: body.actions,
+        conditions: toJson(body.conditions),
+        actions: toJson(body.actions),
         enabled: body.enabled,
       },
     });
@@ -98,16 +109,14 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     const current = await app.prisma.automation.findFirst({ where: { id: automationId, organizationId }, select: { id: true } });
     if (!current) throw new AppError({ code: 'AUTOMATION_NOT_FOUND', message: 'Автоматизация не найдена', statusCode: 404 });
     const body = automationPatchSchema.parse(request.body);
-    const automation = await app.prisma.automation.update({
-      where: { id: current.id },
-      data: {
-        ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(body.trigger !== undefined ? { trigger: body.trigger } : {}),
-        ...(body.conditions !== undefined ? { conditions: body.conditions } : {}),
-        ...(body.actions !== undefined ? { actions: body.actions } : {}),
-        ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
-      },
-    });
+    const data: Prisma.AutomationUpdateInput = {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.trigger !== undefined ? { trigger: body.trigger } : {}),
+      ...(body.conditions !== undefined ? { conditions: toJson(body.conditions) } : {}),
+      ...(body.actions !== undefined ? { actions: toJson(body.actions) } : {}),
+      ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
+    };
+    const automation = await app.prisma.automation.update({ where: { id: current.id }, data });
     await app.prisma.auditLog.create({
       data: { organizationId, actorUserId: userId, action: 'automation.updated', entityType: 'Automation', entityId: automation.id },
     });
@@ -146,7 +155,7 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
       orderBy: { receivedAt: 'desc' },
       take: 250,
     });
-    const runs = [];
+    const runs: Array<Record<string, unknown>> = [];
     for (const review of reviews) {
       runs.push(...await dispatchAutomationEvent(app, {
         type: 'new_review',
@@ -211,14 +220,8 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
       }),
       app.prisma.user.findUnique({ where: { id: userId }, select: { notificationPreferences: true } }),
     ]);
-    const stored = user?.notificationPreferences && typeof user.notificationPreferences === 'object' && !Array.isArray(user.notificationPreferences)
-      ? user.notificationPreferences as Record<string, unknown>
-      : {};
-    return {
-      notifications,
-      preferences: stored.preferences ?? {},
-      settings: stored.settings ?? {},
-    };
+    const stored = asRecord(user?.notificationPreferences);
+    return { notifications, preferences: stored.preferences ?? {}, settings: stored.settings ?? {} };
   });
 
   app.patch('/notifications/:notificationId/read', { preHandler: [app.authenticate] }, async (request) => {
@@ -245,11 +248,9 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
 
   async function updateNotificationConfig(userId: string, section: 'preferences' | 'settings', value: Record<string, unknown>) {
     const user = await app.prisma.user.findUnique({ where: { id: userId }, select: { notificationPreferences: true } });
-    const current = user?.notificationPreferences && typeof user.notificationPreferences === 'object' && !Array.isArray(user.notificationPreferences)
-      ? user.notificationPreferences as Record<string, unknown>
-      : {};
+    const current = asRecord(user?.notificationPreferences);
     const next = { ...current, [section]: value };
-    await app.prisma.user.update({ where: { id: userId }, data: { notificationPreferences: next } });
+    await app.prisma.user.update({ where: { id: userId }, data: { notificationPreferences: toJson(next) } });
     return value;
   }
 
