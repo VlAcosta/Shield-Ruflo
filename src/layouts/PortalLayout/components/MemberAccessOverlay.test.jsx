@@ -10,7 +10,9 @@ describe('MemberAccessOverlay logout', () => {
   beforeEach(() => authService.logout.mockReset());
 
   test('keeps the user on screen and explains a server logout failure', async () => {
-    authService.logout.mockRejectedValue(new Error('Сервис авторизации недоступен'));
+    authService.logout.mockImplementation(() => new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error('Сервис авторизации недоступен')), 0);
+    }));
     render(<MemberAccessOverlay reason="revoked" />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Войти снова' }));
@@ -26,7 +28,7 @@ describe('MemberAccessOverlay logout', () => {
     previous.focus();
     const { unmount } = render(<MemberAccessOverlay reason="frozen" />);
     expect(screen.getByRole('button', { name: 'Войти другим аккаунтом' })).toHaveFocus();
-    fireEvent.keyDown(window, { key: 'Tab' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Войти другим аккаунтом' }), { key: 'Tab' });
     expect(screen.getByRole('button', { name: 'Войти другим аккаунтом' })).toHaveFocus();
     unmount();
     expect(previous).toHaveFocus();
