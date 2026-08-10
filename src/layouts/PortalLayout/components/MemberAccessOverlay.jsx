@@ -57,14 +57,15 @@ export default function MemberAccessOverlay({ reason = 'revoked', security }) {
     setLoggingOut(true);
     setLogoutError('');
 
-    void authService.logout()
-      .then(() => {
+    void authService.logout().then(
+      () => {
         window.location.assign('/auth?mode=login');
-      })
-      .catch((error) => {
+      },
+      (error) => {
         setLogoutError(error?.message || 'Не удалось безопасно завершить сессию. Повторите попытку.');
         setLoggingOut(false);
-      });
+      },
+    );
   };
 
   return (
