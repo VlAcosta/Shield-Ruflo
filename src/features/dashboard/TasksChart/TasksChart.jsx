@@ -17,7 +17,7 @@ function TasksChart() {
   const [period, setPeriod] = useState('week');
   const [activeId, setActiveId] = useState(null);
   const { section, status, refresh } = useDashboardData('tasks');
-  const tasks = Array.isArray(section?.[period]) ? section[period] : [];
+  const tasks = useMemo(() => (Array.isArray(section?.[period]) ? section[period] : []), [period, section]);
   const hasData = tasks.length > 0 && tasks.some((task) => Number(task.total) > 0);
 
   const summary = useMemo(() => tasks.reduce((acc, task) => ({ total: acc.total + Number(task.total || 0), completed: acc.completed + Number(task.completed || 0), overdue: acc.overdue + Number(task.overdue || 0) }), { total: 0, completed: 0, overdue: 0 }), [tasks]);
