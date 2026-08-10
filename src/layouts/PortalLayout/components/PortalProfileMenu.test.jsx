@@ -11,8 +11,10 @@ vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
   useNavigate: () => mockNavigate,
 }));
-vi.mock('../hooks/usePortalProfile', () => () => ({
-  initials: 'AP', fullName: 'Anna Petrova', roleLabel: 'Владелец', capabilities: {},
+vi.mock('../hooks/usePortalProfile', () => ({
+  default: () => ({
+    initials: 'AP', fullName: 'Anna Petrova', roleLabel: 'Владелец', capabilities: {},
+  }),
 }));
 vi.mock('../../../features/access/hooks/useOrganizationContext');
 
