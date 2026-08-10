@@ -147,20 +147,33 @@ export async function queueIntegrationSync(app: FastifyInstance, organizationId:
     });
   }
 
-  const active = await app.prisma.integrationSyncRun.findFirst({
-    where: { accountId, status: { in: ['QUEUED', 'RUNNING'] } },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (active) return active;
-
   return app.prisma.$transaction(async (tx) => {
-    const run = await tx.integrationSyncRun.create({ data: { organizationId, accountId, status: 'QUEUED', trigger: 'manual' } });
+    const lockKey = `integration-sync:${accountId}`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)`;
+
+    const currentAccount = await tx.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
+    if (!currentAccount) {
+      throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
+    }
+    if (!['CONNECTED', 'DEGRADED'].includes(currentAccount.status)) {
+      throw new AppError({ code: 'INTEGRATION_NOT_CONNECTED', message: 'Интеграция не подключена', statusCode: 409 });
+    }
+
+    const active = await tx.integrationSyncRun.findFirst({
+      where: { accountId, status: { in: ['QUEUED', 'RUNNING'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (active) return active;
+
+    const run = await tx.integrationSyncRun.create({
+      data: { organizationId, accountId, status: 'QUEUED', trigger: 'manual' },
+    });
     await tx.job.create({
       data: {
         organizationId,
         type: 'integration.sync.reviews',
         payload: { accountId, syncRunId: run.id },
-        dedupeKey: `integration-sync:${accountId}`,
+        dedupeKey: `integration-sync:${accountId}:${run.id}`,
         maxAttempts: 5,
       },
     });
