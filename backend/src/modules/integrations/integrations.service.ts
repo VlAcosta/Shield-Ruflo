@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { env } from '../../config/env.js';
 
@@ -15,7 +16,25 @@ function encryptSecret(value: string): string {
   return `v1:${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
 }
 
-function publicAccount(account: any) {
+function toJson(value: Record<string, unknown>): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function publicAccount(account: {
+  id: string;
+  provider: string;
+  name: string;
+  externalAccountId: string | null;
+  status: string;
+  configuration: unknown;
+  lastValidatedAt: Date | null;
+  lastSyncedAt: Date | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  credentials?: Array<{ key: string }>;
+}) {
   return {
     id: account.id,
     provider: account.provider,
@@ -29,7 +48,7 @@ function publicAccount(account: any) {
     lastErrorMessage: account.lastErrorMessage,
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
-    credentialKeys: Array.isArray(account.credentials) ? account.credentials.map((item: any) => item.key) : [],
+    credentialKeys: account.credentials?.map((item) => item.key) ?? [],
   };
 }
 
@@ -42,20 +61,29 @@ export async function listIntegrationAccounts(app: FastifyInstance, organization
   return accounts.map(publicAccount);
 }
 
+export type CreateIntegrationAccountInput = {
+  provider: string;
+  name: string;
+  externalAccountId?: string | undefined;
+  configuration?: Record<string, unknown> | undefined;
+};
+
 export async function createIntegrationAccount(
   app: FastifyInstance,
   organizationId: string,
-  input: { provider: string; name: string; externalAccountId?: string; configuration?: Record<string, unknown> },
+  input: CreateIntegrationAccountInput,
 ) {
+  const data: Prisma.IntegrationAccountUncheckedCreateInput = {
+    organizationId,
+    provider: input.provider.trim().toLowerCase(),
+    name: input.name,
+    status: 'DISCONNECTED',
+    ...(input.externalAccountId ? { externalAccountId: input.externalAccountId } : {}),
+    ...(input.configuration ? { configuration: toJson(input.configuration) } : {}),
+  };
+
   const account = await app.prisma.integrationAccount.create({
-    data: {
-      organizationId,
-      provider: input.provider.trim().toLowerCase(),
-      name: input.name,
-      externalAccountId: input.externalAccountId,
-      configuration: input.configuration ?? undefined,
-      status: 'DISCONNECTED',
-    },
+    data,
     include: { credentials: { select: { key: true } } },
   });
   return publicAccount(account);
