@@ -4,6 +4,7 @@ type AutomationEvent = {
   type: 'new_review' | 'negative_review' | 'rating_at_most' | 'unanswered_age';
   organizationId: string;
   dedupeKey: string;
+  actorUserId?: string | null;
   review?: {
     id: string;
     rating: number;
@@ -16,14 +17,28 @@ type AutomationEvent = {
 
 type ActionDefinition = { type?: string; config?: Record<string, unknown> } | string;
 
-function matchesAutomation(automation: any, event: AutomationEvent): boolean {
+type AutomationRecord = {
+  id: string;
+  name: string;
+  trigger: string;
+  enabled: boolean;
+  conditions: unknown;
+  actions: unknown;
+};
+
+function objectValue(value: unknown, key: string): unknown {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+function matchesAutomation(automation: AutomationRecord, event: AutomationEvent): boolean {
   if (!automation.enabled) return false;
   if (automation.trigger === 'new_review') return event.type === 'new_review';
   if (automation.trigger === 'negative_review') return event.type === 'new_review' && Number(event.review?.rating ?? 5) <= 2;
   if (automation.trigger === 'rating_at_most') {
     if (event.type !== 'new_review') return false;
-    const conditions = automation.conditions && typeof automation.conditions === 'object' ? automation.conditions : {};
-    const threshold = Number((conditions as any).rating ?? (conditions as any).ratingMax ?? 2);
+    const threshold = Number(objectValue(automation.conditions, 'rating') ?? objectValue(automation.conditions, 'ratingMax') ?? 2);
     return Number(event.review?.rating ?? 5) <= threshold;
   }
   return false;
@@ -38,10 +53,33 @@ function normalizeActions(actions: unknown): Array<{ type: string; config: Recor
   });
 }
 
-async function executeAction(app: FastifyInstance, automation: any, event: AutomationEvent, action: { type: string; config: Record<string, unknown> }) {
+async function resolveActorUserId(app: FastifyInstance, event: AutomationEvent): Promise<string | null> {
+  if (event.actorUserId) {
+    const member = await app.prisma.organizationMember.findFirst({
+      where: { organizationId: event.organizationId, userId: event.actorUserId, status: 'ACTIVE' },
+      select: { userId: true },
+    });
+    if (member) return member.userId;
+  }
+  const member = await app.prisma.organizationMember.findFirst({
+    where: { organizationId: event.organizationId, status: 'ACTIVE' },
+    orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    select: { userId: true },
+  });
+  return member?.userId ?? null;
+}
+
+async function executeAction(
+  app: FastifyInstance,
+  automation: AutomationRecord,
+  event: AutomationEvent,
+  actorUserId: string | null,
+  action: { type: string; config: Record<string, unknown> },
+) {
   const review = event.review;
 
   if (action.type === 'create_task' && review) {
+    if (!actorUserId) return { type: action.type, skipped: 'NO_ACTIVE_MEMBER' };
     const title = String(action.config.title || `Обработать негативный отзыв ${review.rating}★`).slice(0, 240);
     const priority = Number(review.rating) <= 1 ? 'CRITICAL' : 'HIGH';
     const existing = await app.prisma.task.findFirst({
@@ -59,7 +97,7 @@ async function executeAction(app: FastifyInstance, automation: any, event: Autom
         description: String(action.config.description || `Автоматически создано правилом «${automation.name}»`),
         priority,
         status: 'NEW',
-        createdByUserId: automation.createdByUserId,
+        createdByUserId: actorUserId,
       },
     });
     return { type: action.type, taskId: task.id };
@@ -82,7 +120,7 @@ async function executeAction(app: FastifyInstance, automation: any, event: Autom
         organizationId: event.organizationId,
         reviewId: review.id,
         organizationMemberId: member.id,
-        assignedByUserId: automation.createdByUserId,
+        assignedByUserId: actorUserId ?? member.userId,
         status: 'ACTIVE',
         note: `Автоматизация: ${automation.name}`,
       },
@@ -115,38 +153,40 @@ export async function dispatchAutomationEvent(app: FastifyInstance, event: Autom
   const automations = await app.prisma.automation.findMany({
     where: { organizationId: event.organizationId, enabled: true },
   });
+  const actorUserId = await resolveActorUserId(app, event);
 
-  const results = [];
+  const results: Array<Record<string, unknown>> = [];
   for (const automation of automations) {
     if (!matchesAutomation(automation, event)) continue;
     const executionDedupeKey = `${event.type}:${event.dedupeKey}`;
 
-    const claimed = await app.prisma.automationExecution.upsert({
+    const existing = await app.prisma.automationExecution.findUnique({
       where: { automationId_dedupeKey: { automationId: automation.id, dedupeKey: executionDedupeKey } },
-      create: {
+    });
+    if (existing) {
+      results.push({ automationId: automation.id, deduplicated: true, status: existing.status });
+      continue;
+    }
+
+    const claimed = await app.prisma.automationExecution.create({
+      data: {
         organizationId: event.organizationId,
         automationId: automation.id,
         dedupeKey: executionDedupeKey,
         status: 'RUNNING',
-        triggerPayload: event as any,
+        triggerPayload: JSON.parse(JSON.stringify(event)),
       },
-      update: {},
     });
 
-    if (claimed.status !== 'RUNNING' || claimed.finishedAt) {
-      results.push({ automationId: automation.id, deduplicated: true });
-      continue;
-    }
-
     try {
-      const effects = [];
+      const effects: Array<Record<string, unknown>> = [];
       for (const action of normalizeActions(automation.actions)) {
-        effects.push(await executeAction(app, automation, event, action));
+        effects.push(await executeAction(app, automation, event, actorUserId, action));
       }
       await app.prisma.$transaction([
         app.prisma.automationExecution.update({
           where: { id: claimed.id },
-          data: { status: 'SUCCESS', actionResult: effects as any, finishedAt: new Date() },
+          data: { status: 'SUCCESS', actionResult: JSON.parse(JSON.stringify(effects)), finishedAt: new Date() },
         }),
         app.prisma.automation.update({ where: { id: automation.id }, data: { lastRunAt: new Date() } }),
       ]);
