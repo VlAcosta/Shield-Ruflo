@@ -1,8 +1,8 @@
 import { apiRequest } from '../core/apiClient';
 import { authService } from './authService';
 
-jest.mock('../core/apiClient', () => ({
-  apiRequest: jest.fn(),
+vi.mock('../core/apiClient', () => ({
+  apiRequest: vi.fn(),
   joinEndpoint: (base, path) => `${base}${path}`,
 }));
 
