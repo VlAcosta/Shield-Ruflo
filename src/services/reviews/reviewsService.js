@@ -83,7 +83,7 @@ export async function submitReviewReply(reviewId, reply, { publish = false } = {
   if (!text) throw new Error('Ответ пуст');
   const payload = await request(`/${reviewId}/reply`, { method: 'POST', body: { text, publish } });
   if (!payload?.review) throw new Error('Сервер не подтвердил сохранение ответа');
-  return { review: normalizeReview(payload.review), reply: payload.reply || null };
+  return normalizeReview({ ...payload.review, replyRecord: payload.reply || null });
 }
 
 export async function getReviewReplyHistory(reviewId, { signal } = {}) {
