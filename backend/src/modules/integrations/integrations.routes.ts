@@ -5,10 +5,12 @@ import {
   createIntegrationAccount,
   disconnectIntegration,
   listIntegrationAccounts,
+  listProviderCatalog,
   queueIntegrationSync,
   requestIntegrationConnect,
   saveIntegrationCredentials,
 } from './integrations.service.js';
+import { providerDiagnostics } from './providers/provider-runtime.js';
 
 const idParams = z.object({ integrationId: z.string().uuid() });
 const providerParams = z.object({ providerId: z.string().trim().min(2).max(80) });
@@ -45,6 +47,10 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     integrations: await listIntegrationAccounts(app, orgId(request)),
   }));
 
+  app.get('/integrations/provider-catalog', { preHandler: [app.authenticate, app.authorize('integrations.view')] }, async () => ({
+    providers: listProviderCatalog(),
+  }));
+
   app.post('/integrations', { preHandler: [app.authenticate, app.authorize('integrations.manage')] }, async (request, reply) => {
     const body = createSchema.parse(request.body);
     const integration = await createIntegrationAccount(app, orgId(request), body);
@@ -76,15 +82,19 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/integrations/providers/:providerId/diagnostics', { preHandler: [app.authenticate, app.authorize('integrations.view')] }, async (request) => {
     const { providerId } = providerParams.parse(request.params);
     const account = await findProviderAccount(app, orgId(request), providerId);
+    const sdk = providerDiagnostics(providerId);
     return {
       providerId,
       status: account?.status ?? 'DISCONNECTED',
-      connected: account?.status === 'CONNECTED',
+      connected: account?.status === 'CONNECTED' || account?.status === 'DEGRADED',
       lastValidatedAt: account?.lastValidatedAt ?? null,
       lastSyncedAt: account?.lastSyncedAt ?? null,
       lastErrorCode: account?.lastErrorCode ?? null,
       lastErrorMessage: account?.lastErrorMessage ?? null,
       credentialsExposed: false,
+      adapterInstalled: sdk.installed,
+      capabilities: sdk.capabilities,
+      availability: sdk.availability,
     };
   });
 
