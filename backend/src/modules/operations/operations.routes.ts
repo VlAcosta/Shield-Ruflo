@@ -1,7 +1,8 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
 import { assertEntitlement } from '../billing/billing.service.js';
+import { dispatchAutomationEvent } from './automation-engine.js';
 
 const automationIdParams = z.object({ automationId: z.string().uuid() });
 const reportIdParams = z.object({ reportId: z.string().uuid() });
@@ -9,10 +10,7 @@ const notificationIdParams = z.object({ notificationId: z.string().uuid() });
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 const automationActionSchema = z.union([
   z.string().trim().min(1).max(120),
-  z.object({
-    type: z.string().trim().min(1).max(120),
-    config: jsonObjectSchema.default({}),
-  }),
+  z.object({ type: z.string().trim().min(1).max(120), config: jsonObjectSchema.default({}) }),
 ]);
 const automationSchema = z.object({
   name: z.string().trim().min(1).max(180),
@@ -31,18 +29,14 @@ const reportSchema = z.object({
 });
 const notificationPreferencesSchema = z.record(z.string(), z.unknown());
 
-function authContext(request: { auth?: { organizationId?: string | null; userId: string } }) {
+function authContext(request: FastifyRequest) {
   if (!request.auth?.organizationId) {
     throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
   }
   return { organizationId: request.auth.organizationId, userId: request.auth.userId };
 }
 
-async function createQueuedReport(
-  app: Parameters<FastifyPluginAsync>[0],
-  organizationId: string,
-  body: z.infer<typeof reportSchema>,
-) {
+async function createQueuedReport(app: FastifyInstance, organizationId: string, body: z.infer<typeof reportSchema>) {
   const start = new Date(body.periodStart);
   const end = new Date(body.periodEnd);
   if (start >= end) {
@@ -71,7 +65,7 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     const { organizationId } = authContext(request);
     const automations = await app.prisma.automation.findMany({
       where: { organizationId },
-      include: { executions: { orderBy: { startedAt: 'desc' }, take: 5 } },
+      include: { executions: { orderBy: { startedAt: 'desc' }, take: 10 } },
       orderBy: { createdAt: 'desc' },
     });
     return { automations };
@@ -120,13 +114,65 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     return { automation };
   });
 
+  app.delete('/automations/:automationId', { preHandler: [app.authenticate, app.authorize('automations.manage')] }, async (request, reply) => {
+    const { organizationId, userId } = authContext(request);
+    const { automationId } = automationIdParams.parse(request.params);
+    const current = await app.prisma.automation.findFirst({ where: { id: automationId, organizationId }, select: { id: true, name: true } });
+    if (!current) throw new AppError({ code: 'AUTOMATION_NOT_FOUND', message: 'Автоматизация не найдена', statusCode: 404 });
+    await app.prisma.$transaction([
+      app.prisma.automation.delete({ where: { id: current.id } }),
+      app.prisma.auditLog.create({
+        data: { organizationId, actorUserId: userId, action: 'automation.deleted', entityType: 'Automation', entityId: current.id, metadata: { name: current.name } },
+      }),
+    ]);
+    return reply.code(204).send();
+  });
+
+  app.post('/automations/run', { preHandler: [app.authenticate, app.authorize('automations.manage')] }, async (request) => {
+    const { organizationId, userId } = authContext(request);
+    await assertEntitlement(app, organizationId, 'automations');
+    const reviews = await app.prisma.review.findMany({
+      where: { organizationId, status: { not: 'ARCHIVED' } },
+      select: {
+        id: true,
+        rating: true,
+        businessId: true,
+        locationId: true,
+        externalId: true,
+        sourceId: true,
+        author: { select: { name: true } },
+        source: { select: { provider: true } },
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: 250,
+    });
+    const runs = [];
+    for (const review of reviews) {
+      runs.push(...await dispatchAutomationEvent(app, {
+        type: 'new_review',
+        organizationId,
+        actorUserId: userId,
+        dedupeKey: `${review.sourceId}:${review.externalId}`,
+        review: {
+          id: review.id,
+          rating: review.rating,
+          businessId: review.businessId,
+          locationId: review.locationId,
+          author: review.author?.name ?? null,
+          provider: review.source.provider,
+        },
+      }));
+    }
+    return { evaluated: reviews.length, runs };
+  });
+
   app.get('/reports', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, async (request) => {
     const { organizationId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
     return { reports: await app.prisma.report.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 100 }), schedules: [] };
   });
 
-  const createReportHandler = async (request: Parameters<typeof authContext>[0] & { body?: unknown }, reply: any) => {
+  const createReportHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     const { organizationId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
     const report = await createQueuedReport(app, organizationId, reportSchema.parse(request.body));
@@ -148,8 +194,6 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
   app.put('/reports/schedules', { preHandler: [app.authenticate, app.authorize('analytics.view')] }, async (request) => {
     const { organizationId } = authContext(request);
     await assertEntitlement(app, organizationId, 'reports');
-    // Scheduled report execution will use Automations/Jobs. Until a schedule is
-    // persisted server-side we do not claim that a local UI toggle is active.
     const { schedules } = z.object({ schedules: z.array(z.unknown()).max(50) }).parse(request.body);
     if (schedules.length) {
       throw new AppError({ code: 'REPORT_SCHEDULING_NOT_CONFIGURED', message: 'Планировщик отчётов ещё не настроен', statusCode: 422 });
