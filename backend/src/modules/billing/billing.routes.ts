@@ -1,9 +1,9 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
 import { getBillingSnapshot } from './billing.service.js';
 
-function orgId(request: { auth?: { organizationId?: string | null } }): string {
+function orgId(request: FastifyRequest): string {
   if (!request.auth?.organizationId) {
     throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
   }
