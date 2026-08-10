@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { env } from '../src/config/env.js';
+import { hashSessionToken } from '../src/shared/security/tokens.js';
 
 const app = await buildApp();
 
@@ -8,18 +10,17 @@ const platformAdminId = randomUUID();
 const regularUserId = randomUUID();
 const organizationId = randomUUID();
 const planCode = `admin-${randomUUID().slice(0, 8)}`;
-
-async function createSession(userId: string) {
-  const token = app.auth.signSession({ userId });
-  return `${app.config.AUTH_COOKIE_NAME}=${token}`;
-}
+const platformAdminSessionToken = `admin-platform-data-${randomUUID()}`;
+const regularSessionToken = `regular-platform-data-${randomUUID()}`;
+const platformAdminCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(platformAdminSessionToken)}`;
+const regularCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(regularSessionToken)}`;
 
 beforeAll(async () => {
   await app.prisma.user.createMany({
     data: [
       {
         id: platformAdminId,
-        email: process.env.PLATFORM_ADMIN_IDENTITIES?.split(',')[0] || 'platform-admin@example.test',
+        email: env.PLATFORM_ADMIN_IDENTITIES[0] || 'platform-admin@example.test',
         phone: `+7${Date.now()}71`,
         displayName: 'Platform Data Admin',
         profileCompletedAt: new Date(),
@@ -33,6 +34,22 @@ beforeAll(async () => {
       },
     ],
   });
+
+  await app.prisma.session.createMany({
+    data: [
+      {
+        userId: platformAdminId,
+        tokenHash: hashSessionToken(platformAdminSessionToken),
+        expiresAt: new Date(Date.now() + 10 * 60_000),
+      },
+      {
+        userId: regularUserId,
+        tokenHash: hashSessionToken(regularSessionToken),
+        expiresAt: new Date(Date.now() + 10 * 60_000),
+      },
+    ],
+  });
+
   await app.prisma.organization.create({
     data: {
       id: organizationId,
@@ -82,18 +99,17 @@ afterAll(async () => {
   await app.prisma.plan.deleteMany({ where: { code: planCode } });
   await app.prisma.organizationMember.deleteMany({ where: { organizationId } });
   await app.prisma.organization.deleteMany({ where: { id: organizationId } });
+  await app.prisma.session.deleteMany({ where: { userId: { in: [platformAdminId, regularUserId] } } });
   await app.prisma.user.deleteMany({ where: { id: { in: [platformAdminId, regularUserId] } } });
   await app.close();
 });
 
 describe('platform admin PostgreSQL data', () => {
   test('platform admin can read real clients, subscriptions and analytics', async () => {
-    const cookie = await createSession(platformAdminId);
-
     const clients = await app.inject({
       method: 'GET',
       url: '/api/v1/admin/clients',
-      headers: { cookie },
+      headers: { cookie: platformAdminCookie },
     });
     expect(clients.statusCode).toBe(200);
     expect(clients.json().clients).toEqual(expect.arrayContaining([
@@ -103,7 +119,7 @@ describe('platform admin PostgreSQL data', () => {
     const subscriptions = await app.inject({
       method: 'GET',
       url: '/api/v1/admin/subscriptions',
-      headers: { cookie },
+      headers: { cookie: platformAdminCookie },
     });
     expect(subscriptions.statusCode).toBe(200);
     expect(subscriptions.json().subscriptions).toEqual(expect.arrayContaining([
@@ -113,28 +129,26 @@ describe('platform admin PostgreSQL data', () => {
     const analytics = await app.inject({
       method: 'GET',
       url: '/api/v1/admin/analytics?period=month',
-      headers: { cookie },
+      headers: { cookie: platformAdminCookie },
     });
     expect(analytics.statusCode).toBe(200);
     expect(analytics.json()).toEqual(expect.objectContaining({ source: 'api' }));
   });
 
   test('regular authenticated users cannot read platform data', async () => {
-    const cookie = await createSession(regularUserId);
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/admin/clients',
-      headers: { cookie },
+      headers: { cookie: regularCookie },
     });
     expect(response.statusCode).toBe(403);
   });
 
   test('unconfigured admin modules fail truthfully instead of faking success', async () => {
-    const cookie = await createSession(platformAdminId);
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/admin/settings/smtp/test',
-      headers: { cookie },
+      headers: { cookie: platformAdminCookie },
     });
     expect(response.statusCode).toBe(501);
     expect(response.json().error.code).toBe('PLATFORM_ADMIN_FEATURE_NOT_CONFIGURED');
