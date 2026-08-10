@@ -11,12 +11,16 @@ vi.mock('react-router-dom', async () => ({
   useNavigate: () => mockNavigate,
 }));
 vi.mock('../../../services/auth/authService', () => ({ authService: { logout: vi.fn() } }));
-vi.mock('../../../features/access/hooks/useAccessControl', () => () => ({ can: () => false, role: { label: 'Аналитик' } }));
+vi.mock('../../../features/access/hooks/useAccessControl', () => ({
+  default: () => ({ can: () => false, role: { label: 'Аналитик' } }),
+}));
 vi.mock('../../../services/access/rbacService', () => ({ findFirstAllowedRoute: () => '/dashboard' }));
-vi.mock('../../../features/appearance/hooks/useAppearance', () => () => ({
-  isDark: false,
-  mode: 'light',
-  toggleResolvedTheme: vi.fn(),
+vi.mock('../../../features/appearance/hooks/useAppearance', () => ({
+  default: () => ({
+    isDark: false,
+    mode: 'light',
+    toggleResolvedTheme: vi.fn(),
+  }),
 }));
 vi.mock('../navigation', () => ({
   navigationItems: [{
