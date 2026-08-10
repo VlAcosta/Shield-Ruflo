@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const reviewIdParamsSchema = z.object({ reviewId: z.string().uuid() });
+export const reviewReplyIdParamsSchema = z.object({ reviewId: z.string().uuid(), replyId: z.string().uuid() });
 export const sourceIdParamsSchema = z.object({ sourceId: z.string().uuid() });
 export const assignmentIdParamsSchema = z.object({ assignmentId: z.string().uuid() });
 
@@ -44,6 +45,10 @@ export const updateReviewSchema = z.object({
 export const replySchema = z.object({
   text: z.string().trim().min(1).max(8000),
   publish: z.boolean().default(false),
+});
+
+export const rejectReplySchema = z.object({
+  reason: z.string().trim().max(1000).optional(),
 });
 
 export const assignReviewSchema = z.object({
