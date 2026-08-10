@@ -1,51 +1,44 @@
 {
   "name": "business-shield-frontend",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
+  "type": "module",
   "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "6.30.4",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "vite --host 127.0.0.1 --port 3000 --strictPort",
+    "dev": "vite --host 127.0.0.1 --port 3000 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 3000 --strictPort",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings=0",
+    "test:e2e:p0": "playwright test e2e/p0-session-reload.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "6.30.1",
-    "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "test:ci": "react-scripts test --watchAll=false",
-    "lint": "eslint src --ext .js,.jsx",
-    "test:e2e:p0": "playwright test e2e/p0-session-reload.spec.js",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.54.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.0",
+    "@typescript-eslint/parser": "^8.46.0",
+    "@vitejs/plugin-react": "^6.0.4",
     "eslint": "8.57.1",
-    "eslint-config-react-app": "7.0.1",
-    "eslint-plugin-jest": "25.7.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "jsdom": "^28.1.0",
     "sass": "^1.97.3",
-    "webpack-cli": "^6.0.1"
+    "typescript": "^5.8.3",
+    "vite": "^8.1.0",
+    "vitest": "^4.1.0"
   }
 }
