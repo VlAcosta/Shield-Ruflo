@@ -1,16 +1,18 @@
 {
   "name": "business-shield-backend",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
-  "description": "Business Shield modular backend — B6.2 strict TypeScript compile repair for B2-B6",
+  "description": "Business Shield production backend for multi-tenant reputation operations",
   "engines": {
     "node": ">=22.12 <25"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/worker.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:integration:p0": "test -n \"$TEST_DATABASE_URL\" && DATABASE_URL=\"$TEST_DATABASE_URL\" NODE_ENV=test vitest run test/reviews-tenant.integration.test.ts --reporter=verbose",
