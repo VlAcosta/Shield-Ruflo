@@ -5,7 +5,7 @@ import { getCompanyScope, readScopedJson, writeScopedJson } from '../core/dataSc
 import { isDemoDataEnabled } from '../core/runtimeConfig';
 
 const TASKS_ENDPOINT = String(getRuntimeEnv('TASKS_ENDPOINT', '/api/v1/tasks')).replace(/\/$/, '');
-const TASKS_CACHE_KEY = 'business-shield:tasks:snapshot:v1';
+const TASKS_CACHE_KEY = 'business-shield:tasks:snapshot:v2';
 export const TASKS_CHANGED_EVENT = 'business-shield:tasks-changed';
 
 function clone(value) {
@@ -25,13 +25,17 @@ async function request(path = '', options = {}) {
   return apiRequest(joinEndpoint(TASKS_ENDPOINT, path), { ...options, timeout: 8000 });
 }
 
-function normalizeTask(task) {
+function normalizeTask(task = {}) {
   return {
     comments: [],
     checklist: [],
     attachments: [],
     description: '',
     ...task,
+    type: task.type || (task.reviewId || task.sourceReviewId ? 'Отзывы' : 'Общее'),
+    sourceReviewId: task.sourceReviewId || task.reviewId || null,
+    reviewId: task.reviewId || task.sourceReviewId || null,
+    dueDate: task.dueDate || task.deadline || null,
   };
 }
 
@@ -39,6 +43,40 @@ function snapshotFromResponse(remote) {
   if (remote?.snapshot) return remote.snapshot;
   if (Array.isArray(remote?.tasks)) return remote;
   return null;
+}
+
+function normalizeDateInput(value) {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(value))) return new Date(value).toISOString();
+  const ru = String(value).match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (ru) return new Date(`${ru[3]}-${ru[2]}-${ru[1]}T23:59:59`).toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function prepareCreatePayload(payload = {}) {
+  return {
+    title: payload.title,
+    description: payload.description || '',
+    status: payload.status,
+    priority: payload.priority,
+    dueDate: normalizeDateInput(payload.dueDate || payload.deadline),
+    businessId: payload.businessId || null,
+    locationId: payload.locationId || null,
+    reviewId: payload.reviewId || payload.sourceReviewId || null,
+    assigneeMemberIds: payload.assigneeMemberIds || [],
+  };
+}
+
+function preparePatch(patch = {}) {
+  const allowed = {};
+  for (const key of ['title', 'description', 'status', 'priority', 'position']) {
+    if (patch[key] !== undefined) allowed[key] = patch[key];
+  }
+  if (patch.dueDate !== undefined || patch.deadline !== undefined) {
+    allowed.dueDate = normalizeDateInput(patch.dueDate ?? patch.deadline);
+  }
+  return allowed;
 }
 
 export async function getTasksSnapshot({ signal } = {}) {
@@ -69,7 +107,7 @@ function mergeTaskIntoSnapshot(task, snapshot) {
 export async function createTask(payload, snapshot) {
   const remote = await request('', {
     method: 'POST',
-    body: payload,
+    body: prepareCreatePayload(payload),
     idempotencyKey: createIdempotencyKey('task-create'),
   });
   const task = normalizeTask(remote?.task || remote);
@@ -80,7 +118,7 @@ export async function createTask(payload, snapshot) {
 }
 
 export async function updateTask(taskId, patch, snapshot) {
-  const remote = await request(`/${taskId}`, { method: 'PATCH', body: patch });
+  const remote = await request(`/${taskId}`, { method: 'PATCH', body: preparePatch(patch) });
   const task = normalizeTask(remote?.task || remote);
   if (!task?.id) throw new Error('Tasks API did not return updated task');
   const nextSnapshot = {
