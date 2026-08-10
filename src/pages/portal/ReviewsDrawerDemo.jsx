@@ -48,15 +48,6 @@ const reviewsSeed = [
   },
 ];
 
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M16 16L20 20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function FilterIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none">
@@ -159,7 +150,7 @@ export default function ReviewsDrawerDemo() {
 
                 <div className="review-drawer__meta">
                   <span>{filteredReviews.length} отзывов</span>
-                  <button type="button" onClick={() => setDrawerOpen(false)}>
+                  <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Закрыть отзывы">
                     <CloseIcon />
                   </button>
                 </div>
@@ -175,6 +166,7 @@ export default function ReviewsDrawerDemo() {
                   value={platform}
                   onChange={(e) => setPlatform(e.target.value)}
                   className="review-drawer__select"
+                  aria-label="Площадка"
                 >
                   <option>Все площадки</option>
                   <option>2GIS</option>
@@ -187,6 +179,7 @@ export default function ReviewsDrawerDemo() {
                   value={ratingFilter}
                   onChange={(e) => setRatingFilter(e.target.value)}
                   className="review-drawer__select"
+                  aria-label="Рейтинг"
                 >
                   <option>Любой рейтинг</option>
                   <option>1 ★</option>
@@ -208,11 +201,12 @@ export default function ReviewsDrawerDemo() {
                           <div>
                             <div className="review-item__author">{review.author}</div>
                             <div className="review-item__ratingRow">
-                              <div className="stars stars--crm">
+                              <div className="stars stars--crm" aria-label={`Рейтинг ${review.rating} из 5`}>
                                 {makeStars(review.rating).map((filled, index) => (
                                   <span
                                     key={index}
                                     className={filled ? 'is-filled' : 'is-empty'}
+                                    aria-hidden="true"
                                   >
                                     ★
                                   </span>
@@ -232,7 +226,7 @@ export default function ReviewsDrawerDemo() {
                             Ответить
                           </button>
 
-                          <button type="button" className="icon-round review-item__smallBtn">
+                          <button type="button" className="icon-round review-item__smallBtn" aria-label="Отложить отзыв">
                             <ClockIcon />
                           </button>
 
@@ -240,6 +234,7 @@ export default function ReviewsDrawerDemo() {
                             type="button"
                             className="icon-round success review-item__smallBtn"
                             onClick={() => closeReview(review.id)}
+                            aria-label={`Закрыть отзыв ${review.author}`}
                           >
                             <CircleCheckIcon />
                           </button>
