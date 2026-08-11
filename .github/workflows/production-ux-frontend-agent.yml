@@ -1,0 +1,64 @@
+name: Production UX Frontend Agent
+
+on:
+  push:
+    branches:
+      - feat/production-ux-onboarding-billing-recovery
+    paths:
+      - 'src/**'
+      - 'scripts/production-ux-frontend-apply.py'
+      - '.github/workflows/production-ux-frontend-agent.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-ux-frontend-agent
+  cancel-in-progress: true
+
+jobs:
+  integrate-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Apply frontend recovery patch
+        run: python3 scripts/production-ux-frontend-apply.py
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test:ci
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit validated frontend integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain --untracked-files=normal)" ]; then
+            echo 'No frontend integration changes to commit.'
+            exit 0
+          fi
+          git config user.name 'business-shield-ruflo-agent'
+          git config user.email 'business-shield-ruflo-agent@users.noreply.github.com'
+          git add src
+          git commit -m 'feat: simplify production onboarding billing and navigation UX'
+          git fetch origin feat/production-ux-onboarding-billing-recovery
+          git rebase origin/feat/production-ux-onboarding-billing-recovery
+          git push origin HEAD:feat/production-ux-onboarding-billing-recovery
