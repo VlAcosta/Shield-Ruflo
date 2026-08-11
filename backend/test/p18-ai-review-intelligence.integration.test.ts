@@ -197,6 +197,41 @@ describeWithPostgres('P18 Shield AI Review Intelligence', () => {
     expect(await app.prisma.job.count({ where: { organizationId, type: 'ai.analyzeReview', dedupeKey: { startsWith: `ai:review:${concurrentReview.id}:` } } })).toBe(1);
   });
 
+  it('serializes analysisVersion allocation for concurrent forced jobs', async () => {
+    const versionedReview = await app.prisma.review.create({
+      data: {
+        organizationId,
+        businessId,
+        sourceId,
+        externalId: `versioned-${randomUUID()}`,
+        rating: 2,
+        text: 'Два параллельных анализа не должны получить одну версию.',
+        language: 'ru',
+        publishedAt: new Date('2026-08-04T10:00:00.000Z'),
+        providerUpdatedAt: new Date('2026-08-04T10:00:00.000Z'),
+      },
+    });
+    const [first, second] = await Promise.all([
+      enqueueReviewAnalysis(app.prisma, { organizationId, reviewId: versionedReview.id, force: true }),
+      enqueueReviewAnalysis(app.prisma, { organizationId, reviewId: versionedReview.id, force: true }),
+    ]);
+    expect(first.queued).toBe(true);
+    expect(second.queued).toBe(true);
+    if (!first.queued || !second.queued) throw new Error('Expected forced analyses to queue');
+
+    await Promise.all([
+      processReviewAnalysisJob(app.prisma, { organizationId, reviewId: versionedReview.id, aiOperationId: first.operationId }),
+      processReviewAnalysisJob(app.prisma, { organizationId, reviewId: versionedReview.id, aiOperationId: second.operationId }),
+    ]);
+
+    const insights = await app.prisma.reviewInsight.findMany({
+      where: { organizationId, reviewId: versionedReview.id },
+      orderBy: { analysisVersion: 'asc' },
+      select: { analysisVersion: true },
+    });
+    expect(insights.map((item) => item.analysisVersion)).toEqual([1, 2]);
+  });
+
   it('prevents cross-tenant intelligence access', async () => {
     const response = await app.inject({ method: 'GET', url: `/api/v1/reviews/${reviewId}/intelligence`, headers: { cookie: otherCookie } });
     expect(response.statusCode).toBe(404);
