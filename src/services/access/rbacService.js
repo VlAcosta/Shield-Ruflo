@@ -247,6 +247,7 @@ const ROUTE_PERMISSIONS = Object.freeze([
   { prefix: '/competitive', permission: 'competitive.view' },
   { prefix: '/ai-visibility', permission: 'ai_visibility.view' },
   { prefix: '/location-health', permission: 'locations.view' },
+  { prefix: '/ask-shield', permission: 'analytics.view' },
   { prefix: '/automations', permission: 'automations.view' },
   { prefix: '/integrations', permission: 'integrations.view' },
   { prefix: '/subscriptions', permission: 'billing.view' },

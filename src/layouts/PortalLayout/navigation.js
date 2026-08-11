@@ -21,6 +21,7 @@ export const navigationItems = Object.freeze([
   { to: '/competitive', label: 'Конкуренты', Icon: ReputationIcon, permission: 'competitive.view' },
   { to: '/ai-visibility', label: 'AI Visibility', Icon: ReputationIcon, permission: 'ai_visibility.view' },
   { to: '/location-health', label: 'Локации', Icon: ReputationIcon, permission: 'locations.view' },
+  { to: '/ask-shield', label: 'Ask Shield', Icon: ReputationIcon, permission: 'analytics.view' },
   { to: '/automations', label: 'Автоматизации', Icon: AutomationIcon, permission: 'automations.view' },
   { to: '/integrations', label: 'Интеграции', Icon: IntegrationIcon, permission: 'integrations.view' },
   { to: '/subscriptions', label: 'Подписки', Icon: SubscriptionsIcon, permission: 'billing.view' },
