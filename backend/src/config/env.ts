@@ -78,12 +78,15 @@ const envSchema = z
     AUTH_OTP_RESEND_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
     AUTH_OTP_IP_MAX_REQUESTS: z.coerce.number().int().min(1).max(100).default(10),
     AUTH_OTP_IP_WINDOW_SECONDS: z.coerce.number().int().min(60).max(86_400).default(600),
-    AUTH_OTP_PROVIDER: z.enum(['console', 'webhook']).default('console'),
+    AUTH_OTP_PROVIDER: z.enum(['console', 'webhook', 'smsc']).default('console'),
     AUTH_OTP_FIXED_CODE: z.union([z.literal(''), z.string().regex(/^\d{4}$/)]).default(''),
     AUTH_EXPOSE_DEBUG_CODE: booleanFromString.default(false),
     AUTH_OTP_WEBHOOK_URL: optionalUrl,
     AUTH_OTP_WEBHOOK_TOKEN: z.string().default(''),
     AUTH_OTP_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+    SMSC_API_KEY: z.string().trim().default(''),
+    SMSC_SENDER: z.string().trim().max(32).default(''),
+    SMSC_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
 
     COMPANY_LOOKUP_PROVIDER: z.enum(['disabled', 'mock', 'webhook']).default('disabled'),
     COMPANY_LOOKUP_WEBHOOK_URL: optionalUrl,
@@ -124,6 +127,14 @@ const envSchema = z
         code: 'custom',
         path: ['AUTH_OTP_WEBHOOK_URL'],
         message: 'AUTH_OTP_WEBHOOK_URL is required when AUTH_OTP_PROVIDER=webhook',
+      });
+    }
+
+    if (value.AUTH_OTP_PROVIDER === 'smsc' && !value.SMSC_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMSC_API_KEY'],
+        message: 'SMSC OTP delivery requires an API key',
       });
     }
 
