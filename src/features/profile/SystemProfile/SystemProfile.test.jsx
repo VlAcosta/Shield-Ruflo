@@ -31,7 +31,7 @@ describe('SystemProfile', () => {
 
     expect(screen.getByText('Google setup')).toBeInTheDocument();
     expect(screen.getByText('Integration hub')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Автоматизации PRO/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Автоматизации · доступно в PRO' })).toBeInTheDocument();
   });
 
   test('shows a PRO upgrade state instead of mounting automations on FREE', () => {
