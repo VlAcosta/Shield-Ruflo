@@ -11,6 +11,7 @@ import { processReplyPublishJob, processReplyReconciliationJob } from './modules
 import { replyGenerationModeSchema } from './modules/ai/reply-copilot.schemas.js';
 import { processVisibilityRunJob } from './modules/ai-visibility/ai-visibility.service.js';
 import { processListingSyncJob } from './modules/listings/listing-health.service.js';
+import { processAskShieldJob } from './modules/ask-shield/ask-shield.service.js';
 
 registerGoogleBusinessProfileProvider();
 registerAiProviders();
@@ -99,6 +100,12 @@ async function processJob(job: any) {
     const sourceId = String(job.payload?.sourceId || '');
     if (!organizationId || !sourceId) throw new Error('INVALID_LISTING_SYNC_JOB');
     return processListingSyncJob(prisma, { organizationId, sourceId });
+  }
+  if (job.type === 'askShield.answer') {
+    const organizationId = String(job.payload?.organizationId || '');
+    const queryId = String(job.payload?.queryId || '');
+    if (!organizationId || !queryId) throw new Error('INVALID_ASK_SHIELD_JOB');
+    return processAskShieldJob(prisma, { organizationId, queryId });
   }
   if (job.type === 'provider.publishReply' || job.type === 'provider.reconcileReply') {
     const organizationId = String(job.payload?.organizationId || '');

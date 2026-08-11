@@ -417,6 +417,7 @@ model User {
   createdAiVisibilityProbes AiVisibilityProbe[] @relation("AiVisibilityProbeCreator")
   createdAiVisibilityRuns AiVisibilityRun[] @relation("AiVisibilityRunCreator")
   notifications              Notification[]        @relation("NotificationUser")
+  askShieldQueries           AskShieldQuery[]        @relation("AskShieldQueryCreator")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -501,6 +502,7 @@ model Organization {
   listingSources           ListingSource[]
   listingSnapshots         ListingSnapshot[]
   listingHealthIssues      ListingHealthIssue[]
+  askShieldQueries         AskShieldQuery[]
 }
 
 model OrganizationMember {
@@ -1962,4 +1964,40 @@ model ListingHealthIssue {
   @@index([locationId, severity, createdAt], map: "listing_health_issues_location_severity_idx")
   @@index([snapshotId], map: "listing_health_issues_snapshot_idx")
   @@map("listing_health_issues")
+}
+
+
+enum AskShieldStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@map("ask_shield_status")
+}
+
+model AskShieldQuery {
+  id                  String          @id @default(uuid()) @db.Uuid
+  organizationId      String          @map("organization_id") @db.Uuid
+  createdByUserId     String?         @map("created_by_user_id") @db.Uuid
+  question            String          @db.Text
+  status              AskShieldStatus @default(RUNNING)
+  answer              String?         @db.Text
+  evidence            Json            @default("[]")
+  provider            String?         @db.VarChar(80)
+  model               String?         @db.VarChar(180)
+  promptVersion       String?         @map("prompt_version") @db.VarChar(80)
+  inputTokens         Int?            @map("input_tokens")
+  outputTokens        Int?            @map("output_tokens")
+  estimatedCostMicros BigInt?         @map("estimated_cost_micros")
+  errorCode           String?         @map("error_code") @db.VarChar(160)
+  errorMessage        String?         @map("error_message") @db.Text
+  createdAt           DateTime        @default(now()) @map("created_at")
+  completedAt         DateTime?       @map("completed_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("AskShieldQueryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt], map: "ask_shield_queries_org_created_idx")
+  @@index([organizationId, status, createdAt], map: "ask_shield_queries_org_status_idx")
+  @@map("ask_shield_queries")
 }

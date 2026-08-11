@@ -77,17 +77,17 @@ async function buildTenantContext(prisma: PrismaClient, organizationId: string) 
     prisma.review.count({ where: { organizationId, receivedAt: { gte: thirtyDaysAgo }, rating: { lte: 2 } } }),
     prisma.review.count({ where: { organizationId, receivedAt: { gte: thirtyDaysAgo }, replies: { none: { status: 'PUBLISHED' } } } }),
     prisma.review.findMany({
-      where: { organizationId, receivedAt: { gte: thirtyDaysAgo }, text: { not: null } },
+      where: { organizationId, receivedAt: { gte: thirtyDaysAgo } },
       orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
       take: MAX_REVIEW_EVIDENCE,
       select: { id: true, rating: true, text: true, receivedAt: true },
     }),
     prisma.reputationCase.count({ where: { organizationId, status: { notIn: ['RESOLVED', 'VERIFIED', 'CLOSED'] } } }),
-    prisma.task.count({ where: { organizationId, dueAt: { lt: now }, status: { notIn: ['DONE', 'ARCHIVED'] } } }),
+    prisma.task.count({ where: { organizationId, deadline: { lt: now }, status: { notIn: ['DONE', 'ARCHIVED'] } } }),
     prisma.aiVisibilityRun.count({ where: { organizationId, status: 'SUCCEEDED', completedAt: { gte: thirtyDaysAgo } } }),
     prisma.aiVisibilityResult.count({ where: { organizationId, createdAt: { gte: thirtyDaysAgo }, brandMentioned: true } }),
     prisma.listingSnapshot.aggregate({ where: { organizationId, observedAt: { gte: thirtyDaysAgo } }, _count: { _all: true }, _avg: { healthScore: true } }),
-    prisma.competitiveMetricSnapshot.count({ where: { organizationId, capturedAt: { gte: thirtyDaysAgo } } }),
+    prisma.competitiveMetricSnapshot.count({ where: { organizationId, observedAt: { gte: thirtyDaysAgo } } }),
   ]);
   if (!organization) throw new AiProviderError({ code: 'ORGANIZATION_NOT_FOUND', message: 'Organization not found', retryable: false });
 
@@ -109,7 +109,7 @@ async function buildTenantContext(prisma: PrismaClient, organizationId: string) 
       id: review.id,
       label: `Review ${review.rating}/5 · ${review.receivedAt.toISOString().slice(0, 10)}`,
       route: `/reviews?reviewId=${encodeURIComponent(review.id)}`,
-      summary: redactPii(review.text ?? '').slice(0, 900) || null,
+      summary: redactPii(review.text).text.slice(0, 900) || null,
     })),
   ];
 
