@@ -6,6 +6,7 @@ on:
       - ops/production-deploy
     paths:
       - deploy/production-release.env
+      - deploy/production-known-hosts
       - .github/workflows/deploy-production.yml
   workflow_dispatch:
 
@@ -15,6 +16,11 @@ permissions:
 concurrency:
   group: business-shield-production-deploy
   cancel-in-progress: false
+
+env:
+  PROD_SSH_HOST: bis-shield.ru
+  PROD_SSH_PORT: "22"
+  PROD_SSH_USER: acosta
 
 jobs:
   deploy:
@@ -40,6 +46,7 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid release SHA" >&2; exit 11; }
           [[ "$PUBLIC_URL" == https://* ]] || { echo "PUBLIC_URL must use HTTPS" >&2; exit 12; }
           [[ "$APP_DIR" == /* ]] || { echo "APP_DIR must be absolute" >&2; exit 13; }
+          test -s deploy/production-known-hosts
 
           git fetch origin "refs/heads/$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH"
           ACTUAL_SHA="$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH")"
@@ -53,76 +60,71 @@ jobs:
           echo "public_url=$PUBLIC_URL" >> "$GITHUB_OUTPUT"
           echo "app_dir=$APP_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Configure production SSH
+      - name: Configure production SSH authentication
         id: ssh
         shell: bash
         env:
-          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
-          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
           PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
         run: |
           set -euo pipefail
 
-          missing=0
-          for name in PROD_SSH_HOST PROD_SSH_USER PROD_SSH_PRIVATE_KEY PROD_SSH_KNOWN_HOSTS; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Missing required GitHub Actions secret: $name" >&2
-              missing=1
-            fi
-          done
-          [[ "$missing" -eq 0 ]] || exit 20
-
-          port="${PROD_SSH_PORT:-22}"
-          [[ "$port" =~ ^[0-9]+$ ]] || { echo "PROD_SSH_PORT must be numeric" >&2; exit 21; }
-
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
-          chmod 600 "$HOME/.ssh/business-shield-production"
-          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          cp deploy/production-known-hosts "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-          echo "port=$port" >> "$GITHUB_OUTPUT"
+          if [[ -n "$PROD_SSH_PRIVATE_KEY" ]]; then
+            printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+            chmod 600 "$HOME/.ssh/business-shield-production"
+            echo 'auth_mode=key' >> "$GITHUB_OUTPUT"
+            echo 'Production SSH auth: dedicated private key'
+          elif [[ -n "$PROD_SSH_PASSWORD" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass >/dev/null
+            echo 'auth_mode=password' >> "$GITHUB_OUTPUT"
+            echo 'Production SSH auth: password bootstrap'
+          else
+            echo 'Missing production SSH credential.' >&2
+            echo 'Add exactly one GitHub Actions secret: PROD_SSH_PRIVATE_KEY (preferred) or PROD_SSH_PASSWORD.' >&2
+            exit 20
+          fi
 
       - name: Verify production SSH access
         shell: bash
         env:
-          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
-          PROD_SSH_PORT: ${{ steps.ssh.outputs.port }}
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
         run: |
           set -euo pipefail
-          ssh \
-            -i "$HOME/.ssh/business-shield-production" \
-            -p "$PROD_SSH_PORT" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=10 \
-            "$PROD_SSH_USER@$PROD_SSH_HOST" \
-            'printf "Production SSH connected\n"; test -d /var/www/bis-shield; command -v node >/dev/null; command -v git >/dev/null; command -v pg_dump >/dev/null; sudo -n true'
+          remote_check='printf "Production SSH connected\n"; test -d /var/www/bis-shield; command -v node >/dev/null; command -v git >/dev/null; command -v pg_dump >/dev/null; sudo -n true'
 
-      - name: Deploy pinned release to VPS
+          if [[ "$AUTH_MODE" == 'key' ]]; then
+            ssh \
+              -i "$HOME/.ssh/business-shield-production" \
+              -p "$PROD_SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=10 \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "$remote_check"
+          else
+            SSHPASS="$PROD_SSH_PASSWORD" sshpass -e ssh \
+              -p "$PROD_SSH_PORT" \
+              -o PreferredAuthentications=password,keyboard-interactive \
+              -o PubkeyAuthentication=no \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=10 \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "$remote_check"
+          fi
+
+      - name: Prepare guarded remote deployment script
         shell: bash
-        env:
-          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
-          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
-          PROD_SSH_PORT: ${{ steps.ssh.outputs.port }}
-          RELEASE_BRANCH: ${{ steps.manifest.outputs.release_branch }}
-          RELEASE_SHA: ${{ steps.manifest.outputs.release_sha }}
-          APP_DIR: ${{ steps.manifest.outputs.app_dir }}
-          PUBLIC_URL: ${{ steps.manifest.outputs.public_url }}
         run: |
           set -euo pipefail
-
-          ssh \
-            -i "$HOME/.ssh/business-shield-production" \
-            -p "$PROD_SSH_PORT" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            "$PROD_SSH_USER@$PROD_SSH_HOST" \
-            "bash -s -- '$RELEASE_BRANCH' '$RELEASE_SHA' '$APP_DIR' '$PUBLIC_URL'" <<'REMOTE'
+          cat > /tmp/business-shield-production-deploy.sh <<'REMOTE'
           set -Eeuo pipefail
 
           RELEASE_BRANCH="$1"
@@ -292,6 +294,39 @@ jobs:
           echo "URL: $PUBLIC_URL"
           echo "Backup: $BACKUP_ROOT"
           REMOTE
+          chmod 700 /tmp/business-shield-production-deploy.sh
+
+      - name: Deploy pinned release to VPS
+        shell: bash
+        env:
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+          RELEASE_BRANCH: ${{ steps.manifest.outputs.release_branch }}
+          RELEASE_SHA: ${{ steps.manifest.outputs.release_sha }}
+          APP_DIR: ${{ steps.manifest.outputs.app_dir }}
+          PUBLIC_URL: ${{ steps.manifest.outputs.public_url }}
+        run: |
+          set -euo pipefail
+          remote_command="bash -s -- '$RELEASE_BRANCH' '$RELEASE_SHA' '$APP_DIR' '$PUBLIC_URL'"
+
+          if [[ "$AUTH_MODE" == 'key' ]]; then
+            ssh \
+              -i "$HOME/.ssh/business-shield-production" \
+              -p "$PROD_SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "$remote_command" < /tmp/business-shield-production-deploy.sh
+          else
+            SSHPASS="$PROD_SSH_PASSWORD" sshpass -e ssh \
+              -p "$PROD_SSH_PORT" \
+              -o PreferredAuthentications=password,keyboard-interactive \
+              -o PubkeyAuthentication=no \
+              -o StrictHostKeyChecking=yes \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "$remote_command" < /tmp/business-shield-production-deploy.sh
+          fi
 
       - name: Deployment summary
         if: success()
