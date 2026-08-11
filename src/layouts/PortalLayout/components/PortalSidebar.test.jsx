@@ -3,12 +3,16 @@ import { MemoryRouter } from 'react-router-dom';
 import PortalSidebar from './PortalSidebar';
 
 const toggleTheme = vi.fn();
+const permissionAccessState = vi.fn();
 const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
 
 vi.mock('../../../features/access/hooks/useAccessControl', () => ({
   default: () => ({ can: () => false, role: { label: 'Аналитик' } }),
 }));
 vi.mock('../../../services/access/rbacService', () => ({ findFirstAllowedRoute: () => '/dashboard' }));
+vi.mock('../../../services/access/planAccessService', () => ({
+  getPermissionAccessState: (permission) => permissionAccessState(permission),
+}));
 vi.mock('../../../features/appearance/hooks/useAppearance', () => ({
   default: () => ({
     isDark: false,
@@ -33,7 +37,11 @@ function renderSidebar(props = {}) {
 }
 
 describe('PortalSidebar compact navigation', () => {
-  beforeEach(() => toggleTheme.mockReset());
+  beforeEach(() => {
+    toggleTheme.mockReset();
+    permissionAccessState.mockReset();
+    permissionAccessState.mockReturnValue('role_denied');
+  });
 
   test('shows only destinations allowed for the current role', () => {
     renderSidebar();
@@ -41,6 +49,16 @@ describe('PortalSidebar compact navigation', () => {
     expect(screen.getByText('Главная')).toBeInTheDocument();
     expect(screen.queryByText('Отзывы')).not.toBeInTheDocument();
     expect(screen.queryByText('Помощь')).not.toBeInTheDocument();
+  });
+
+  test('keeps plan-locked destinations visible with a compact PRO badge', () => {
+    permissionAccessState.mockImplementation((permission) => (
+      permission === 'reviews.view' ? 'plan_locked' : 'role_denied'
+    ));
+    renderSidebar();
+
+    expect(screen.getByRole('link', { name: 'Отзывы · доступно в PRO' })).toBeInTheDocument();
+    expect(screen.getByText('PRO')).toBeInTheDocument();
   });
 
   test('does not duplicate logout or cabinet lock actions in the sidebar', () => {
