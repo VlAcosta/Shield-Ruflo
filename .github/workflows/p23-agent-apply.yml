@@ -8,6 +8,7 @@ on:
       - scripts/p23-integrate.py
       - scripts/p23-prisma-relation-fix.py
       - scripts/p23-type-fix.py
+      - backend/test/p23-ai-visibility.integration.test.ts
       - .github/workflows/p23-agent-apply.yml
 
 permissions:
