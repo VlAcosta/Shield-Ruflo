@@ -4,7 +4,7 @@ import { SubscriptionsWorkspace } from '../../features/subscriptions';
 
 export default function SubscriptionsPage() {
   return (
-    <PortalLayout title="Подписки" subtitle="Аккаунт">
+    <PortalLayout title="Тариф и оплата" subtitle="Настройки">
       <SubscriptionsWorkspace />
     </PortalLayout>
   );
