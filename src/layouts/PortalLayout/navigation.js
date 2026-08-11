@@ -19,6 +19,7 @@ export const navigationItems = Object.freeze([
   { to: '/cases', label: 'Кейсы', Icon: ReputationIcon, permission: 'cases.view' },
   { to: '/acquisition', label: 'Сбор отзывов', Icon: ReviewsIcon, permission: 'acquisition.view' },
   { to: '/competitive', label: 'Конкуренты', Icon: ReputationIcon, permission: 'competitive.view' },
+  { to: '/ai-visibility', label: 'AI Visibility', Icon: ReputationIcon, permission: 'ai_visibility.view' },
   { to: '/automations', label: 'Автоматизации', Icon: AutomationIcon, permission: 'automations.view' },
   { to: '/integrations', label: 'Интеграции', Icon: IntegrationIcon, permission: 'integrations.view' },
   { to: '/subscriptions', label: 'Подписки', Icon: SubscriptionsIcon, permission: 'billing.view' },
