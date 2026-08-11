@@ -104,11 +104,24 @@ enum ReviewReplyStatus {
   DRAFT
   PENDING
   READY_TO_PUBLISH
+  PUBLISH_QUEUED
+  PUBLISHING
   PUBLISHED
+  PUBLISH_FAILED
+  PUBLISH_UNKNOWN
   FAILED
   REJECTED
 
   @@map("review_reply_status")
+}
+
+enum ReviewReplyOrigin {
+  HUMAN
+  AI
+  AI_EDITED
+  AUTOPILOT
+
+  @@map("review_reply_origin")
 }
 
 enum ReviewAssignmentStatus {
@@ -322,6 +335,8 @@ model Organization {
   reviewAssignments      ReviewAssignment[]
   reviewInsights         ReviewInsight[]
   aiOperations           AiOperation[]
+  brandVoiceProfile      BrandVoiceProfile?
+  replyAutopilotPolicy   ReplyAutopilotPolicy?
   tasks                  Task[]
   taskComments           TaskComment[]
   taskActivities         TaskActivity[]
@@ -669,6 +684,7 @@ model AiOperation {
   organizationId      String            @map("organization_id") @db.Uuid
   reviewId            String?           @map("review_id") @db.Uuid
   insightId           String?           @map("insight_id") @db.Uuid
+  replyId             String?           @map("reply_id") @db.Uuid
   operationType       String            @map("operation_type") @db.VarChar(80)
   provider            String            @db.VarChar(80)
   model               String            @db.VarChar(120)
@@ -693,11 +709,51 @@ model AiOperation {
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   review       Review?        @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   insight      ReviewInsight? @relation(fields: [insightId], references: [id], onDelete: SetNull)
+  reply        ReviewReply?   @relation(fields: [replyId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status, createdAt], map: "ai_operations_org_status_created_idx")
+  @@index([replyId, createdAt], map: "ai_operations_reply_created_idx")
   @@index([reviewId, createdAt], map: "ai_operations_review_created_idx")
   @@index([reviewId, inputHash, promptVersion, model], map: "ai_operations_input_idx")
   @@map("ai_operations")
+}
+
+model BrandVoiceProfile {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @unique @map("organization_id") @db.Uuid
+  tone               String   @default("PROFESSIONAL") @db.VarChar(32)
+  formality          String   @default("BALANCED") @db.VarChar(32)
+  primaryLanguage    String   @default("ru") @map("primary_language") @db.VarChar(16)
+  responseLength     String   @default("MEDIUM") @map("response_length") @db.VarChar(32)
+  greetingStyle      String   @default("") @map("greeting_style") @db.VarChar(240)
+  signature          String   @default("") @db.VarChar(240)
+  preferredPhrases   Json     @default("[]") @map("preferred_phrases")
+  prohibitedPhrases  Json     @default("[]") @map("prohibited_phrases")
+  legalDisclaimer    String   @default("") @map("legal_disclaimer") @db.Text
+  compensationPolicy String   @default("REQUIRE_APPROVAL") @map("compensation_policy") @db.VarChar(32)
+  escalationTriggers Json     @default("[]") @map("escalation_triggers")
+  customInstructions String   @default("") @map("custom_instructions") @db.Text
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("brand_voice_profiles")
+}
+
+model ReplyAutopilotPolicy {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationId        String   @unique @map("organization_id") @db.Uuid
+  enabled               Boolean  @default(false)
+  minimumRating         Int      @default(4) @map("minimum_rating")
+  maximumReputationRisk Int      @default(20) @map("maximum_reputation_risk")
+  minimumAiConfidence   Float    @default(0.95) @map("minimum_ai_confidence")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("reply_autopilot_policies")
 }
 
 model ReviewTag {
@@ -742,13 +798,22 @@ model ReviewReply {
   failedReason       String?           @map("failed_reason") @db.Text
   publishRequestedAt DateTime?         @map("publish_requested_at")
   publishedAt        DateTime?         @map("published_at")
-  retryCount         Int               @default(0) @map("retry_count")
-  createdAt          DateTime          @default(now()) @map("created_at")
+  retryCount              Int               @default(0) @map("retry_count")
+  origin                  ReviewReplyOrigin @default(HUMAN)
+  generationMode          String?           @map("generation_mode") @db.VarChar(32)
+  policyDecision          String?           @map("policy_decision") @db.VarChar(32)
+  policyVersion           String?           @map("policy_version") @db.VarChar(80)
+  policyMetadata          Json?             @map("policy_metadata")
+  providerState           String?           @map("provider_state") @db.VarChar(80)
+  providerPolicyViolation Json?             @map("provider_policy_violation")
+  lastReconciledAt        DateTime?          @map("last_reconciled_at")
+  createdAt               DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   review       Review       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   authorUser   User?        @relation("ReviewReplyAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  aiOperations AiOperation[]
 
   @@unique([reviewId, version], map: "review_replies_review_version_key")
   @@index([reviewId, createdAt], map: "review_replies_review_created_idx")

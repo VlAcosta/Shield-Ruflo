@@ -3,6 +3,9 @@ import { ProviderAdapterError } from '../provider.errors.js';
 import type {
   ProviderAdapter,
   ProviderConnectionContext,
+  ProviderReplyInput,
+  ProviderReplyReconciliationResult,
+  ProviderReplyResult,
   ProviderReviewRecord,
   ProviderReviewSyncResult,
 } from '../provider.types.js';
@@ -172,7 +175,7 @@ async function accessToken(context: ProviderConnectionContext): Promise<string> 
 export class GoogleBusinessProfileAdapter implements ProviderAdapter {
   readonly id = GOOGLE_BUSINESS_PROVIDER_ID;
   readonly displayName = 'Google Business Profile';
-  readonly capabilities = ['oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read'] as const;
+  readonly capabilities = ['oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read', 'reviews.reply'] as const;
 
   availability() {
     if (!env.GOOGLE_BUSINESS_ENABLED) {
@@ -301,6 +304,33 @@ export class GoogleBusinessProfileAdapter implements ProviderAdapter {
       };
     }
     return { reviews: records, hasMore: false };
+  }
+
+  async publishReply(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyResult> {
+    const result = await googleBusinessReviewsClient().updateReply(
+      await accessToken(context),
+      input.reviewReference,
+      input.text,
+    );
+    if (result.status === 'UNKNOWN') return { status: 'UNKNOWN' };
+    const reply = result.reply;
+    return {
+      status: 'CONFIRMED',
+      externalReplyId: `${input.reviewReference}/reply`,
+      ...(reply.reviewReplyState ? { providerState: reply.reviewReplyState } : {}),
+      ...(reply.policyViolation !== undefined ? { policyViolation: reply.policyViolation } : {}),
+    };
+  }
+
+  async reconcileReply(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyReconciliationResult> {
+    const review = await googleBusinessReviewsClient().getReview(await accessToken(context), input.reviewReference);
+    if (review.reviewReply?.comment !== input.text) return { status: 'ABSENT' };
+    return {
+      status: 'CONFIRMED',
+      externalReplyId: `${input.reviewReference}/reply`,
+      ...(review.reviewReply.reviewReplyState ? { providerState: review.reviewReply.reviewReplyState } : {}),
+      ...(review.reviewReply.policyViolation !== undefined ? { policyViolation: review.reviewReply.policyViolation } : {}),
+    };
   }
 
   async disconnect(context: ProviderConnectionContext) {

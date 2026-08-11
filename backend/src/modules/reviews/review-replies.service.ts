@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
 import { presentReview, reviewInclude } from './reviews.service.js';
+import { evaluateReplyPolicy } from '../ai/reply-policy.service.js';
+import { enqueueReplyPublication } from './review-publishing.service.js';
 
 function auditContext(request: FastifyRequest) {
   return {
@@ -62,12 +64,14 @@ export async function createVersionedDraft(
   }
 
   const createdReply = await app.prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ acquired: number }>>`SELECT 1::int AS acquired FROM (SELECT pg_advisory_xact_lock(hashtext(${reviewId}), 19)) AS advisory_lock`;
     const latest = await tx.reviewReply.findFirst({
       where: { organizationId, reviewId },
       orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-      select: { version: true },
+      select: { version: true, origin: true },
     });
     const version = (latest?.version ?? 0) + 1;
+    const origin = latest && ['AI', 'AI_EDITED', 'AUTOPILOT'].includes(latest.origin) ? 'AI_EDITED' : 'HUMAN';
 
     const reply = await tx.reviewReply.create({
       data: {
@@ -77,6 +81,7 @@ export async function createVersionedDraft(
         text: body.text,
         status: 'DRAFT',
         version,
+        origin,
       },
     });
     await tx.review.update({
@@ -120,10 +125,14 @@ export async function submitReplyForApproval(
     });
   }
 
+  const policy = await evaluateReplyPolicy(app.prisma, { organizationId, reviewId, text: reply.text });
+  if (policy.decision === 'BLOCK') {
+    throw new AppError({ code: 'REVIEW_REPLY_POLICY_BLOCKED', message: 'Ответ не прошёл политику безопасной публикации', statusCode: 422, details: policy });
+  }
   const result = await app.prisma.$transaction(async (tx) => {
     const changed = await tx.reviewReply.updateMany({
       where: { id: reply.id, organizationId, reviewId, status: 'DRAFT' },
-      data: { status: 'PENDING' },
+      data: { status: 'PENDING', policyDecision: policy.decision, policyVersion: policy.policyVersion, policyMetadata: { violations: policy.violations, warnings: policy.warnings, reasons: policy.reasons } },
     });
     if (changed.count !== 1) {
       throw new AppError({ code: 'REVIEW_REPLY_INVALID_TRANSITION', message: 'Статус ответа уже изменился', statusCode: 409 });
@@ -247,13 +256,16 @@ export async function requestPublishReply(
     });
   }
 
-  // This endpoint is intentionally truthful until a provider-specific publisher
-  // confirms the external write. It performs no state mutation and never marks
-  // a reply PUBLISHED locally.
-  throw new AppError({
-    code: 'REVIEW_PUBLISH_NOT_AVAILABLE',
-    message: 'Публикация во внешнем источнике недоступна без production provider adapter',
-    statusCode: 422,
+  const policy = await evaluateReplyPolicy(app.prisma, { organizationId, reviewId, text: reply.text });
+  if (policy.decision === 'BLOCK') {
+    throw new AppError({ code: 'REVIEW_REPLY_POLICY_BLOCKED', message: 'Ответ не прошёл политику безопасной публикации', statusCode: 422, details: policy });
+  }
+  return enqueueReplyPublication(app.prisma, {
+    organizationId,
+    reviewId,
+    replyId,
+    actorUserId: request.auth!.userId,
+    trigger: 'manual',
   });
 }
 
@@ -271,6 +283,14 @@ export async function listReplyHistory(app: FastifyInstance, organizationId: str
       publishedAt: true,
       retryCount: true,
       failedReason: true,
+      origin: true,
+      generationMode: true,
+      policyDecision: true,
+      policyVersion: true,
+      policyMetadata: true,
+      providerState: true,
+      providerPolicyViolation: true,
+      lastReconciledAt: true,
       createdAt: true,
       updatedAt: true,
       authorUser: { select: { id: true, firstName: true, lastName: true, email: true } },

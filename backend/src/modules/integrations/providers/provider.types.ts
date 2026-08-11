@@ -56,6 +56,25 @@ export type ProviderReviewSyncResult = {
   hasMore: boolean;
 };
 
+export type ProviderReplyInput = {
+  reviewReference: string;
+  text: string;
+};
+
+export type ProviderReplyResult = {
+  status: 'CONFIRMED' | 'UNKNOWN';
+  externalReplyId?: string | undefined;
+  providerState?: string | undefined;
+  policyViolation?: unknown;
+};
+
+export type ProviderReplyReconciliationResult = {
+  status: 'CONFIRMED' | 'ABSENT' | 'UNKNOWN';
+  externalReplyId?: string | undefined;
+  providerState?: string | undefined;
+  policyViolation?: unknown;
+};
+
 export interface ProviderAdapter {
   readonly id: string;
   readonly displayName: string;
@@ -64,6 +83,8 @@ export interface ProviderAdapter {
   connect(context: ProviderConnectionContext): Promise<ProviderConnectResult>;
   disconnect?(context: ProviderConnectionContext): Promise<ProviderDisconnectResult>;
   syncReviews?(context: ProviderConnectionContext, cursor?: string): Promise<ProviderReviewSyncResult>;
+  publishReply?(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyResult>;
+  reconcileReply?(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyReconciliationResult>;
 }
 
 export type ProviderCatalogItem = {

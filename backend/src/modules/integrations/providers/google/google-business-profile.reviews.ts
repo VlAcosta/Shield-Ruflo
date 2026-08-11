@@ -13,7 +13,7 @@ export type GoogleReviewReply = {
   comment?: string | undefined;
   updateTime?: string | undefined;
   reviewReplyState?: string | undefined;
-  policyViolation?: string | undefined;
+  policyViolation?: unknown;
 };
 
 export type GoogleReview = {
@@ -36,6 +36,10 @@ export type GoogleReviewPage = {
   averageRating?: number | undefined;
 };
 
+export type GoogleReplyUpdateResult =
+  | { status: 'CONFIRMED'; reply: GoogleReviewReply }
+  | { status: 'UNKNOWN' };
+
 type ClientOptions = {
   timeoutMs: number;
   fetcher?: typeof fetch | undefined;
@@ -53,7 +57,7 @@ function providerError(status: number): ProviderAdapterError {
   if (status === 403) {
     return new ProviderAdapterError({
       code: 'GOOGLE_REVIEWS_ACCESS_DENIED',
-      message: 'Google не разрешил чтение отзывов для выбранной локации. Проверьте доступ, верификацию профиля и API quota.',
+      message: 'Google не разрешил работу с отзывами для выбранной локации. Проверьте доступ, верификацию профиля и API quota.',
       statusCode: 403,
       retryable: false,
     });
@@ -61,7 +65,7 @@ function providerError(status: number): ProviderAdapterError {
   if (status === 404) {
     return new ProviderAdapterError({
       code: 'GOOGLE_REVIEWS_LOCATION_NOT_FOUND',
-      message: 'Выбранная Google Business Profile локация недоступна или больше не существует.',
+      message: 'Выбранный Google Business Profile review/location недоступен или больше не существует.',
       statusCode: 404,
       retryable: false,
     });
@@ -69,7 +73,7 @@ function providerError(status: number): ProviderAdapterError {
   if (status === 429) {
     return new ProviderAdapterError({
       code: 'GOOGLE_REVIEWS_RATE_LIMITED',
-      message: 'Google временно ограничил частоту чтения отзывов.',
+      message: 'Google временно ограничил частоту запросов к отзывам.',
       statusCode: 429,
       retryable: true,
     });
@@ -84,7 +88,7 @@ function providerError(status: number): ProviderAdapterError {
   }
   return new ProviderAdapterError({
     code: 'GOOGLE_REVIEWS_REQUEST_FAILED',
-    message: 'Не удалось получить отзывы Google Business Profile.',
+    message: 'Не удалось выполнить запрос Google Reviews API.',
     statusCode: 502,
     retryable: false,
   });
@@ -92,6 +96,10 @@ function providerError(status: number): ProviderAdapterError {
 
 function validParent(value: string): boolean {
   return /^accounts\/[A-Za-z0-9_-]+\/locations\/[A-Za-z0-9_-]+$/.test(value);
+}
+
+function validReviewName(value: string): boolean {
+  return /^accounts\/[A-Za-z0-9_-]+\/locations\/[A-Za-z0-9_-]+\/reviews\/[A-Za-z0-9_-]+$/.test(value);
 }
 
 export class GoogleBusinessReviewsClient {
@@ -120,10 +128,7 @@ export class GoogleBusinessReviewsClient {
     try {
       response = await this.fetcher(url, {
         method: 'GET',
-        headers: {
-          authorization: `Bearer ${accessToken}`,
-          accept: 'application/json',
-        },
+        headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (error) {
@@ -157,6 +162,60 @@ export class GoogleBusinessReviewsClient {
       totalReviewCount: typeof payload.totalReviewCount === 'number' ? payload.totalReviewCount : undefined,
       averageRating: typeof payload.averageRating === 'number' ? payload.averageRating : undefined,
     };
+  }
+
+  async getReview(accessToken: string, name: string): Promise<GoogleReview> {
+    if (!validReviewName(name)) {
+      throw new ProviderAdapterError({ code: 'GOOGLE_REVIEW_NAME_INVALID', message: 'Некорректный Google review resource name.', statusCode: 400 });
+    }
+    let response: Response;
+    try {
+      response = await this.fetcher(`${GOOGLE_MY_BUSINESS_V4}/${name}`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (error) {
+      throw new ProviderAdapterError({ code: 'GOOGLE_REVIEWS_UPSTREAM_UNAVAILABLE', message: 'Не удалось проверить состояние ответа Google.', statusCode: 503, retryable: true, cause: error });
+    }
+    if (!response.ok) throw providerError(response.status);
+    try {
+      return await response.json() as GoogleReview;
+    } catch (error) {
+      throw new ProviderAdapterError({ code: 'GOOGLE_REVIEWS_RESPONSE_INVALID', message: 'Google Reviews API вернул некорректный review.', statusCode: 502, retryable: true, cause: error });
+    }
+  }
+
+  async updateReply(accessToken: string, name: string, comment: string): Promise<GoogleReplyUpdateResult> {
+    if (!validReviewName(name)) {
+      throw new ProviderAdapterError({ code: 'GOOGLE_REVIEW_NAME_INVALID', message: 'Некорректный Google review resource name.', statusCode: 400 });
+    }
+    let response: Response;
+    try {
+      response = await this.fetcher(`${GOOGLE_MY_BUSINESS_V4}/${name}/reply`, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ comment }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      // A network/timeout failure after sending a mutation does not prove whether
+      // Google applied the reply. The caller must reconcile before claiming failure.
+      return { status: 'UNKNOWN' };
+    }
+
+    if (response.status >= 500 || response.status === 408) return { status: 'UNKNOWN' };
+    if (!response.ok) throw providerError(response.status);
+    try {
+      return { status: 'CONFIRMED', reply: await response.json() as GoogleReviewReply };
+    } catch {
+      // 2xx with an unreadable body still means the external write may have happened.
+      return { status: 'UNKNOWN' };
+    }
   }
 }
 

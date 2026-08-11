@@ -126,7 +126,7 @@ describeWithPostgres('Reviews P5 reply approval workflow', () => {
       headers: { cookie },
     });
     expect(publish.statusCode).toBe(422);
-    expect(publish.json()).toMatchObject({ error: { code: 'REVIEW_PUBLISH_NOT_AVAILABLE' } });
+    expect(publish.json()).toMatchObject({ error: { code: 'REVIEW_PROVIDER_ACCOUNT_MISSING' } });
 
     await expect(app.prisma.reviewReply.findUniqueOrThrow({ where: { id: secondReplyId } }))
       .resolves.toMatchObject({ status: 'READY_TO_PUBLISH', publishedAt: null, providerReplyId: null });
