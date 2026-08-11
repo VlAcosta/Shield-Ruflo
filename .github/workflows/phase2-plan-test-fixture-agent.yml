@@ -1,0 +1,43 @@
+name: Phase 2 Plan Test Fixture Agent
+
+on:
+  push:
+    branches:
+      - feat/production-ux-phase2-simplification
+    paths:
+      - scripts/ruflo/patch-phase2-plan-test-fixtures.mjs
+      - .github/workflows/phase2-plan-test-fixture-agent.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/production-ux-phase2-simplification
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+
+      - name: Patch plan-aware test fixtures
+        run: node scripts/ruflo/patch-phase2-plan-test-fixtures.mjs
+
+      - name: Commit fixture updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No fixture updates required.'
+            exit 0
+          fi
+          git config user.name 'Business Shield Ruflo Agent'
+          git config user.email '65966048+VlAcosta@users.noreply.github.com'
+          git add backend/test
+          git commit -m 'test: make premium integration suites explicit PRO fixtures'
+          git push origin HEAD:feat/production-ux-phase2-simplification
