@@ -1,0 +1,30 @@
+name: Business Shield Production SSH Host Scan
+
+on:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - .github/workflows/scan-production-host.yml
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Scan production SSH host key
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST='bis-shield.ru'
+          PORT='22'
+          mkdir -p /tmp/sshscan
+          ssh-keyscan -T 10 -p "$PORT" "$HOST" 2>/dev/null | sort -u > /tmp/sshscan/known_hosts
+          test -s /tmp/sshscan/known_hosts
+          echo '--- BEGIN PINNED KNOWN_HOSTS ---'
+          cat /tmp/sshscan/known_hosts
+          echo '--- END PINNED KNOWN_HOSTS ---'
+          echo '--- FINGERPRINTS ---'
+          ssh-keygen -lf /tmp/sshscan/known_hosts
