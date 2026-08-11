@@ -44,7 +44,7 @@ export function validateCompanyIdentifiers(input: {
   legalType?: string | null;
 }): void {
   const inn = String(input.inn ?? '').replace(/\D/g, '');
-  const legalType = input.legalType === 'ip' || input.legalType === 'ul'
+  const legalType = ['ip', 'ul', 'smz'].includes(String(input.legalType || ''))
     ? input.legalType
     : inferLegalType(inn);
 
@@ -57,13 +57,16 @@ export function validateCompanyIdentifiers(input: {
   if (legalType === 'ip' && inn && inn.length !== 12) {
     throw new AppError({ code: 'INVALID_INN', message: 'Для ИП ИНН должен содержать 12 цифр', statusCode: 400 });
   }
+  if (legalType === 'smz' && inn && inn.length !== 12) {
+    throw new AppError({ code: 'INVALID_INN', message: 'Для самозанятого ИНН должен содержать 12 цифр', statusCode: 400 });
+  }
 
   const kpp = String(input.kpp ?? '').replace(/\D/g, '');
   if (kpp && kpp.length !== 9) {
     throw new AppError({ code: 'INVALID_KPP', message: 'КПП должен содержать 9 цифр', statusCode: 400 });
   }
-  if (legalType === 'ip' && kpp) {
-    throw new AppError({ code: 'INVALID_KPP', message: 'Для ИП КПП не используется', statusCode: 400 });
+  if ((legalType === 'ip' || legalType === 'smz') && kpp) {
+    throw new AppError({ code: 'INVALID_KPP', message: legalType === 'smz' ? 'Для самозанятого КПП не используется' : 'Для ИП КПП не используется', statusCode: 400 });
   }
 
   const ogrn = String(input.ogrn ?? '').replace(/\D/g, '');

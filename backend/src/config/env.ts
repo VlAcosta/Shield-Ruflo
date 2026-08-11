@@ -90,10 +90,13 @@ const envSchema = z
     EXOLVE_TTS_VOICE: z.coerce.number().int().min(1).max(15).default(2),
     EXOLVE_TTS_SPEED: z.coerce.number().min(0.1).max(3).default(0.85),
 
-    COMPANY_LOOKUP_PROVIDER: z.enum(['disabled', 'mock', 'webhook']).default('disabled'),
+    COMPANY_LOOKUP_PROVIDER: z.enum(['disabled', 'mock', 'webhook', 'dadata']).default('disabled'),
     COMPANY_LOOKUP_WEBHOOK_URL: optionalUrl,
     COMPANY_LOOKUP_WEBHOOK_TOKEN: z.string().default(''),
     COMPANY_LOOKUP_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+    DADATA_API_KEY: z.string().trim().default(''),
+    DADATA_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(6_500),
+    FNS_NPD_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(120_000).default(65_000),
 
     INTEGRATION_CREDENTIALS_KEY: z.string().min(32).default('development-integration-credential-key-change-me'),
 
@@ -122,6 +125,9 @@ const envSchema = z
         path: ['COMPANY_LOOKUP_WEBHOOK_URL'],
         message: 'COMPANY_LOOKUP_WEBHOOK_URL is required when COMPANY_LOOKUP_PROVIDER=webhook',
       });
+    }
+    if (value.COMPANY_LOOKUP_PROVIDER === 'dadata' && !value.DADATA_API_KEY) {
+      ctx.addIssue({ code: 'custom', path: ['DADATA_API_KEY'], message: 'DaData company lookup requires an API key' });
     }
 
     if (value.AUTH_OTP_PROVIDER === 'webhook' && !value.AUTH_OTP_WEBHOOK_URL) {

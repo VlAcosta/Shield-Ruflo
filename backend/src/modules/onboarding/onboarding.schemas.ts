@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const legalType = z.enum(['ul', 'ip']);
+const legalType = z.enum(['ul', 'ip', 'smz']);
 const integrationDraftItem = z.object({
   enabled: z.boolean().default(false),
   link: z.string().trim().max(2048).default(''),

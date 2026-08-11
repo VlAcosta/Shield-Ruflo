@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
-import { getBillingSnapshot } from './billing.service.js';
+import { getBillingSnapshot, startProTrial } from './billing.service.js';
 
 function orgId(request: FastifyRequest): string {
   if (!request.auth?.organizationId) {
@@ -35,6 +35,10 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
       data: { autoRenew: enabled },
     });
     return { plan: { ...snapshot.plan, autoRenew: subscription.autoRenew }, subscription };
+  });
+
+  app.post('/billing/subscription/trial', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async (request) => {
+    return startProTrial(app, orgId(request));
   });
 
   app.post('/billing/subscription/promo/validate', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async (request) => {
