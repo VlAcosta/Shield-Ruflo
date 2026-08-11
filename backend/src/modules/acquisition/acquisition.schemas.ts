@@ -12,28 +12,67 @@ export const targetClickParamsSchema = publicCampaignParamsSchema.extend({ targe
 export const campaignStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']);
 export const acquisitionChannelSchema = z.enum(['QR', 'LINK', 'EMAIL', 'SMS', 'WHATSAPP', 'OTHER']);
 
-export const reviewTargetSchema = z.object({
+const reviewTargetFields = {
   provider: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1).max(120),
   url: httpUrlSchema,
-  priority: z.number().int().min(0).max(10_000).default(100),
-  enabled: z.boolean().default(true),
+  priority: z.number().int().min(0).max(10_000),
+  enabled: z.boolean(),
+};
+
+export const reviewTargetSchema = z.object({
+  provider: reviewTargetFields.provider,
+  label: reviewTargetFields.label,
+  url: reviewTargetFields.url,
+  priority: reviewTargetFields.priority.default(100),
+  enabled: reviewTargetFields.enabled.default(true),
 }).strict();
 
-export const createCampaignSchema = z.object({
+const campaignFields = {
   name: z.string().trim().min(1).max(180),
-  businessId: z.string().uuid().nullable().optional(),
-  locationId: z.string().uuid().nullable().optional(),
-  channel: acquisitionChannelSchema.default('QR'),
-  headline: z.string().trim().min(1).max(240).default('Расскажите о вашем опыте'),
-  description: z.string().trim().max(4000).default(''),
-  thankYouMessage: z.string().trim().min(1).max(500).default('Спасибо за обратную связь!'),
-  collectContact: z.boolean().default(false),
-  caseBelowRating: z.number().int().min(1).max(5).nullable().default(2),
+  businessId: z.string().uuid().nullable(),
+  locationId: z.string().uuid().nullable(),
+  channel: acquisitionChannelSchema,
+  headline: z.string().trim().min(1).max(240),
+  description: z.string().trim().max(4000),
+  thankYouMessage: z.string().trim().min(1).max(500),
+  collectContact: z.boolean(),
+  caseBelowRating: z.number().int().min(1).max(5).nullable(),
+};
+
+export const createCampaignSchema = z.object({
+  name: campaignFields.name,
+  businessId: campaignFields.businessId.optional(),
+  locationId: campaignFields.locationId.optional(),
+  channel: campaignFields.channel.default('QR'),
+  headline: campaignFields.headline.default('Расскажите о вашем опыте'),
+  description: campaignFields.description.default(''),
+  thankYouMessage: campaignFields.thankYouMessage.default('Спасибо за обратную связь!'),
+  collectContact: campaignFields.collectContact.default(false),
+  caseBelowRating: campaignFields.caseBelowRating.default(2),
   targets: z.array(reviewTargetSchema).max(20).default([]),
 }).strict();
 
-export const updateCampaignSchema = createCampaignSchema.partial().extend({
+// PATCH fields deliberately have no defaults. An omitted field must stay omitted;
+// otherwise a status-only patch could accidentally materialize `targets: []` and
+// erase the campaign's public destinations.
+export const updateCampaignSchema = z.object({
+  name: campaignFields.name.optional(),
+  businessId: campaignFields.businessId.optional(),
+  locationId: campaignFields.locationId.optional(),
+  channel: campaignFields.channel.optional(),
+  headline: campaignFields.headline.optional(),
+  description: campaignFields.description.optional(),
+  thankYouMessage: campaignFields.thankYouMessage.optional(),
+  collectContact: campaignFields.collectContact.optional(),
+  caseBelowRating: campaignFields.caseBelowRating.optional(),
+  targets: z.array(z.object({
+    provider: reviewTargetFields.provider,
+    label: reviewTargetFields.label,
+    url: reviewTargetFields.url,
+    priority: reviewTargetFields.priority.default(100),
+    enabled: reviewTargetFields.enabled.default(true),
+  }).strict()).max(20).optional(),
   status: campaignStatusSchema.optional(),
 }).strict();
 
