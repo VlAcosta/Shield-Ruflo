@@ -58,6 +58,7 @@ function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
   };
 
   const switchOrganization = async (organizationId) => {
+    if (organizationId === organizations.activeOrganizationId || organizations.switchingId) return;
     try {
       const user = await organizations.select(organizationId);
       if (!user) return;
@@ -83,22 +84,35 @@ function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
         </div>
       </div>
 
+      {organizations.error ? <div className="portal-profile-menu__notice" role="alert">{organizations.error}</div> : null}
+
       {activeWorkspace ? (
         <div className="portal-profile-menu__workspaceSummary">
           <span>{String(activeWorkspace.organization.name || 'О').trim().slice(0, 1).toUpperCase()}</span>
           <div><small>Рабочее пространство</small><strong>{activeWorkspace.organization.name}</strong></div>
           {organizations.items.length > 1 ? <em>{organizations.items.length}</em> : <i>✓</i>}
         </div>
+      ) : organizations.items.length === 0 ? (
+        <div className="portal-profile-menu__workspaceRecovery">
+          <div><strong>Нет активных организаций</strong><small>Обновите список или завершите настройку рабочего пространства.</small></div>
+          <button type="button" onClick={() => organizations.load?.()}>Обновить</button>
+        </div>
       ) : null}
 
       {organizations.items.length > 1 ? (
-        <details className="portal-profile-menu__workspacePicker">
+        <details className="portal-profile-menu__workspacePicker" open>
           <summary>Сменить пространство</summary>
           <div>
             {organizations.items.map(({ organization, membership }) => {
               const active = organization.id === organizations.activeOrganizationId;
               return (
-                <button key={organization.id} type="button" disabled={active || Boolean(organizations.switchingId)} onClick={() => switchOrganization(organization.id)}>
+                <button
+                  key={organization.id}
+                  type="button"
+                  aria-disabled={active ? 'true' : undefined}
+                  disabled={!active && Boolean(organizations.switchingId)}
+                  onClick={() => switchOrganization(organization.id)}
+                >
                   <span>{organization.name}</span><small>{active ? 'Текущее' : getRoleLabel(membership?.role)}</small>
                 </button>
               );
