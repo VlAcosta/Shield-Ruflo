@@ -1,0 +1,307 @@
+name: Business Shield Production Deploy
+
+on:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - deploy/production-release.env
+      - .github/workflows/deploy-production.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: business-shield-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout deployment control branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate pinned production release
+        id: manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source deploy/production-release.env
+          set +a
+
+          [[ "$RELEASE_BRANCH" == release/* ]] || { echo "Release branch must be release/*" >&2; exit 10; }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid release SHA" >&2; exit 11; }
+          [[ "$PUBLIC_URL" == https://* ]] || { echo "PUBLIC_URL must use HTTPS" >&2; exit 12; }
+          [[ "$APP_DIR" == /* ]] || { echo "APP_DIR must be absolute" >&2; exit 13; }
+
+          git fetch origin "refs/heads/$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH"
+          ACTUAL_SHA="$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH")"
+
+          echo "Pinned SHA: $RELEASE_SHA"
+          echo "Remote SHA: $ACTUAL_SHA"
+          [[ "$ACTUAL_SHA" == "$RELEASE_SHA" ]] || { echo "Pinned production SHA does not match release branch" >&2; exit 14; }
+
+          echo "release_branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "public_url=$PUBLIC_URL" >> "$GITHUB_OUTPUT"
+          echo "app_dir=$APP_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Configure production SSH
+        id: ssh
+        shell: bash
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for name in PROD_SSH_HOST PROD_SSH_USER PROD_SSH_PRIVATE_KEY PROD_SSH_KNOWN_HOSTS; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub Actions secret: $name" >&2
+              missing=1
+            fi
+          done
+          [[ "$missing" -eq 0 ]] || exit 20
+
+          port="${PROD_SSH_PORT:-22}"
+          [[ "$port" =~ ^[0-9]+$ ]] || { echo "PROD_SSH_PORT must be numeric" >&2; exit 21; }
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+          chmod 600 "$HOME/.ssh/business-shield-production"
+          printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production SSH access
+        shell: bash
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_SSH_PORT: ${{ steps.ssh.outputs.port }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/business-shield-production" \
+            -p "$PROD_SSH_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=10 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            'printf "Production SSH connected\n"; test -d /var/www/bis-shield; command -v node >/dev/null; command -v git >/dev/null; command -v pg_dump >/dev/null; sudo -n true'
+
+      - name: Deploy pinned release to VPS
+        shell: bash
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_SSH_PORT: ${{ steps.ssh.outputs.port }}
+          RELEASE_BRANCH: ${{ steps.manifest.outputs.release_branch }}
+          RELEASE_SHA: ${{ steps.manifest.outputs.release_sha }}
+          APP_DIR: ${{ steps.manifest.outputs.app_dir }}
+          PUBLIC_URL: ${{ steps.manifest.outputs.public_url }}
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i "$HOME/.ssh/business-shield-production" \
+            -p "$PROD_SSH_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "bash -s -- '$RELEASE_BRANCH' '$RELEASE_SHA' '$APP_DIR' '$PUBLIC_URL'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          RELEASE_BRANCH="$1"
+          RELEASE_SHA="$2"
+          APP_DIR="$3"
+          PUBLIC_URL="$4"
+          API_URL="http://127.0.0.1:8081"
+
+          cd "$APP_DIR"
+
+          echo "========================================="
+          echo "1. VERIFY CURRENT PRODUCTION STATE"
+          echo "========================================="
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "STOP: production repository contains local tracked/untracked changes" >&2
+            git status --short >&2
+            exit 30
+          fi
+
+          PREVIOUS_SHA="$(git rev-parse HEAD)"
+          echo "Previous SHA: $PREVIOUS_SHA"
+
+          STAMP="$(date +%Y%m%d-%H%M%S)"
+          BACKUP_ROOT="/var/backups/bis-shield/deploy-$STAMP"
+
+          echo
+          echo "========================================="
+          echo "2. BACKUP ENVIRONMENT AND DATABASE"
+          echo "========================================="
+
+          sudo mkdir -p "$BACKUP_ROOT"
+          sudo chmod 700 "$BACKUP_ROOT"
+          sudo cp -a backend/.env "$BACKUP_ROOT/backend.env"
+          printf '%s\n' "$PREVIOUS_SHA" | sudo tee "$BACKUP_ROOT/previous-sha.txt" >/dev/null
+
+          DB_URL="$(node --env-file=backend/.env -p 'process.env.DATABASE_URL || ""')"
+          [[ -n "$DB_URL" ]] || { echo "DATABASE_URL is missing" >&2; exit 31; }
+
+          TMP_DB="/tmp/business-shield-$STAMP.sql.gz"
+          pg_dump "$DB_URL" | gzip > "$TMP_DB"
+          test -s "$TMP_DB"
+          sudo mv "$TMP_DB" "$BACKUP_ROOT/database.sql.gz"
+          sudo chmod 600 "$BACKUP_ROOT/database.sql.gz" "$BACKUP_ROOT/backend.env"
+          echo "Backup created: $BACKUP_ROOT"
+
+          echo
+          echo "========================================="
+          echo "3. FETCH AND VERIFY PINNED RELEASE"
+          echo "========================================="
+
+          git fetch --prune origin "refs/heads/$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH"
+          REMOTE_SHA="$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH")"
+          echo "Expected: $RELEASE_SHA"
+          echo "Remote:   $REMOTE_SHA"
+          [[ "$REMOTE_SHA" == "$RELEASE_SHA" ]] || { echo "Release SHA mismatch on VPS" >&2; exit 32; }
+
+          ROLLBACK_ENABLED=0
+          rollback() {
+            code=$?
+            trap - ERR
+            if [[ "$ROLLBACK_ENABLED" -eq 1 ]]; then
+              echo
+              echo "Deployment failed. Attempting application rollback to $PREVIOUS_SHA" >&2
+              cd "$APP_DIR"
+              git checkout --detach "$PREVIOUS_SHA" || true
+              npm ci || true
+              CI=true npm run build || true
+              (
+                cd backend
+                npm ci || exit 0
+                npm run prisma:generate || true
+                npm run build || true
+              ) || true
+              sudo systemctl restart bis-shield-api || true
+              sudo systemctl restart bis-shield-worker || true
+              sleep 3
+              curl -fsS "$API_URL/health" >/dev/null || true
+              echo "Rollback attempt finished. Database backup: $BACKUP_ROOT" >&2
+            fi
+            exit "$code"
+          }
+          trap rollback ERR
+
+          git checkout --detach "$RELEASE_SHA"
+          ROLLBACK_ENABLED=1
+
+          echo
+          echo "========================================="
+          echo "4. FRONTEND BUILD"
+          echo "========================================="
+
+          npm ci
+          npm run typecheck
+          npm run lint
+          CI=true npm run build
+          test -f build/index.html
+
+          echo
+          echo "========================================="
+          echo "5. BACKEND BUILD + ENV VALIDATION"
+          echo "========================================="
+
+          cd backend
+          npm ci
+          npm run prisma:generate
+          npm run typecheck
+          npm run build
+          test -f dist/server.js
+          test -f dist/worker.js
+
+          node --env-file=.env --input-type=module <<'NODE'
+          await import('./dist/config/env.js');
+          console.log('Production backend environment is valid');
+          NODE
+
+          echo
+          echo "========================================="
+          echo "6. DATABASE MIGRATIONS"
+          echo "========================================="
+
+          npm run db:deploy
+          npm run db:status
+
+          cd "$APP_DIR"
+
+          echo
+          echo "========================================="
+          echo "7. RESTART API + WORKER"
+          echo "========================================="
+
+          sudo systemctl restart bis-shield-api
+          sudo systemctl restart bis-shield-worker
+          sleep 5
+          sudo systemctl is-active --quiet bis-shield-api
+          sudo systemctl is-active --quiet bis-shield-worker
+
+          echo
+          echo "========================================="
+          echo "8. NGINX + INTERNAL PREFLIGHT"
+          echo "========================================="
+
+          sudo nginx -t
+          sudo systemctl reload nginx
+          APP_DIR="$APP_DIR" API_URL="$API_URL" bash scripts/production-preflight.sh
+
+          echo
+          echo "========================================="
+          echo "9. PUBLIC HTTPS SMOKE"
+          echo "========================================="
+
+          curl -fsSI --max-time 15 "$PUBLIC_URL/" >/dev/null
+          curl -fsS --max-time 15 "$PUBLIC_URL/api/v1/meta"
+          echo
+
+          FINAL_SHA="$(git rev-parse HEAD)"
+          [[ "$FINAL_SHA" == "$RELEASE_SHA" ]] || { echo "Final production SHA mismatch" >&2; exit 33; }
+
+          ROLLBACK_ENABLED=0
+          trap - ERR
+
+          echo
+          echo "========================================="
+          echo "PRODUCTION DEPLOYMENT COMPLETE"
+          echo "========================================="
+          echo "SHA: $FINAL_SHA"
+          echo "URL: $PUBLIC_URL"
+          echo "Backup: $BACKUP_ROOT"
+          REMOTE
+
+      - name: Deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Business Shield production deployment'
+            echo
+            echo '- Release branch: `${{ steps.manifest.outputs.release_branch }}`'
+            echo '- Release SHA: `${{ steps.manifest.outputs.release_sha }}`'
+            echo '- Public URL: ${{ steps.manifest.outputs.public_url }}'
+            echo '- Result: **success**'
+          } >> "$GITHUB_STEP_SUMMARY"
