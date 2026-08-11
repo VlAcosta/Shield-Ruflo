@@ -7,6 +7,7 @@ on:
     paths:
       - 'backend/**'
       - 'scripts/production-ux-backend-apply.py'
+      - 'scripts/production-ux-backend-fix.py'
       - '.github/workflows/production-ux-backend-agent.yml'
 
 permissions:
@@ -59,7 +60,9 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Apply backend recovery patch
-        run: python3 scripts/production-ux-backend-apply.py
+        run: |
+          python3 scripts/production-ux-backend-apply.py
+          python3 scripts/production-ux-backend-fix.py
 
       - name: Install backend dependencies
         working-directory: backend
