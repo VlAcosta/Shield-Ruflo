@@ -1,0 +1,265 @@
+name: Business Shield Production Registry Enablement
+
+on:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - .github/workflows/enable-production-registry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: business-shield-production-registry
+  cancel-in-progress: false
+
+env:
+  PROD_SSH_HOST: bis-shield.ru
+  PROD_SSH_PORT: "22"
+  PROD_SSH_USER: acosta
+  APP_DIR: /var/www/bis-shield
+  EXPECTED_RELEASE_SHA: e0b7416dfa208fa982b921fdce9361a237102faf
+  PUBLIC_URL: https://bis-shield.ru
+
+jobs:
+  enable-registry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout deployment control branch
+        uses: actions/checkout@v4
+
+      - name: Validate DaData production secret
+        shell: bash
+        env:
+          PROD_DADATA_API_KEY: ${{ secrets.PROD_DADATA_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PROD_DADATA_API_KEY" ]]; then
+            echo 'Missing GitHub Actions secret: PROD_DADATA_API_KEY' >&2
+            exit 20
+          fi
+          echo "::add-mask::$PROD_DADATA_API_KEY"
+          printf '%s' "$PROD_DADATA_API_KEY" > /tmp/business-shield-dadata-key
+          chmod 600 /tmp/business-shield-dadata-key
+          echo 'DaData secret is present and masked.'
+
+      - name: Configure production SSH authentication
+        id: ssh
+        shell: bash
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          cp deploy/production-known-hosts "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          if [[ -n "$PROD_SSH_PRIVATE_KEY" ]]; then
+            printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+            chmod 600 "$HOME/.ssh/business-shield-production"
+            echo 'auth_mode=key' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PROD_SSH_PASSWORD" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass >/dev/null
+            echo 'auth_mode=password' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Missing production SSH credential.' >&2
+            exit 21
+          fi
+
+      - name: Stage DaData key on VPS
+        id: stage
+        shell: bash
+        env:
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          REMOTE_SECRET="/tmp/business-shield-dadata-${GITHUB_RUN_ID}"
+
+          if [[ "$AUTH_MODE" == 'key' ]]; then
+            scp \
+              -i "$HOME/.ssh/business-shield-production" \
+              -P "$PROD_SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              /tmp/business-shield-dadata-key \
+              "$PROD_SSH_USER@$PROD_SSH_HOST:$REMOTE_SECRET"
+          else
+            SSHPASS="$PROD_SSH_PASSWORD" sshpass -e scp \
+              -P "$PROD_SSH_PORT" \
+              -o PreferredAuthentications=password,keyboard-interactive \
+              -o PubkeyAuthentication=no \
+              -o StrictHostKeyChecking=yes \
+              /tmp/business-shield-dadata-key \
+              "$PROD_SSH_USER@$PROD_SSH_HOST:$REMOTE_SECRET"
+          fi
+
+          rm -f /tmp/business-shield-dadata-key
+          echo "remote_secret=$REMOTE_SECRET" >> "$GITHUB_OUTPUT"
+
+      - name: Enable and verify production registry
+        shell: bash
+        env:
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+          REMOTE_SECRET: ${{ steps.stage.outputs.remote_secret }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/enable-business-shield-registry.sh <<'REMOTE'
+          set -Eeuo pipefail
+
+          APP_DIR="$1"
+          EXPECTED_RELEASE_SHA="$2"
+          PUBLIC_URL="$3"
+          SECRET_PATH="$4"
+          API_URL="http://127.0.0.1:8081"
+
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+            . "$NVM_DIR/nvm.sh"
+            nvm use 22 >/dev/null
+          fi
+          hash -r
+
+          cd "$APP_DIR"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          echo "Expected production SHA: $EXPECTED_RELEASE_SHA"
+          echo "Current production SHA:  $CURRENT_SHA"
+          [[ "$CURRENT_SHA" == "$EXPECTED_RELEASE_SHA" ]] || { echo 'Production SHA mismatch; registry activation aborted.' >&2; exit 30; }
+          [[ -f backend/.env ]] || { echo 'backend/.env is missing' >&2; exit 31; }
+          [[ -s "$SECRET_PATH" ]] || { echo 'Staged DaData secret is missing' >&2; exit 32; }
+          chmod 600 "$SECRET_PATH"
+
+          STAMP="$(date +%Y%m%d-%H%M%S)"
+          BACKUP_ROOT="/var/backups/bis-shield/registry-$STAMP"
+          sudo mkdir -p "$BACKUP_ROOT"
+          sudo chmod 700 "$BACKUP_ROOT"
+          sudo cp -a backend/.env "$BACKUP_ROOT/backend.env"
+          sudo chmod 600 "$BACKUP_ROOT/backend.env"
+
+          rollback() {
+            code=$?
+            trap - ERR
+            rm -f "$SECRET_PATH" || true
+            echo "Registry activation failed; restoring backend environment from $BACKUP_ROOT" >&2
+            sudo cp -a "$BACKUP_ROOT/backend.env" "$APP_DIR/backend/.env" || true
+            sudo systemctl restart bis-shield-api || true
+            sudo systemctl restart bis-shield-worker || true
+            exit "$code"
+          }
+          trap rollback ERR
+
+          DADATA_API_KEY="$(cat "$SECRET_PATH")"
+          rm -f "$SECRET_PATH"
+          [[ -n "$DADATA_API_KEY" ]] || { echo 'DaData key is empty' >&2; exit 33; }
+          export DADATA_API_KEY
+
+          cd backend
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path = '.env';
+          let text = fs.readFileSync(path, 'utf8');
+          const setEnv = (key, value) => {
+            const line = `${key}=${value}`;
+            const pattern = new RegExp(`^${key}=.*$`, 'm');
+            text = pattern.test(text) ? text.replace(pattern, line) : `${text.trimEnd()}\n${line}\n`;
+          };
+          setEnv('COMPANY_LOOKUP_PROVIDER', 'dadata');
+          setEnv('DADATA_API_KEY', process.env.DADATA_API_KEY);
+          setEnv('DADATA_TIMEOUT_MS', '6500');
+          setEnv('FNS_NPD_TIMEOUT_MS', '65000');
+          fs.writeFileSync(path, text, { mode: 0o600 });
+          NODE
+          unset DADATA_API_KEY
+          chmod 600 .env
+
+          echo 'Safe registry config:'
+          node --env-file=.env -e "console.log('COMPANY_LOOKUP_PROVIDER=' + process.env.COMPANY_LOOKUP_PROVIDER); console.log('DADATA_API_KEY=' + (process.env.DADATA_API_KEY ? '<REDACTED>' : '<MISSING>')); console.log('DADATA_TIMEOUT_MS=' + process.env.DADATA_TIMEOUT_MS); console.log('FNS_NPD_TIMEOUT_MS=' + process.env.FNS_NPD_TIMEOUT_MS)"
+
+          node --env-file=.env --input-type=module <<'NODE'
+          await import('./dist/config/env.js');
+          console.log('Production environment validation passed with DaData enabled.');
+          NODE
+
+          echo 'Running DaData server-side smoke test...'
+          DADATA_TOKEN="$(node --env-file=.env -p 'process.env.DADATA_API_KEY || ""')"
+          [[ -n "$DADATA_TOKEN" ]] || { echo 'DaData token did not persist' >&2; exit 34; }
+          TMP_RESPONSE="$(mktemp)"
+          HTTP_CODE="$(curl -sS -o "$TMP_RESPONSE" -w '%{http_code}' \
+            -X POST 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party' \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            -H "Authorization: Token $DADATA_TOKEN" \
+            --data '{"query":"7707083893","count":1,"type":"LEGAL"}')"
+          unset DADATA_TOKEN
+          [[ "$HTTP_CODE" == '200' ]] || { echo "DaData smoke HTTP $HTTP_CODE" >&2; rm -f "$TMP_RESPONSE"; exit 35; }
+          node - "$TMP_RESPONSE" <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const item = payload?.suggestions?.[0]?.data;
+          if (!item || item.inn !== '7707083893' || item.type !== 'LEGAL') {
+            console.error('DaData smoke returned an unexpected registry payload');
+            process.exit(1);
+          }
+          console.log('DaData ЕГРЮЛ/ЕГРИП smoke passed.');
+          NODE
+          rm -f "$TMP_RESPONSE"
+
+          cd "$APP_DIR"
+          sudo systemctl restart bis-shield-api
+          sudo systemctl restart bis-shield-worker
+          sleep 5
+          sudo systemctl is-active --quiet bis-shield-api
+          sudo systemctl is-active --quiet bis-shield-worker
+
+          APP_DIR="$APP_DIR" API_URL="$API_URL" bash scripts/production-preflight.sh
+          curl -fsSI --max-time 15 "$PUBLIC_URL/" >/dev/null
+          curl -fsS --max-time 15 "$PUBLIC_URL/api/v1/meta"
+          echo
+
+          trap - ERR
+          echo "Registry production activation complete. Backup: $BACKUP_ROOT"
+          REMOTE
+
+          chmod 700 /tmp/enable-business-shield-registry.sh
+          remote_command="bash -s -- '$APP_DIR' '$EXPECTED_RELEASE_SHA' '$PUBLIC_URL' '$REMOTE_SECRET'"
+
+          if [[ "$AUTH_MODE" == 'key' ]]; then
+            ssh \
+              -i "$HOME/.ssh/business-shield-production" \
+              -p "$PROD_SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "$remote_command" < /tmp/enable-business-shield-registry.sh
+          else
+            SSHPASS="$PROD_SSH_PASSWORD" sshpass -e ssh \
+              -p "$PROD_SSH_PORT" \
+              -o PreferredAuthentications=password,keyboard-interactive \
+              -o PubkeyAuthentication=no \
+              -o StrictHostKeyChecking=yes \
+              "$PROD_SSH_USER@$PROD_SSH_HOST" \
+              "$remote_command" < /tmp/enable-business-shield-registry.sh
+          fi
+
+      - name: Registry activation summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## Business Shield production registry'
+            echo
+            echo '- ЕГРЮЛ/ЕГРИП provider: **DaData enabled**'
+            echo '- СМЗ provider: **ФНС НПД public API**'
+            echo '- DaData server-side smoke: **passed**'
+            echo '- Production preflight: **passed**'
+          } >> "$GITHUB_STEP_SUMMARY"
