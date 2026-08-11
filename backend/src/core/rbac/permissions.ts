@@ -13,6 +13,8 @@ export const permissions = [
   'reviews.settings',
   'reviews.intelligence.read',
   'reviews.intelligence.reanalyze',
+  'ai.brand_voice.manage',
+  'ai.autopilot.manage',
   'tasks.view',
   'tasks.manage',
   'tasks.create',
