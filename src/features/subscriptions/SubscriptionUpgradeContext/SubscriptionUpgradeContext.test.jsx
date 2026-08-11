@@ -17,7 +17,7 @@ describe('SubscriptionUpgradeContext', () => {
     renderContext('/subscriptions?upgrade=automations.view&from=%2Fprofile%3Ftab%3Dsystem');
 
     expect(screen.getByText('Для раздела «Автоматизации» нужен расширенный тариф')).toBeInTheDocument();
-    expect(screen.getByText(/«Автоматизации»/)).toBeInTheDocument();
+    expect(screen.getByText('«Автоматизации»')).toBeInTheDocument();
   });
 
   test('renders nothing when the page was opened normally', () => {
