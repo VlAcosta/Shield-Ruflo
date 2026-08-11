@@ -122,7 +122,7 @@ describeWithPostgres('P17 canonical review ingestion', () => {
       data: { organizationId, name: 'P17 Business', isPrimary: true, status: 'ACTIVE' },
     });
     await app.prisma.location.create({
-      data: { organizationId, businessId: business.id, name: 'Тула', isPrimary: true, status: 'ACTIVE' },
+      data: { businessId: business.id, name: 'Тула', isPrimary: true, status: 'ACTIVE' },
     });
 
     const otherBusiness = await app.prisma.business.create({

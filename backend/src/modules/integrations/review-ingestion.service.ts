@@ -4,6 +4,7 @@ import { providerRegistry } from './providers/provider.registry.js';
 import { ProviderAdapterError } from './providers/provider.errors.js';
 import { loadIntegrationCredentialsFromPrisma } from './providers/credential-vault.js';
 import type { ProviderConnectionContext, ProviderReviewRecord } from './providers/provider.types.js';
+import { enqueueReviewAnalysis } from '../ai/review-intelligence.service.js';
 
 const MAX_SYNC_PAGES = 10_000;
 const MAX_EXTERNAL_ID_LENGTH = 240;
@@ -230,7 +231,7 @@ async function ingestReviewRecord(
   businessId: string,
   selectedProviderLocationCount: number,
   record: ProviderReviewRecord,
-): Promise<{ disposition: IngestionDisposition; sourceId: string }> {
+): Promise<{ disposition: IngestionDisposition; sourceId: string; reviewId: string }> {
   const source = await ensureSource(prisma, account, businessId, selectedProviderLocationCount, record);
   const existing = await prisma.review.findUnique({
     where: { sourceId_externalId: { sourceId: source.id, externalId: record.externalId } },
@@ -247,8 +248,8 @@ async function ingestReviewRecord(
   });
 
   const previousMarker = metadataSyncMarker(existing?.metadata);
-  if (previousMarker.runId === syncRunId && previousMarker.disposition) {
-    return { disposition: previousMarker.disposition, sourceId: source.id };
+  if (existing && previousMarker.runId === syncRunId && previousMarker.disposition) {
+    return { disposition: previousMarker.disposition, sourceId: source.id, reviewId: existing.id };
   }
 
   const authorExternalId = (record.authorExternalId || `provider-review:${record.externalId}:author`).slice(0, MAX_EXTERNAL_ID_LENGTH);
@@ -267,6 +268,7 @@ async function ingestReviewRecord(
     disposition = changed ? 'updated' : 'skipped';
   }
 
+  let persistedReviewId = existing?.id ?? '';
   await prisma.$transaction(async (tx) => {
     const author = await tx.reviewAuthor.upsert({
       where: { sourceId_externalId: { sourceId: source.id, externalId: authorExternalId } },
@@ -286,7 +288,7 @@ async function ingestReviewRecord(
     });
 
     if (!existing) {
-      await tx.review.create({
+      const createdReview = await tx.review.create({
         data: {
           organizationId: account.organizationId,
           businessId,
@@ -303,6 +305,7 @@ async function ingestReviewRecord(
           metadata: providerMetadata(null, account, syncRunId, disposition, record),
         },
       });
+      persistedReviewId = createdReview.id;
       return;
     }
 
@@ -322,7 +325,7 @@ async function ingestReviewRecord(
     });
   });
 
-  return { disposition, sourceId: source.id };
+  return { disposition, sourceId: source.id, reviewId: persistedReviewId };
 }
 
 function selectedProviderLocationCount(configuration: unknown): number {
@@ -481,6 +484,13 @@ export async function processIntegrationReviewSync(
         if (result.disposition === 'imported') counters.imported += 1;
         else if (result.disposition === 'updated') counters.updated += 1;
         else counters.skipped += 1;
+
+        if (result.disposition === 'imported' || result.disposition === 'updated') {
+          await enqueueReviewAnalysis(prisma, {
+            organizationId: account.organizationId,
+            reviewId: result.reviewId,
+          }).catch(() => ({ queued: false as const, reason: 'AI_ENQUEUE_FAILED' }));
+        }
       }
 
       const nextCursor = page.nextCursor;

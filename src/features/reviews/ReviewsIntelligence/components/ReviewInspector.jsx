@@ -31,6 +31,8 @@ function ReviewInspector({
   onApprove,
   onRequestChanges,
   onPublishApproved,
+  canReanalyze = false,
+  onReanalyze,
 }) {
   const [reply, setReply] = useState('');
   const [changesNote, setChangesNote] = useState('');
@@ -97,6 +99,30 @@ function ReviewInspector({
           </div>
         </section>
       ) : null}
+
+      <section className="reviews-inspector__aiIntel" aria-label="Shield AI Intelligence">
+        <div className="reviews-inspector__sectionTitle"><span>SHIELD AI</span><strong>Анализ отзыва</strong></div>
+        {!review.intelligence || review.intelligence.status === 'LOADING' ? <p>Загружаем AI-анализ…</p> : null}
+        {review.intelligence?.status === 'QUEUED' || review.intelligence?.status === 'ANALYZING' ? <p>AI-анализ выполняется в фоне. Отзыв уже доступен для работы.</p> : null}
+        {review.intelligence?.status === 'UNAVAILABLE' ? <div className="reviews-ai-state is-muted"><strong>AI-анализ пока недоступен</strong><span>{review.intelligence.providerState?.reasonMessage || 'Провайдер не настроен.'}</span></div> : null}
+        {review.intelligence?.status === 'FAILED' ? <div className="reviews-ai-state is-danger"><strong>Не удалось выполнить AI-анализ</strong><span>{review.intelligence.error || review.intelligence.operation?.errorCode || 'Попробуйте повторить анализ.'}</span></div> : null}
+        {review.intelligence?.status === 'STALE' ? <div className="reviews-ai-state is-warning"><strong>Анализ устарел</strong><span>Текст отзыва изменился после последнего анализа.</span></div> : null}
+        {review.intelligence?.insight ? (
+          <div className="reviews-ai-grid">
+            <div><span>Тональность</span><strong>{review.intelligence.insight.sentiment}</strong></div>
+            <div><span>Срочность</span><strong>{review.intelligence.insight.operationalUrgency}/100</strong></div>
+            <div><span>Репутационный риск</span><strong>{review.intelligence.insight.reputationRisk}/100</strong></div>
+            <div><span>Уверенность</span><strong>{review.intelligence.insight.confidence >= 0.8 ? 'Высокая' : review.intelligence.insight.confidence >= 0.55 ? 'Средняя' : 'Низкая'}</strong></div>
+            {review.intelligence.insight.aspects?.length ? <div className="reviews-ai-grid__wide"><span>Аспекты</span><div className="reviews-inspector__chips">{review.intelligence.insight.aspects.map((item) => <span key={`${item.aspect}-${item.sentiment}`}>{item.aspect}</span>)}</div></div> : null}
+            {review.intelligence.insight.legalPrRisk ? <div className="reviews-ai-grid__wide is-risk"><strong>Потенциальный юридический / PR-риск</strong><span>{review.intelligence.insight.legalPrRiskReason || 'Требуется проверка человеком.'}</span></div> : null}
+            {review.intelligence.insight.safetyRisk ? <div className="reviews-ai-grid__wide is-risk"><strong>Safety-сигнал</strong><span>{review.intelligence.insight.safetyRiskReason || 'Требуется приоритетная проверка.'}</span></div> : null}
+            {review.intelligence.insight.observedFacts?.length ? <div className="reviews-ai-grid__wide"><span>Что сообщил клиент</span><ul>{review.intelligence.insight.observedFacts.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+            {review.intelligence.insight.inferences?.length ? <div className="reviews-ai-grid__wide"><span>Возможные причины</span><ul>{review.intelligence.insight.inferences.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+            {review.intelligence.insight.recommendations?.length ? <div className="reviews-ai-grid__wide"><span>Что проверить</span><ul>{review.intelligence.insight.recommendations.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          </div>
+        ) : null}
+        {canReanalyze && onReanalyze && !['QUEUED', 'ANALYZING'].includes(review.intelligence?.status) ? <button type="button" className="reviews-copilot__generate" onClick={onReanalyze} disabled={working.startsWith('intelligence:')}>{working.startsWith('intelligence:') ? 'Ставим в очередь…' : 'Повторить AI-анализ'}</button> : null}
+      </section>
 
       <section className="reviews-copilot">
         <div className="reviews-copilot__head">

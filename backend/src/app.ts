@@ -26,9 +26,12 @@ import { registerGoogleBusinessProfileProvider } from './modules/integrations/pr
 import { operationsRoutes } from './modules/operations/operations.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
+import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
+import { registerAiProviders } from './modules/ai/providers/index.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   registerGoogleBusinessProfileProvider();
+  registerAiProviders();
 
   const app = Fastify({
     logger: {
@@ -48,6 +51,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.COMPANY_LOOKUP_WEBHOOK_TOKEN',
           '*.INTEGRATION_CREDENTIALS_KEY',
           '*.GOOGLE_BUSINESS_CLIENT_SECRET',
+          '*.AI_OPENAI_API_KEY',
           '*.refreshToken',
           '*.accessToken',
         ],
@@ -77,6 +81,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(profileRoutes, { prefix: '/api/v1' });
   await app.register(teamRoutes, { prefix: '/api/v1' });
   await app.register(reviewsRoutes, { prefix: '/api/v1' });
+  await app.register(reviewIntelligenceRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/v1' });
   await app.register(tasksRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });

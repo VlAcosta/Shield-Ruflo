@@ -4,8 +4,11 @@ import { PrismaClient } from './generated/prisma/client.js';
 import { env } from './config/env.js';
 import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
 import { registerGoogleBusinessProfileProvider } from './modules/integrations/providers/google/index.js';
+import { processReviewAnalysisJob } from './modules/ai/review-intelligence.service.js';
+import { registerAiProviders } from './modules/ai/providers/index.js';
 
 registerGoogleBusinessProfileProvider();
+registerAiProviders();
 
 const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -63,6 +66,13 @@ async function processReport(payload: any) {
 
 async function processJob(job: any) {
   if (job.type === 'integration.sync.reviews') return processIntegrationSync(job.payload);
+  if (job.type === 'ai.analyzeReview') {
+    const organizationId = String(job.payload?.organizationId || '');
+    const reviewId = String(job.payload?.reviewId || '');
+    const aiOperationId = String(job.payload?.aiOperationId || '');
+    if (!organizationId || !reviewId || !aiOperationId) throw new Error('INVALID_AI_REVIEW_JOB');
+    return processReviewAnalysisJob(prisma, { organizationId, reviewId, aiOperationId });
+  }
   if (job.type === 'report.generate') return processReport(job.payload);
   throw new Error(`UNSUPPORTED_JOB_TYPE:${job.type}`);
 }
@@ -133,7 +143,8 @@ async function finishSuccess(id: string) {
 
 async function finishFailure(job: any, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  const exhausted = job.attempts >= job.maxAttempts;
+  const explicitlyNonRetryable = Boolean(error && typeof error === 'object' && 'retryable' in error && (error as { retryable?: boolean }).retryable === false);
+  const exhausted = explicitlyNonRetryable || job.attempts >= job.maxAttempts;
   const delaySeconds = Math.min(3600, 5 * 2 ** Math.max(0, job.attempts - 1));
   await prisma.job.update({
     where: { id: job.id },

@@ -98,6 +98,13 @@ const envSchema = z
     GOOGLE_BUSINESS_REDIRECT_URI: optionalUrl,
     GOOGLE_BUSINESS_RETURN_URL: optionalUrl,
     GOOGLE_BUSINESS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+
+    AI_REVIEW_INTELLIGENCE_ENABLED: booleanFromString.default(false),
+    AI_OPENAI_API_KEY: z.string().default(''),
+    AI_OPENAI_MODEL: z.string().default(''),
+    AI_OPENAI_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
+    AI_OPENAI_INPUT_COST_MICROS_PER_MILLION_TOKENS: z.coerce.number().int().min(0).default(0),
+    AI_OPENAI_OUTPUT_COST_MICROS_PER_MILLION_TOKENS: z.coerce.number().int().min(0).default(0),
   })
   .superRefine((value, ctx) => {
     if (value.COMPANY_LOOKUP_PROVIDER === 'webhook' && !value.COMPANY_LOOKUP_WEBHOOK_URL) {
@@ -114,6 +121,15 @@ const envSchema = z
         path: ['AUTH_OTP_WEBHOOK_URL'],
         message: 'AUTH_OTP_WEBHOOK_URL is required when AUTH_OTP_PROVIDER=webhook',
       });
+    }
+
+    if (value.AI_REVIEW_INTELLIGENCE_ENABLED) {
+      if (!value.AI_OPENAI_API_KEY) {
+        ctx.addIssue({ code: 'custom', path: ['AI_OPENAI_API_KEY'], message: 'AI Review Intelligence requires an AI provider API key' });
+      }
+      if (!value.AI_OPENAI_MODEL) {
+        ctx.addIssue({ code: 'custom', path: ['AI_OPENAI_MODEL'], message: 'AI Review Intelligence requires an explicit model' });
+      }
     }
 
     if (value.GOOGLE_BUSINESS_ENABLED) {

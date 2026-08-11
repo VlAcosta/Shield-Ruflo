@@ -299,6 +299,10 @@ export async function getReviewIntelligenceState(prisma: PrismaClient, organizat
   if (!review) return null;
   const provider = aiProviderRegistry.active();
   const availability = provider?.availability() ?? { configured: false, available: false, reasonCode: 'AI_PROVIDER_UNAVAILABLE' };
+  const entitlementEnabled = await hasEntitlement(prisma, organizationId);
+  const providerState = entitlementEnabled
+    ? availability
+    : { ...availability, available: false, reasonCode: 'AI_ENTITLEMENT_DISABLED', reasonMessage: 'AI Review Intelligence недоступен на текущем тарифе.' };
   const [insight, operation] = await Promise.all([
     prisma.reviewInsight.findFirst({
       where: { organizationId, reviewId },
@@ -316,12 +320,12 @@ export async function getReviewIntelligenceState(prisma: PrismaClient, organizat
   else if (operation?.status === 'RUNNING') status = 'ANALYZING';
   else if (insight && insight.inputHash !== inputHash) status = 'STALE';
   else if (insight) status = 'AVAILABLE';
-  else if (operation?.status === 'FAILED') status = availability.available ? 'FAILED' : 'UNAVAILABLE';
-  else if (!availability.available) status = 'UNAVAILABLE';
+  else if (operation?.status === 'FAILED') status = providerState.available ? 'FAILED' : 'UNAVAILABLE';
+  else if (!providerState.available) status = 'UNAVAILABLE';
 
   return {
     status,
-    providerState: availability,
+    providerState,
     freshness: insight ? { stale: insight.inputHash !== inputHash, analyzedAt: insight.createdAt } : null,
     insight,
     operation: operation ? {

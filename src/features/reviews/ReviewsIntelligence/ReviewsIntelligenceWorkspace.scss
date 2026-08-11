@@ -320,3 +320,15 @@
 }
 .reviews-settings__automationLink{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px;border:1px solid rgba(113,98,245,.14);border-radius:16px;background:linear-gradient(135deg,#f7f6ff,#fbf8ff)}.reviews-settings__automationLink strong{display:block;font-size:13px}.reviews-settings__automationLink span{display:block;margin-top:4px;color:#9098b1;font-size:11px;line-height:1.45}.reviews-settings__automationLink a{white-space:nowrap;color:#6554eb;font-size:11px;font-weight:900;text-decoration:none}
 .reviews-intel-hero__links{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.reviews-intel-hero__links button{border:1px solid rgba(111,94,238,.13);border-radius:11px;background:#fff;color:#6455e7;padding:8px 11px;font:inherit;font-size:10px;font-weight:900;cursor:pointer;box-shadow:0 6px 16px rgba(54,58,109,.045)}.reviews-intel-hero__links button span{display:inline-block;margin-left:4px;transition:transform .2s}.reviews-intel-hero__links button:hover span{transform:translateX(3px)}
+
+
+/* P18 Shield AI Review Intelligence */
+.reviews-inspector__aiIntel { margin: 18px 0; padding: 18px; border: 1px solid var(--border-color, rgba(127,127,127,.2)); border-radius: 16px; }
+.reviews-ai-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 12px; }
+.reviews-ai-grid > div { padding: 12px; border-radius: 12px; background: rgba(127,127,127,.07); display: flex; flex-direction: column; gap: 5px; }
+.reviews-ai-grid__wide { grid-column: 1 / -1; }
+.reviews-ai-grid .is-risk { border: 1px solid rgba(220,70,70,.28); }
+.reviews-ai-grid ul { margin: 4px 0 0 18px; padding: 0; }
+.reviews-ai-state { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 12px; border-radius: 12px; background: rgba(127,127,127,.07); }
+.reviews-ai-state.is-danger, .reviews-ai-state.is-warning { border: 1px solid rgba(220,110,70,.3); }
+@media (max-width: 680px) { .reviews-ai-grid { grid-template-columns: 1fr; } .reviews-ai-grid__wide { grid-column: auto; } }
