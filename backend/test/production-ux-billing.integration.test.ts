@@ -57,7 +57,7 @@ describeWithPostgres('Production UX billing recovery', () => {
   });
 
   it('creates a truthful FREE baseline and exposes the one-time PRO trial without fake checkout', async () => {
-    const response = await app.inject({ method: 'GET', url: '/api/v1/billing', headers: { cookie } });
+    const response = await app.inject({ method: 'GET', url: '/api/v1/billing/subscription', headers: { cookie } });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       plan: { code: 'FREE' },
