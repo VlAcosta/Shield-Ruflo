@@ -104,4 +104,6 @@ jobs:
           git config user.email 'business-shield-ruflo-agent@users.noreply.github.com'
           git add backend
           git commit -m 'feat: recover production onboarding and billing backend'
+          git fetch origin feat/production-ux-onboarding-billing-recovery
+          git rebase origin/feat/production-ux-onboarding-billing-recovery
           git push origin HEAD:feat/production-ux-onboarding-billing-recovery
