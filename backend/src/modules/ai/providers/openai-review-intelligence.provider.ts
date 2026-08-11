@@ -5,6 +5,7 @@ import {
 } from '../review-intelligence.schemas.js';
 import { AI_REPLY_PROMPT_VERSION, aiReplyOutputSchema } from '../reply-copilot.schemas.js';
 import { redactPii } from '../privacy/pii-redaction.js';
+import { runOpenAiVisibilityProbe } from './openai-visibility.js';
 import type {
   AiProviderAvailability,
   AiReviewIntelligenceProvider,
@@ -12,6 +13,8 @@ import type {
   AnalyzeReviewResult,
   GenerateReplyInput,
   GenerateReplyResult,
+  VisibilityProbeInput,
+  VisibilityProbeResult,
 } from '../ai-provider.types.js';
 import { AiProviderError } from '../ai-provider.types.js';
 
@@ -271,4 +274,12 @@ export class OpenAiReviewIntelligenceProvider implements AiReviewIntelligencePro
       estimatedCostMicros: costMicros(response.inputTokens, response.outputTokens),
     };
   }
+  async runVisibilityProbe(input: VisibilityProbeInput): Promise<VisibilityProbeResult> {
+    const availability = this.availability();
+    if (!availability.available) {
+      throw new AiProviderError({ code: availability.reasonCode ?? 'AI_PROVIDER_UNAVAILABLE', message: availability.reasonMessage ?? 'AI provider недоступен', retryable: false });
+    }
+    return runOpenAiVisibilityProbe(input, { id: this.id, model: this.model });
+  }
+
 }

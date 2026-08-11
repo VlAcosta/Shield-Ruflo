@@ -27,6 +27,7 @@ import { operationsRoutes } from './modules/operations/operations.routes.js';
 import { casesRoutes } from './modules/cases/cases.routes.js';
 import { acquisitionRoutes } from './modules/acquisition/acquisition.routes.js';
 import { competitiveRoutes } from './modules/competitive/competitive.routes.js';
+import { aiVisibilityRoutes } from './modules/ai-visibility/ai-visibility.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
@@ -92,6 +93,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(casesRoutes, { prefix: '/api/v1' });
   await app.register(acquisitionRoutes, { prefix: '/api/v1' });
   await app.register(competitiveRoutes, { prefix: '/api/v1' });
+  await app.register(aiVisibilityRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(googleBusinessProfileRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });

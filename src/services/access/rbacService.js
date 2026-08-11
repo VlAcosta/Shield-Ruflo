@@ -46,6 +46,9 @@ export const PERMISSION_GROUPS = Object.freeze([
       { id: 'acquisition.manage', label: 'Управлять сбором отзывов', description: 'Создавать кампании и ссылки, запускать сбор и работать с first-party feedback' },
       { id: 'competitive.view', label: 'Просматривать конкурентов', description: 'Benchmark, coverage и метрики конкурентов' },
       { id: 'competitive.manage', label: 'Управлять конкурентами', description: 'Добавлять конкурентов, источники и persistable snapshots' },
+      { id: 'ai_visibility.view', label: 'Просматривать AI Visibility', description: 'Probe library, evidence и агрегированные GEO-метрики' },
+      { id: 'ai_visibility.manage', label: 'Управлять AI Visibility', description: 'Создавать и изменять discovery probes' },
+      { id: 'ai_visibility.run', label: 'Запускать AI Visibility', description: 'Создавать внешние web-grounded измерения' },
     ],
   },
   {
@@ -142,6 +145,7 @@ const readOnlyPermissions = [
   'cases.view',
   'acquisition.view',
   'competitive.view',
+  'ai_visibility.view',
   'automations.view',
   'integrations.view',
   'analytics.view',
@@ -183,6 +187,7 @@ export const PRESET_ROLES = Object.freeze([
       'cases.view', 'cases.manage', 'cases.verify',
       'acquisition.view', 'acquisition.manage',
       'competitive.view', 'competitive.manage',
+      'ai_visibility.view', 'ai_visibility.manage', 'ai_visibility.run',
       'automations.view',
       'integrations.view',
       'analytics.view',
@@ -208,7 +213,7 @@ export const PRESET_ROLES = Object.freeze([
     description: 'Работает с отзывами и задачами без административного доступа.',
     tone: 'cyan',
     system: true,
-    permissions: ['dashboard.view', 'business.view', 'locations.view', 'reviews.view', 'reviews.reply', 'cases.view', 'acquisition.view', 'competitive.view', 'tasks.view', 'tasks.create', 'tasks.edit', 'integrations.view', 'automations.view', 'reports.view', 'company.view', 'team.view', 'support.view', 'support.write'],
+    permissions: ['dashboard.view', 'business.view', 'locations.view', 'reviews.view', 'reviews.reply', 'cases.view', 'acquisition.view', 'competitive.view', 'ai_visibility.view', 'tasks.view', 'tasks.create', 'tasks.edit', 'integrations.view', 'automations.view', 'reports.view', 'company.view', 'team.view', 'support.view', 'support.write'],
   },
 ]);
 
@@ -240,6 +245,7 @@ const ROUTE_PERMISSIONS = Object.freeze([
   { prefix: '/cases', permission: 'cases.view' },
   { prefix: '/acquisition', permission: 'acquisition.view' },
   { prefix: '/competitive', permission: 'competitive.view' },
+  { prefix: '/ai-visibility', permission: 'ai_visibility.view' },
   { prefix: '/automations', permission: 'automations.view' },
   { prefix: '/integrations', permission: 'integrations.view' },
   { prefix: '/subscriptions', permission: 'billing.view' },

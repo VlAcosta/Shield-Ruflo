@@ -414,6 +414,8 @@ model User {
   createdAcquisitionInvites   ReviewAcquisitionInvite[] @relation("AcquisitionInviteCreator")
   createdCompetitiveCompetitors CompetitiveCompetitor[] @relation("CompetitiveCompetitorCreator")
   createdCompetitiveSnapshots CompetitiveMetricSnapshot[] @relation("CompetitiveSnapshotCreator")
+  createdAiVisibilityProbes AiVisibilityProbe[] @relation("AiVisibilityProbeCreator")
+  createdAiVisibilityRuns AiVisibilityRun[] @relation("AiVisibilityRunCreator")
   notifications              Notification[]        @relation("NotificationUser")
 
   @@index([status], map: "users_status_idx")
@@ -485,6 +487,11 @@ model Organization {
   competitiveLocations    CompetitiveLocation[]
   competitiveSources      CompetitiveSource[]
   competitiveSnapshots    CompetitiveMetricSnapshot[]
+  aiVisibilityProbes       AiVisibilityProbe[]
+  aiVisibilityRuns         AiVisibilityRun[]
+  aiVisibilityResults      AiVisibilityResult[]
+  aiVisibilityCitations    AiVisibilityCitation[]
+  aiVisibilityCompetitors  AiVisibilityCompetitor[]
   subscriptions          Subscription[]
   usageRecords           Usage[]
 
@@ -601,6 +608,7 @@ model Location {
   reputationCases ReputationCaseLocation[]
   acquisitionCampaigns ReviewAcquisitionCampaign[]
   acquisitionFeedback ReviewAcquisitionFeedback[]
+  aiVisibilityProbes AiVisibilityProbe[]
 
   @@index([businessId, status], map: "locations_business_status_idx")
   @@index([businessId, isPrimary], map: "locations_business_primary_idx")
@@ -1241,6 +1249,7 @@ model CompetitiveCompetitor {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy    User?        @relation("CompetitiveCompetitorCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   locations    CompetitiveLocation[]
+  aiVisibilityMentions AiVisibilityCompetitor[]
 
   @@index([organizationId, status, createdAt], map: "competitive_competitors_org_status_idx")
   @@map("competitive_competitors")
@@ -1694,4 +1703,152 @@ model Usage {
   @@unique([organizationId, key, periodStart, periodEnd], map: "usage_org_key_period_key")
   @@index([organizationId, key, periodEnd], map: "usage_org_key_end_idx")
   @@map("usage")
+}
+
+
+enum AiVisibilityProbeStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+
+  @@map("ai_visibility_probe_status")
+}
+
+enum AiVisibilityRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@map("ai_visibility_run_status")
+}
+
+enum AiVisibilitySentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  MIXED
+  UNKNOWN
+
+  @@map("ai_visibility_sentiment")
+}
+
+enum AiVisibilityCitationMeasurement {
+  SUPPORTED
+  UNSUPPORTED
+
+  @@map("ai_visibility_citation_measurement")
+}
+
+model AiVisibilityProbe {
+  id              String                  @id @default(uuid()) @db.Uuid
+  organizationId  String                  @map("organization_id") @db.Uuid
+  locationId      String?                 @map("location_id") @db.Uuid
+  name            String                  @db.VarChar(180)
+  query           String                  @db.Text
+  languageCode    String                  @default("ru") @map("language_code") @db.VarChar(16)
+  countryCode     String?                 @map("country_code") @db.Char(2)
+  status          AiVisibilityProbeStatus @default(ACTIVE)
+  createdByUserId String?                 @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  archivedAt      DateTime?               @map("archived_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("AiVisibilityProbeCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  runs         AiVisibilityRun[]
+
+  @@index([organizationId, status, createdAt], map: "ai_visibility_probes_org_status_idx")
+  @@index([locationId, status], map: "ai_visibility_probes_location_idx")
+  @@map("ai_visibility_probes")
+}
+
+model AiVisibilityRun {
+  id                  String                @id @default(uuid()) @db.Uuid
+  organizationId      String                @map("organization_id") @db.Uuid
+  probeId             String                @map("probe_id") @db.Uuid
+  status              AiVisibilityRunStatus @default(QUEUED)
+  provider            String?               @db.VarChar(80)
+  model               String?               @db.VarChar(180)
+  modelVersion        String?               @map("model_version") @db.VarChar(180)
+  promptVersion       String?               @map("prompt_version") @db.VarChar(80)
+  inputHash           String?               @map("input_hash") @db.VarChar(128)
+  inputTokens         Int?                  @map("input_tokens")
+  outputTokens        Int?                  @map("output_tokens")
+  estimatedCostMicros BigInt?               @map("estimated_cost_micros")
+  errorCode           String?               @map("error_code") @db.VarChar(160)
+  errorMessage        String?               @map("error_message") @db.Text
+  queuedAt            DateTime              @default(now()) @map("queued_at")
+  startedAt           DateTime?             @map("started_at")
+  completedAt         DateTime?             @map("completed_at")
+  createdByUserId     String?               @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime              @default(now()) @map("created_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  probe        AiVisibilityProbe  @relation(fields: [probeId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("AiVisibilityRunCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  result       AiVisibilityResult?
+
+  @@index([organizationId, status, createdAt], map: "ai_visibility_runs_org_status_idx")
+  @@index([probeId, createdAt], map: "ai_visibility_runs_probe_created_idx")
+  @@map("ai_visibility_runs")
+}
+
+model AiVisibilityResult {
+  id                  String                          @id @default(uuid()) @db.Uuid
+  organizationId      String                          @map("organization_id") @db.Uuid
+  runId               String                          @unique @map("run_id") @db.Uuid
+  brandMentioned      Boolean                         @map("brand_mentioned")
+  brandPosition       Int?                            @map("brand_position")
+  sentiment           AiVisibilitySentiment           @default(UNKNOWN)
+  answerText          String                          @map("answer_text") @db.Text
+  recommendations     Json                            @default("[]")
+  citationMeasurement AiVisibilityCitationMeasurement @default(UNSUPPORTED) @map("citation_measurement")
+  createdAt           DateTime                        @default(now()) @map("created_at")
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  run          AiVisibilityRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  citations    AiVisibilityCitation[]
+  competitors  AiVisibilityCompetitor[]
+
+  @@index([organizationId, createdAt], map: "ai_visibility_results_org_created_idx")
+  @@map("ai_visibility_results")
+}
+
+model AiVisibilityCitation {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  resultId       String   @map("result_id") @db.Uuid
+  url            String   @db.Text
+  title          String?  @db.VarChar(500)
+  domain         String?  @db.VarChar(255)
+  position       Int?
+  qualityScore   Float?   @map("quality_score")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  result       AiVisibilityResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@index([resultId, position], map: "ai_visibility_citations_result_idx")
+  @@index([organizationId, createdAt], map: "ai_visibility_citations_org_created_idx")
+  @@map("ai_visibility_citations")
+}
+
+model AiVisibilityCompetitor {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  resultId            String   @map("result_id") @db.Uuid
+  name                String   @db.VarChar(240)
+  position            Int?
+  matchedCompetitorId String?  @map("matched_competitor_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  result            AiVisibilityResult    @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  matchedCompetitor CompetitiveCompetitor? @relation(fields: [matchedCompetitorId], references: [id], onDelete: SetNull)
+
+  @@index([resultId, position], map: "ai_visibility_competitors_result_idx")
+  @@index([organizationId, createdAt], map: "ai_visibility_competitors_org_created_idx")
+  @@map("ai_visibility_competitors")
 }
