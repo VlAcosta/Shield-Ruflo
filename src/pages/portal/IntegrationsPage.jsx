@@ -1,13 +1,6 @@
 import React from 'react';
-import PortalLayout from '../../layouts/PortalLayout';
-import IntegrationHubWorkspace from '../../features/integrations/IntegrationHub';
-import GoogleBusinessProfileSetup from '../../features/integrations/GoogleBusinessProfile/GoogleBusinessProfileSetup';
+import { Navigate } from 'react-router-dom';
 
 export default function IntegrationsPage() {
-  return (
-    <PortalLayout title="Интеграции" subtitle="Provider Hub">
-      <GoogleBusinessProfileSetup />
-      <IntegrationHubWorkspace />
-    </PortalLayout>
-  );
+  return <Navigate to="/profile?tab=system&section=integrations" replace />;
 }
