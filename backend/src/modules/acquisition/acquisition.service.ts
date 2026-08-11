@@ -288,6 +288,13 @@ export async function submitPublicFeedback(
 ) {
   const campaign = await activeCampaignBySlug(app, slug);
   const invite = await resolveInvite(app, campaign.id, input.invite);
+  if (invite?.status === 'CONVERTED') {
+    throw new AppError({
+      code: 'ACQUISITION_INVITE_ALREADY_CONVERTED',
+      message: 'Обратная связь по этому приглашению уже отправлена',
+      statusCode: 409,
+    });
+  }
   const allowContact = campaign.collectContact && input.consentToContact;
   const submittedAt = new Date();
 
@@ -317,7 +324,7 @@ export async function submitPublicFeedback(
         anonymousSessionHash: input.session ? hash(input.session) : null,
       },
     });
-    if (invite && invite.status !== 'CONVERTED') {
+    if (invite) {
       await tx.reviewAcquisitionInvite.update({ where: { id: invite.id }, data: { status: 'CONVERTED', convertedAt: submittedAt } });
     }
     return created;

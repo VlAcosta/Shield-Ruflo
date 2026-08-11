@@ -242,6 +242,15 @@ describeWithPostgres('P21 Review Acquisition', () => {
     expect(feedback.statusCode).toBe(201);
     await expect(app.prisma.reviewAcquisitionInvite.findUniqueOrThrow({ where: { id: storedInvite.id } })).resolves.toMatchObject({ status: 'CONVERTED' });
 
+    const duplicateFeedback = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/review-acquisition/${campaign.publicSlug}/feedback`,
+      payload: { rating: 1, text: 'Повторная отправка тем же invite', consentToContact: false, invite: inviteToken, session: 'session-metrics-duplicate' },
+    });
+    expect(duplicateFeedback.statusCode).toBe(409);
+    expect(duplicateFeedback.json()).toMatchObject({ error: { code: 'ACQUISITION_INVITE_ALREADY_CONVERTED' } });
+    expect(await app.prisma.reviewAcquisitionFeedback.count({ where: { inviteId: storedInvite.id } })).toBe(1);
+
     const metrics = await app.inject({
       method: 'GET',
       url: `/api/v1/acquisition/campaigns/${campaign.id}/metrics`,
