@@ -7,6 +7,7 @@ import {
   REVIEW_STATUS,
   REVIEW_WORKFLOW,
 } from '../../model/reviewData';
+import { getReviewIntelligence, reanalyzeReview } from '../../../../services/reviews/reviewInsightService';
 import {
   REVIEW_SETTINGS_CHANGED_EVENT,
   approveReviewDraft,
@@ -68,6 +69,7 @@ export default function useReviewsIntelligence() {
   const [selectedId, setSelectedId] = useState(() => searchParams.get('review') || '');
   const [working, setWorking] = useState('');
   const [notice, setNotice] = useState(null);
+  const [insightState, setInsightState] = useState(null);
 
   useEffect(() => {
     const handleSettings = (event) => setSettings(event.detail || readReviewSettings());
@@ -130,7 +132,26 @@ export default function useReviewsIntelligence() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const selectedReview = useMemo(() => enrichedReviews.find((review) => review.id === selectedId) || null, [enrichedReviews, selectedId]);
+  useEffect(() => {
+    if (!selectedId) {
+      setInsightState(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setInsightState({ status: 'LOADING', insight: null, reviewId: selectedId });
+    getReviewIntelligence(selectedId, { signal: controller.signal })
+      .then((state) => setInsightState({ ...state, reviewId: selectedId }))
+      .catch((error) => {
+        if (error?.name !== 'AbortError') setInsightState({ status: 'FAILED', insight: null, reviewId: selectedId, error: error?.message || 'AI-анализ недоступен' });
+      });
+    return () => controller.abort();
+  }, [selectedId]);
+
+  const selectedReview = useMemo(() => {
+    const review = enrichedReviews.find((item) => item.id === selectedId) || null;
+    if (!review) return null;
+    return { ...review, intelligence: insightState?.reviewId === review.id ? insightState : null };
+  }, [enrichedReviews, insightState, selectedId]);
 
   const metrics = useMemo(() => {
     const total = enrichedReviews.length;
@@ -211,6 +232,15 @@ export default function useReviewsIntelligence() {
     return taskId;
   }, 'Задача связана с отзывом'), [run, selectedReview]);
 
+  const reanalyzeIntelligence = useCallback(async () => {
+    if (!selectedReview) return null;
+    return run(`intelligence:${selectedReview.id}`, async () => {
+      const queued = await reanalyzeReview(selectedReview.id);
+      setInsightState((current) => ({ ...(current || {}), reviewId: selectedReview.id, status: 'QUEUED', operation: { id: queued?.operationId || null, status: 'QUEUED' } }));
+      return queued;
+    }, 'AI-анализ поставлен в очередь');
+  }, [run, selectedReview]);
+
   const updateSettings = useCallback(async (patch) => {
     const next = await saveReviewSettings(patch);
     setSettings(next);
@@ -248,6 +278,7 @@ export default function useReviewsIntelligence() {
     publishApproved,
     escalateLegal,
     ensureTask,
+    reanalyzeIntelligence,
     patchReview,
   };
 }

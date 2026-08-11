@@ -178,6 +178,25 @@ enum JobStatus {
   @@map("job_status")
 }
 
+enum ReviewSentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  MIXED
+
+  @@map("review_sentiment")
+}
+
+enum AiOperationStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+
+  @@map("ai_operation_status")
+}
+
 enum AutomationExecutionStatus {
   RUNNING
   SUCCESS
@@ -301,6 +320,8 @@ model Organization {
   reviewTags             ReviewTag[]
   reviewReplies          ReviewReply[]
   reviewAssignments      ReviewAssignment[]
+  reviewInsights         ReviewInsight[]
+  aiOperations           AiOperation[]
   tasks                  Task[]
   taskComments           TaskComment[]
   taskActivities         TaskActivity[]
@@ -570,9 +591,11 @@ model Review {
   source       ReviewSource       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   author       ReviewAuthor?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
   tags         ReviewTagLink[]
-  replies      ReviewReply[]
-  assignments  ReviewAssignment[]
-  tasks        Task[]
+  replies       ReviewReply[]
+  assignments   ReviewAssignment[]
+  insights      ReviewInsight[]
+  aiOperations  AiOperation[]
+  tasks         Task[]
 
   @@unique([sourceId, externalId], map: "reviews_source_external_key")
   @@index([organizationId, status, receivedAt], map: "reviews_org_status_received_idx")
@@ -582,6 +605,99 @@ model Review {
   @@index([locationId, receivedAt], map: "reviews_location_received_idx")
   @@index([sourceId, receivedAt], map: "reviews_source_received_idx")
   @@map("reviews")
+}
+
+model ReviewInsight {
+  id                            String          @id @default(uuid()) @db.Uuid
+  organizationId                String          @map("organization_id") @db.Uuid
+  reviewId                      String          @map("review_id") @db.Uuid
+  analysisVersion               Int             @default(1) @map("analysis_version")
+  inputHash                     String          @map("input_hash") @db.VarChar(128)
+  sentiment                     ReviewSentiment
+  operationalUrgency            Int             @map("operational_urgency")
+  reputationRisk                Int             @map("reputation_risk")
+  churnRisk                     Int?            @map("churn_risk")
+  churnRiskConfidence           Float?          @map("churn_risk_confidence")
+  churnRiskInsufficientEvidence Boolean         @default(false) @map("churn_risk_insufficient_evidence")
+  legalPrRisk                   Boolean         @default(false) @map("legal_pr_risk")
+  legalPrRiskReason             String?         @map("legal_pr_risk_reason") @db.Text
+  safetyRisk                    Boolean         @default(false) @map("safety_risk")
+  safetyRiskReason              String?         @map("safety_risk_reason") @db.Text
+  spamSignalProbability         Float?          @map("spam_signal_probability")
+  coordinatedSignalProbability  Float?          @map("coordinated_signal_probability")
+  signalReasons                 Json            @default("[]") @map("signal_reasons")
+  rootCauseHypothesis           String?         @map("root_cause_hypothesis") @db.Text
+  observedFacts                 Json            @default("[]") @map("observed_facts")
+  inferences                    Json            @default("[]")
+  recommendations               Json            @default("[]")
+  confidence                    Float
+  provider                      String          @db.VarChar(80)
+  model                         String          @db.VarChar(120)
+  modelVersion                  String?         @map("model_version") @db.VarChar(80)
+  promptVersion                 String          @map("prompt_version") @db.VarChar(80)
+  createdAt                     DateTime        @default(now()) @map("created_at")
+  updatedAt                     DateTime        @updatedAt @map("updated_at")
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  review       Review                @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  aspects      ReviewInsightAspect[]
+  operations   AiOperation[]
+
+  @@index([organizationId, reviewId, createdAt], map: "review_insights_org_review_created_idx")
+  @@index([organizationId, sentiment, createdAt], map: "review_insights_org_sentiment_created_idx")
+  @@index([reviewId, analysisVersion], map: "review_insights_review_version_idx")
+  @@map("review_insights")
+}
+
+model ReviewInsightAspect {
+  id         String          @id @default(uuid()) @db.Uuid
+  insightId  String          @map("insight_id") @db.Uuid
+  aspect     String          @db.VarChar(80)
+  sentiment  ReviewSentiment
+  confidence Float
+  evidence   String          @default("") @db.Text
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  insight ReviewInsight @relation(fields: [insightId], references: [id], onDelete: Cascade)
+
+  @@index([insightId, confidence], map: "review_insight_aspects_insight_confidence_idx")
+  @@map("review_insight_aspects")
+}
+
+model AiOperation {
+  id                  String            @id @default(uuid()) @db.Uuid
+  organizationId      String            @map("organization_id") @db.Uuid
+  reviewId            String?           @map("review_id") @db.Uuid
+  insightId           String?           @map("insight_id") @db.Uuid
+  operationType       String            @map("operation_type") @db.VarChar(80)
+  provider            String            @db.VarChar(80)
+  model               String            @db.VarChar(120)
+  modelVersion        String?           @map("model_version") @db.VarChar(80)
+  promptVersion       String            @map("prompt_version") @db.VarChar(80)
+  inputHash           String            @map("input_hash") @db.VarChar(128)
+  outputHash          String?           @map("output_hash") @db.VarChar(128)
+  status              AiOperationStatus @default(QUEUED)
+  startedAt           DateTime?         @map("started_at")
+  completedAt         DateTime?         @map("completed_at")
+  latencyMs           Int?              @map("latency_ms")
+  inputTokens         Int?              @map("input_tokens")
+  outputTokens        Int?              @map("output_tokens")
+  estimatedCostMicros Int?              @map("estimated_cost_micros")
+  confidence          Float?
+  moderationResult    Json?             @map("moderation_result")
+  errorCode           String?           @map("error_code") @db.VarChar(120)
+  errorMessage        String?           @map("error_message") @db.Text
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  review       Review?        @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  insight      ReviewInsight? @relation(fields: [insightId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt], map: "ai_operations_org_status_created_idx")
+  @@index([reviewId, createdAt], map: "ai_operations_review_created_idx")
+  @@index([reviewId, inputHash, promptVersion, model], map: "ai_operations_input_idx")
+  @@map("ai_operations")
 }
 
 model ReviewTag {

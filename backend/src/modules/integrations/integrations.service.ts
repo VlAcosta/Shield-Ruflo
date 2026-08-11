@@ -149,7 +149,7 @@ export async function queueIntegrationSync(app: FastifyInstance, organizationId:
 
   return app.prisma.$transaction(async (tx) => {
     const lockKey = `integration-sync:${accountId}`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)`;
+    await tx.$queryRaw<Array<{ acquired: number }>>`SELECT 1::int AS acquired FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock`;
 
     const currentAccount = await tx.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
     if (!currentAccount) {

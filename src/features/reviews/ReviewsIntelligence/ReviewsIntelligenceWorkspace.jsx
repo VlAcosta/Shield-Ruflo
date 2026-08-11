@@ -58,6 +58,7 @@ export default function ReviewsIntelligenceWorkspace() {
 
   const canReply = access.can('reviews.reply');
   const canApprove = access.can('reviews.approve');
+  const canReanalyze = access.can('reviews.intelligence.reanalyze');
   const canLegal = access.can('reviews.legal') && intelligence.settings.legalEscalationEnabled;
   const canSettings = access.can('reviews.settings');
   const canCreateTask = access.can('tasks.create');
@@ -172,6 +173,8 @@ export default function ReviewsIntelligenceWorkspace() {
             onApprove={intelligence.approve}
             onRequestChanges={intelligence.requestChanges}
             onPublishApproved={intelligence.publishApproved}
+            canReanalyze={canReanalyze}
+            onReanalyze={intelligence.reanalyzeIntelligence}
           />
           <ReviewsInsights
             review={intelligence.selectedReview}
