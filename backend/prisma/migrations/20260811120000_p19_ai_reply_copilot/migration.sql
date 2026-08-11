@@ -61,11 +61,10 @@ ALTER TABLE "ai_operations"
 CREATE INDEX "ai_operations_reply_created_idx" ON "ai_operations"("reply_id", "created_at");
 
 INSERT INTO "entitlements" ("id", "plan_id", "key", "value", "updated_at")
-SELECT gen_random_uuid(), p."id", e."key", e."value"::jsonb, CURRENT_TIMESTAMP
+SELECT gen_random_uuid(), p."id", k."key",
+       CASE WHEN p."code" = 'PRO' THEN 'true'::jsonb ELSE 'false'::jsonb END,
+       CURRENT_TIMESTAMP
 FROM "plans" p
-CROSS JOIN (VALUES
-  ('ai.reply_copilot', CASE WHEN p."code" = 'PRO' THEN 'true' ELSE 'false' END),
-  ('ai.autopilot', CASE WHEN p."code" = 'PRO' THEN 'true' ELSE 'false' END)
-) AS e("key", "value")
+CROSS JOIN (VALUES ('ai.reply_copilot'), ('ai.autopilot')) AS k("key")
 WHERE p."code" IN ('FREE', 'PRO')
 ON CONFLICT ("plan_id", "key") DO NOTHING;
