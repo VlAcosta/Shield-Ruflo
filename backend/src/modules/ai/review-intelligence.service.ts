@@ -14,6 +14,11 @@ function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+function prismaErrorCode(error: unknown): string {
+  if (!error || typeof error !== 'object' || !('code' in error)) return '';
+  return String((error as { code?: unknown }).code ?? '');
+}
+
 export function reviewInputHash(review: {
   id: string;
   rating: number;
@@ -106,32 +111,55 @@ export async function enqueueReviewAnalysis(
     if (pending) return { queued: false as const, reason: 'ALREADY_QUEUED', operationId: pending.id };
   }
 
-  const operation = await prisma.aiOperation.create({
-    data: {
-      organizationId: input.organizationId,
-      reviewId: input.reviewId,
-      operationType: 'REVIEW_INTELLIGENCE',
-      provider: provider.id,
-      model: provider.model,
-      modelVersion: null,
-      promptVersion: provider.promptVersion,
-      inputHash,
-      status: 'QUEUED',
-    },
-  });
-  const dedupeKey = input.force
-    ? `ai:review:${input.reviewId}:${operation.id}`
-    : `ai:review:${input.reviewId}:${inputHash}:${provider.promptVersion}:${provider.model}`;
-  const job = await prisma.job.create({
-    data: {
-      organizationId: input.organizationId,
-      type: 'ai.analyzeReview',
-      payload: { organizationId: input.organizationId, reviewId: input.reviewId, aiOperationId: operation.id },
-      dedupeKey,
-      maxAttempts: 5,
-    },
-  });
-  return { queued: true as const, operationId: operation.id, jobId: job.id };
+  const stableDedupeKey = `ai:review:${input.reviewId}:${inputHash}:${provider.promptVersion}:${provider.model}`;
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const operation = await tx.aiOperation.create({
+        data: {
+          organizationId: input.organizationId,
+          reviewId: input.reviewId,
+          operationType: 'REVIEW_INTELLIGENCE',
+          provider: provider.id,
+          model: provider.model,
+          modelVersion: null,
+          promptVersion: provider.promptVersion,
+          inputHash,
+          status: 'QUEUED',
+        },
+      });
+      const dedupeKey = input.force ? `ai:review:${input.reviewId}:${operation.id}` : stableDedupeKey;
+      const job = await tx.job.create({
+        data: {
+          organizationId: input.organizationId,
+          type: 'ai.analyzeReview',
+          payload: { organizationId: input.organizationId, reviewId: input.reviewId, aiOperationId: operation.id },
+          dedupeKey,
+          maxAttempts: 5,
+        },
+      });
+      return { queued: true as const, operationId: operation.id, jobId: job.id };
+    });
+  } catch (error) {
+    if (!input.force && prismaErrorCode(error) === 'P2002') {
+      const pending = await prisma.aiOperation.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          reviewId: input.reviewId,
+          inputHash,
+          promptVersion: provider.promptVersion,
+          provider: provider.id,
+          model: provider.model,
+          status: { in: ['QUEUED', 'RUNNING'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      return pending
+        ? { queued: false as const, reason: 'ALREADY_QUEUED', operationId: pending.id }
+        : { queued: false as const, reason: 'ALREADY_QUEUED' };
+    }
+    throw error;
+  }
 }
 
 export async function processReviewAnalysisJob(
@@ -243,7 +271,7 @@ export async function processReviewAnalysisJob(
           outputTokens: result.outputTokens,
           estimatedCostMicros: result.estimatedCostMicros,
           confidence: result.output.confidence,
-          moderationResult: result.moderationResult ? json(result.moderationResult) : undefined,
+          ...(result.moderationResult ? { moderationResult: json(result.moderationResult) } : {}),
         },
       });
       const { start, end } = monthWindow(completedAt);
