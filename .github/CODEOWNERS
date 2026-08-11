@@ -1,0 +1,14 @@
+# Business Shield code ownership
+# Until the engineering team expands, the repository owner is the required reviewer.
+
+* @VlAcosta
+
+# Security- and data-sensitive areas
+/backend/ @VlAcosta
+/backend/prisma/ @VlAcosta
+/backend/src/modules/auth/ @VlAcosta
+/backend/src/modules/admin/ @VlAcosta
+/backend/src/modules/integrations/ @VlAcosta
+/backend/src/modules/billing/ @VlAcosta
+/.github/ @VlAcosta
+/scripts/ @VlAcosta
