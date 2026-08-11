@@ -1671,8 +1671,9 @@ model Notification {
 }
 
 model Plan {
-  id         String   @id @default(uuid()) @db.Uuid
-  code       String   @unique @db.VarChar(80)
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  code           String   @unique @db.VarChar(80)
   name       String   @db.VarChar(160)
   priceCents Int      @default(0) @map("price_cents")
   currency   String   @default("RUB") @db.VarChar(3)
