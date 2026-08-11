@@ -134,6 +134,8 @@ export type PermissionOverrides = {
   deny?: string[];
 };
 
+export type PlanEntitlements = Readonly<Record<string, unknown>>;
+
 export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
   'billing.manage',
 ]);
@@ -143,6 +145,20 @@ export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
   'team.manage',
   'billing.manage',
 ]);
+
+const entitlementPermissionGates: Readonly<Record<string, readonly Permission[]>> = Object.freeze({
+  analytics: Object.freeze(['analytics.view']),
+  automations: Object.freeze(['automations.view', 'automations.manage']),
+  reports: Object.freeze(['reports.view', 'reports.create', 'reports.export']),
+  competitive: Object.freeze(['competitive.view', 'competitive.manage']),
+  aiVisibility: Object.freeze(['ai_visibility.view', 'ai_visibility.manage', 'ai_visibility.run']),
+  aiFeatures: Object.freeze([
+    'reviews.intelligence.read',
+    'reviews.intelligence.reanalyze',
+    'ai.brand_voice.manage',
+    'ai.autopilot.manage',
+  ]),
+});
 
 export function isPermission(value: string): value is Permission {
   return (permissions as readonly string[]).includes(value);
@@ -166,5 +182,23 @@ export function effectivePermissions(role: string, overrides: PermissionOverride
       && !(normalizedRole === 'OWNER' && essentialOwnerPermissions.includes(permission))
     ) allowed.delete(permission);
   }
+  return [...allowed];
+}
+
+/**
+ * Intersects role permissions with the organization's active plan.
+ * Missing premium entitlements fail closed while core workspace permissions remain available.
+ */
+export function permissionsForEntitlements(
+  basePermissions: readonly Permission[],
+  entitlements: PlanEntitlements | null | undefined,
+): Permission[] {
+  const allowed = new Set(basePermissions);
+
+  for (const [entitlement, gatedPermissions] of Object.entries(entitlementPermissionGates)) {
+    if (entitlements?.[entitlement] === true) continue;
+    for (const permission of gatedPermissions) allowed.delete(permission);
+  }
+
   return [...allowed];
 }
