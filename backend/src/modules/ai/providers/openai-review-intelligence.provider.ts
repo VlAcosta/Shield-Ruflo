@@ -6,6 +6,7 @@ import {
 import { AI_REPLY_PROMPT_VERSION, aiReplyOutputSchema } from '../reply-copilot.schemas.js';
 import { redactPii } from '../privacy/pii-redaction.js';
 import { runOpenAiVisibilityProbe } from './openai-visibility.js';
+import { answerOpenAiShieldQuestion } from './openai-ask-shield.js';
 import type {
   AiProviderAvailability,
   AiReviewIntelligenceProvider,
@@ -15,6 +16,8 @@ import type {
   GenerateReplyResult,
   VisibilityProbeInput,
   VisibilityProbeResult,
+  AskShieldInput,
+  AskShieldResult,
 } from '../ai-provider.types.js';
 import { AiProviderError } from '../ai-provider.types.js';
 
@@ -280,6 +283,14 @@ export class OpenAiReviewIntelligenceProvider implements AiReviewIntelligencePro
       throw new AiProviderError({ code: availability.reasonCode ?? 'AI_PROVIDER_UNAVAILABLE', message: availability.reasonMessage ?? 'AI provider недоступен', retryable: false });
     }
     return runOpenAiVisibilityProbe(input, { id: this.id, model: this.model });
+  }
+
+  async answerShieldQuestion(input: AskShieldInput): Promise<AskShieldResult> {
+    const availability = this.availability();
+    if (!availability.available) {
+      throw new AiProviderError({ code: availability.reasonCode ?? 'AI_PROVIDER_UNAVAILABLE', message: availability.reasonMessage ?? 'AI provider недоступен', retryable: false });
+    }
+    return answerOpenAiShieldQuestion(input, { id: this.id, model: this.model });
   }
 
 }
