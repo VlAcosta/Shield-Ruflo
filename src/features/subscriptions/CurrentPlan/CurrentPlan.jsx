@@ -40,7 +40,7 @@ function CurrentPlan({ plan, canManage = true }) {
 
         <div className="current-plan__actions">
           {canManage ? (
-            <span className="current-plan__management-note">Сменить тариф или собрать конфигурацию можно ниже</span>
+            <span className="current-plan__badge">Сменить тариф или собрать конфигурацию можно ниже</span>
           ) : (
             <span className="current-plan__readonly">Только просмотр</span>
           )}
@@ -52,7 +52,7 @@ function CurrentPlan({ plan, canManage = true }) {
           <span>{isFree ? 'Оплата не требуется' : 'Оплата периода'}</span>
           <small>{isFree ? 'Бесплатный тариф · автоматических списаний нет' : 'Автосписание пока не подключено · следующий период оформляется вручную'}</small>
         </div>
-        <span className="current-plan__manual-mark" aria-hidden="true">{isFree ? '0 ₽' : 'ручн.'}</span>
+        <span className="current-plan__badge" aria-hidden="true">{isFree ? '0 ₽' : 'вручную'}</span>
       </div>
     </section>
   );
