@@ -9,6 +9,7 @@ import { apiRequest, createIdempotencyKey, joinEndpoint } from '../core/apiClien
 import { isDemoDataEnabled } from '../core/runtimeConfig';
 
 const ENDPOINT = String(getRuntimeEnv('SUBSCRIPTIONS_ENDPOINT')).replace(/\/$/, '');
+const BILLING_ENDPOINT = ENDPOINT.replace(/\/subscription$/, '');
 const LOCAL_STATE_KEY = 'business_shield_subscription_state_v1';
 export const SUBSCRIPTION_CHANGED_EVENT = 'business-shield:subscription-changed';
 
@@ -22,6 +23,8 @@ function createEmptySubscriptionSnapshot() {
     limits: [],
     packages: [],
     payments: [],
+    availablePlans: [],
+    paymentProviderConfigured: false,
   };
 }
 
@@ -54,6 +57,7 @@ function mergeSnapshot(localState) {
     limits: localState?.snapshot?.limits || base.limits,
     packages: localState?.snapshot?.packages || base.packages,
     payments: localState?.snapshot?.payments || base.payments,
+    availablePlans: localState?.snapshot?.availablePlans || base.availablePlans || [],
   };
 }
 
@@ -62,12 +66,16 @@ async function request(path = '', options = {}) {
   return apiRequest(joinEndpoint(ENDPOINT, path), { ...options, timeout: 10000 });
 }
 
-function paymentUnavailable(payload, error = null) {
+async function billingRequest(path = '', options = {}) {
+  if (!BILLING_ENDPOINT) return null;
+  return apiRequest(joinEndpoint(BILLING_ENDPOINT, path), { ...options, timeout: 10000 });
+}
+
+function paymentUnavailable(error = null) {
   return {
     ok: false,
     status: 'payment_unavailable',
     paymentId: null,
-    amount: Number(payload?.total || 0),
     redirectUrl: null,
     message: error?.message || 'Онлайн-оплата сейчас недоступна',
     errorCode: error?.code || 'PAYMENT_PROVIDER_NOT_CONFIGURED',
@@ -180,28 +188,50 @@ export async function validatePromoCode(code, subtotal) {
   };
 }
 
-export async function createSubscriptionCheckout(payload) {
+export async function quoteSubscriptionConstructor(selection, { signal } = {}) {
+  if (BILLING_ENDPOINT) {
+    return billingRequest('/constructor/quote', {
+      method: 'POST',
+      body: JSON.stringify(selection),
+      signal,
+    });
+  }
+
+  if (isDemoDataEnabled()) {
+    await delay(120);
+    return null;
+  }
+
+  throw new Error('Серверный расчёт тарифа недоступен');
+}
+
+export async function createSubscriptionCheckout(payload, { idempotencyKey } = {}) {
   if (ENDPOINT) {
     try {
       const result = await request('/checkout', {
         method: 'POST',
         body: JSON.stringify(payload),
-        idempotencyKey: createIdempotencyKey('subscription-checkout'),
+        idempotencyKey: idempotencyKey || createIdempotencyKey('subscription-checkout'),
       });
       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SUBSCRIPTION_CHANGED_EVENT, { detail: result }));
       return result;
     } catch (error) {
-      return paymentUnavailable(payload, error);
+      return paymentUnavailable(error);
     }
   }
 
   await delay(120);
-  return paymentUnavailable(payload);
+  return paymentUnavailable();
+}
+
+export async function getSubscriptionPayment(paymentId, { refresh = false, signal } = {}) {
+  if (!BILLING_ENDPOINT) return null;
+  return billingRequest(`/payments/${encodeURIComponent(paymentId)}?refresh=${refresh ? 'true' : 'false'}`, { signal });
 }
 
 export async function downloadPaymentReceipt(payment) {
   if (ENDPOINT) {
-    const blob = await apiRequest(joinEndpoint(ENDPOINT, `/payments/${encodeURIComponent(payment.id)}/receipt`), { responseType: 'blob', timeout: 15000 });
+    const blob = await apiRequest(joinEndpoint(BILLING_ENDPOINT, `/payments/${encodeURIComponent(payment.id)}/receipt`), { responseType: 'blob', timeout: 15000 });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
