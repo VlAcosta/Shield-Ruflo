@@ -18,6 +18,7 @@ export type ProviderPayment = {
   currency: string;
   confirmationUrl: string | null;
   test: boolean;
+  metadata: Record<string, string>;
 };
 
 export interface BillingProvider {
