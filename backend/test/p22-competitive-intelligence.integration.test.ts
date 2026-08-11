@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { hashSessionToken } from '../src/shared/security/tokens.js';
+import { provisionTestPlan } from './support/plan-fixtures.js';
 
 const integrationDatabaseUrl = process.env.TEST_DATABASE_URL ?? '';
 const databaseName = integrationDatabaseUrl ? new URL(integrationDatabaseUrl).pathname.toLowerCase() : '';
@@ -38,6 +39,7 @@ describeWithPostgres('P22 Competitive Intelligence', () => {
         { id: otherOrganizationId, name: 'P22 Other Org', slug: `p22-other-${randomUUID()}` },
       ],
     });
+    await provisionTestPlan(app, [organizationId, otherOrganizationId], 'PRO');
     await app.prisma.user.createMany({
       data: [
         { id: userId, phone: `+7${Date.now()}51`, displayName: 'P22 Owner', profileCompletedAt: new Date() },

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { hashSessionToken } from '../src/shared/security/tokens.js';
+import { provisionTestPlan } from './support/plan-fixtures.js';
 
 const integrationDatabaseUrl = process.env.TEST_DATABASE_URL ?? '';
 const databaseName = integrationDatabaseUrl ? new URL(integrationDatabaseUrl).pathname.toLowerCase() : '';
@@ -35,6 +36,7 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
         { id: organizationBId, name: 'P6 Organization B', slug: `p6-b-${randomUUID()}`, timezone: 'Europe/Moscow' },
       ],
     });
+    await provisionTestPlan(app, [organizationAId, organizationBId], 'PRO');
     await app.prisma.user.createMany({
       data: [
         { id: userAId, phone: `+7${Date.now()}61`, displayName: 'P6 Owner A', profileCompletedAt: new Date() },
