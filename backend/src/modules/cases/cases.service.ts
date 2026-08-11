@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { Prisma } from '../../generated/prisma/client.js';
 import type {
-  Prisma,
   PrismaClient,
   ReputationCaseMetricPhase,
   ReputationCaseSeverity,
@@ -441,8 +441,8 @@ export async function createReputationCase(
           resolution: input.resolution ?? null,
           sourceDedupeKey: input.sourceDedupeKey ?? null,
           createdByUserId: context.userId,
-          reviews: reviewIds.length ? { createMany: { data: reviewIds.map((reviewId) => ({ reviewId })), skipDuplicates: true } } : undefined,
-          locations: locationIds.length ? { createMany: { data: locationIds.map((locationId) => ({ locationId })), skipDuplicates: true } } : undefined,
+          ...(reviewIds.length ? { reviews: { createMany: { data: reviewIds.map((reviewId) => ({ reviewId })), skipDuplicates: true } } } : {}),
+          ...(locationIds.length ? { locations: { createMany: { data: locationIds.map((locationId) => ({ locationId })), skipDuplicates: true } } } : {}),
         },
       });
       await tx.reputationCaseActivity.create({
@@ -597,7 +597,7 @@ async function transition(
         action: target === 'IN_PROGRESS' && ['RESOLVED', 'VERIFIED', 'CLOSED'].includes(existing.status) ? 'case.reopened' : 'case.transitioned',
         fromStatus: existing.status,
         toStatus: target,
-        metadata: input.note ? { note: input.note } : undefined,
+        ...(input.note ? { metadata: { note: input.note } } : {}),
       },
     });
     await tx.auditLog.create({
@@ -662,7 +662,15 @@ export async function verifyReputationCase(
     const outcome = buildOutcome(existing, baseline?.metrics ?? null, snapshot.metrics);
     await tx.reputationCase.update({ where: { id: existing.id }, data: { status: 'VERIFIED', verifiedAt: now, outcome: toJson(outcome) } });
     await tx.reputationCaseActivity.create({
-      data: { organizationId: context.organizationId, caseId: existing.id, actorUserId: context.userId, action: 'case.verified', fromStatus: 'RESOLVED', toStatus: 'VERIFIED', metadata: note ? { note } : undefined },
+      data: {
+        organizationId: context.organizationId,
+        caseId: existing.id,
+        actorUserId: context.userId,
+        action: 'case.verified',
+        fromStatus: 'RESOLVED',
+        toStatus: 'VERIFIED',
+        ...(note ? { metadata: { note } } : {}),
+      },
     });
     await tx.auditLog.create({
       data: { organizationId: context.organizationId, actorUserId: context.userId, action: 'reputation_case.verified', entityType: 'ReputationCase', entityId: existing.id, metadata: { note: note ?? null } },
@@ -685,7 +693,17 @@ export async function closeReputationCase(
   const now = new Date();
   await app.prisma.$transaction([
     app.prisma.reputationCase.update({ where: { id: existing.id }, data: { status: 'CLOSED', closedAt: now } }),
-    app.prisma.reputationCaseActivity.create({ data: { organizationId: context.organizationId, caseId: existing.id, actorUserId: context.userId, action: 'case.closed', fromStatus: 'VERIFIED', toStatus: 'CLOSED', metadata: note ? { note } : undefined } }),
+    app.prisma.reputationCaseActivity.create({
+      data: {
+        organizationId: context.organizationId,
+        caseId: existing.id,
+        actorUserId: context.userId,
+        action: 'case.closed',
+        fromStatus: 'VERIFIED',
+        toStatus: 'CLOSED',
+        ...(note ? { metadata: { note } } : {}),
+      },
+    }),
     app.prisma.auditLog.create({ data: { organizationId: context.organizationId, actorUserId: context.userId, action: 'reputation_case.closed', entityType: 'ReputationCase', entityId: existing.id, metadata: { note: note ?? null } } }),
   ]);
   return getCase(app, context.organizationId, existing.id);
@@ -704,13 +722,13 @@ export async function addCaseTask(
   if (!caseRow) throw new AppError({ code: 'REPUTATION_CASE_NOT_FOUND', message: 'Репутационный кейс не найден', statusCode: 404 });
   const task = await createTask(app, context, {
     title: input.title,
-    description: input.description,
-    priority: input.priority,
-    deadline: input.deadline,
     reviewId: caseRow.reviews[0]?.reviewId ?? null,
     locationId: caseRow.locations[0]?.locationId ?? null,
     caseId: caseRow.id,
-    assigneeMemberIds: input.assigneeMemberIds,
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.priority !== undefined ? { priority: input.priority } : {}),
+    ...(input.deadline !== undefined ? { deadline: input.deadline } : {}),
+    ...(input.assigneeMemberIds !== undefined ? { assigneeMemberIds: input.assigneeMemberIds } : {}),
   });
   await app.prisma.reputationCaseActivity.create({
     data: { organizationId: context.organizationId, caseId: caseRow.id, actorUserId: context.userId, action: 'case.task_created', metadata: { taskId: task.id } },

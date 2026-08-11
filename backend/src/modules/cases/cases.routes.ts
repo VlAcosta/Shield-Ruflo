@@ -34,7 +34,17 @@ function context(request: FastifyRequest) {
 export const casesRoutes: FastifyPluginAsync = async (app) => {
   app.get('/cases', { preHandler: [app.authenticate, app.authorize('cases.view')] }, async (request) => {
     const tenant = context(request);
-    return listCases(app, tenant.organizationId, caseListQuerySchema.parse(request.query));
+    const query = caseListQuerySchema.parse(request.query);
+    return listCases(app, tenant.organizationId, {
+      limit: query.limit,
+      ...(query.status !== undefined ? { status: query.status } : {}),
+      ...(query.severity !== undefined ? { severity: query.severity } : {}),
+      ...(query.ownerMemberId !== undefined ? { ownerMemberId: query.ownerMemberId } : {}),
+      ...(query.locationId !== undefined ? { locationId: query.locationId } : {}),
+      ...(query.category !== undefined ? { category: query.category } : {}),
+      ...(query.overdue !== undefined ? { overdue: query.overdue } : {}),
+      ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+    });
   });
 
   app.get('/cases/:caseId', { preHandler: [app.authenticate, app.authorize('cases.view')] }, async (request) => {
@@ -67,7 +77,12 @@ export const casesRoutes: FastifyPluginAsync = async (app) => {
     const tenant = context(request);
     const { caseId } = caseIdParamsSchema.parse(request.params);
     const body = transitionCaseSchema.parse(request.body);
-    return { case: await transitionReputationCase(app, tenant, caseId, body.status, { note: body.note, resolution: body.resolution }) };
+    return {
+      case: await transitionReputationCase(app, tenant, caseId, body.status, {
+        ...(body.note !== undefined ? { note: body.note } : {}),
+        ...(body.resolution !== undefined ? { resolution: body.resolution } : {}),
+      }),
+    };
   });
 
   app.post('/cases/:caseId/verify', { preHandler: [app.authenticate, app.authorize('cases.verify')] }, async (request) => {
@@ -94,7 +109,14 @@ export const casesRoutes: FastifyPluginAsync = async (app) => {
   app.post('/cases/:caseId/tasks', { preHandler: [app.authenticate, app.authorize('cases.manage'), app.authorize('tasks.manage')] }, async (request, reply) => {
     const tenant = context(request);
     const { caseId } = caseIdParamsSchema.parse(request.params);
-    const task = await addCaseTask(app, tenant, caseId, caseTaskSchema.parse(request.body));
+    const body = caseTaskSchema.parse(request.body);
+    const task = await addCaseTask(app, tenant, caseId, {
+      title: body.title,
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.priority !== undefined ? { priority: body.priority } : {}),
+      ...(body.deadline !== undefined ? { deadline: body.deadline } : {}),
+      ...(body.assigneeMemberIds !== undefined ? { assigneeMemberIds: body.assigneeMemberIds } : {}),
+    });
     return reply.code(201).send({ task });
   });
 

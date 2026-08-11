@@ -25,6 +25,7 @@ const createSchema = z.object({
   businessId: z.string().uuid().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
   reviewId: z.string().uuid().nullable().optional(),
+  caseId: z.string().uuid().nullable().optional(),
   assigneeMemberIds: z.array(z.string().uuid()).max(50).optional(),
 });
 const updateSchema = createSchema.partial().extend({ position: z.number().int().min(0).optional() });
