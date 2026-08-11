@@ -75,7 +75,9 @@ export const acquisitionRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(201).send({ invite });
   });
 
-  app.get('/acquisition/campaigns/:campaignId/feedback', { preHandler: [app.authenticate, app.authorize('acquisition.view')] }, async (request) => {
+  // First-party feedback can contain customer contact PII. Viewing campaign metrics
+  // is read-only, but reading the feedback inbox requires the stronger manage scope.
+  app.get('/acquisition/campaigns/:campaignId/feedback', { preHandler: [app.authenticate, app.authorize('acquisition.manage')] }, async (request) => {
     const context = tenant(request);
     const { campaignId } = campaignIdParamsSchema.parse(request.params);
     const query = feedbackListQuerySchema.parse(request.query);
