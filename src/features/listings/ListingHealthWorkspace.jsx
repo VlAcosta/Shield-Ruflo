@@ -36,7 +36,7 @@ export default function ListingHealthWorkspace() {
   const [providerLocations, setProviderLocations] = useState([]);
   const [externalLocationId, setExternalLocationId] = useState('');
 
-  const locations = overview?.items ?? [];
+  const locations = useMemo(() => overview?.items ?? [], [overview?.items]);
   const selected = useMemo(() => locations.find((item) => item.id === selectedId) ?? locations[0] ?? null, [locations, selectedId]);
 
   const loadOverview = useCallback(async (signal) => {

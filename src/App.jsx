@@ -33,6 +33,7 @@ const CasesPage = lazy(() => import('./pages/portal/CasesPage'));
 const ReviewAcquisitionPage = lazy(() => import('./pages/portal/ReviewAcquisitionPage'));
 const CompetitiveIntelligencePage = lazy(() => import('./pages/portal/CompetitiveIntelligencePage'));
 const AiVisibilityPage = lazy(() => import('./pages/portal/AiVisibilityPage'));
+const ListingHealthPage = lazy(() => import('./pages/portal/ListingHealthPage'));
 const ReviewAcquisitionLandingPage = lazy(() => import('./pages/ReviewAcquisitionLandingPage'));
 const AutomationsPage = lazy(() => import('./pages/portal/AutomationsPage'));
 const IntegrationsPage = lazy(() => import('./pages/portal/IntegrationsPage'));
@@ -45,7 +46,7 @@ const AdminSubscriptionsPage = lazy(() => import('./pages/admin/AdminSubscriptio
 const AdminAnalyticsPage = lazy(() => import('./pages/admin/AdminAnalyticsPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 
-const protectedPortalPaths = ['/onboarding','/dashboard','/reviews','/reputation','/cases','/acquisition','/competitive','/ai-visibility','/automations','/integrations','/subscriptions','/reports','/tasks','/profile','/knowledge-base','/notifications','/chat','/video-consultations','/faq','/blocked','/access-denied'];
+const protectedPortalPaths = ['/onboarding','/dashboard','/reviews','/reputation','/cases','/acquisition','/competitive','/ai-visibility','/location-health','/automations','/integrations','/subscriptions','/reports','/tasks','/profile','/knowledge-base','/notifications','/chat','/video-consultations','/faq','/blocked','/access-denied'];
 
 function RouteFallback({ tone = 'portal' }) {
   return <div className={`route-fallback route-fallback--${tone}`} role="status" aria-live="polite" aria-label="Загрузка раздела"><span /><span /><span /></div>;
@@ -205,6 +206,7 @@ function App() {
         <Route path="/acquisition" element={<LazyRoute><ReviewAcquisitionPage /></LazyRoute>} />
         <Route path="/competitive" element={<LazyRoute><CompetitiveIntelligencePage /></LazyRoute>} />
         <Route path="/ai-visibility" element={<LazyRoute><AiVisibilityPage /></LazyRoute>} />
+        <Route path="/location-health" element={<LazyRoute><ListingHealthPage /></LazyRoute>} />
         <Route path="/automations" element={<LazyRoute><AutomationsPage /></LazyRoute>} />
         <Route path="/integrations" element={<LazyRoute><IntegrationsPage /></LazyRoute>} />
         <Route path="/subscriptions" element={<LazyRoute><SubscriptionsPage /></LazyRoute>} />
