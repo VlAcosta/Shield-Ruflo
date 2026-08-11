@@ -6,6 +6,7 @@ on:
       - feat/product-v2-p20-reputation-cases
     paths:
       - scripts/p20-agent-apply.py
+      - scripts/p20-type-fix.py
       - .github/workflows/p20-agent-apply.yml
 
 permissions:
@@ -53,7 +54,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Apply Ruflo P20 integration patch
-        run: python3 scripts/p20-agent-apply.py
+        run: |
+          python3 scripts/p20-agent-apply.py
+          python3 scripts/p20-type-fix.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22.23.2
@@ -91,7 +94,9 @@ jobs:
             backend/src/app.ts \
             backend/src/core/rbac/permissions.ts \
             backend/src/modules/tasks/tasks.service.ts \
-            backend/src/modules/tasks/tasks.routes.ts
+            backend/src/modules/tasks/tasks.routes.ts \
+            backend/src/modules/cases/cases.routes.ts \
+            backend/src/modules/cases/cases.service.ts
           if git diff --cached --quiet; then
             echo "No integration changes"
             exit 0
