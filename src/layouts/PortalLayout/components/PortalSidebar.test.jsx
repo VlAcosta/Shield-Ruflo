@@ -1,16 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { authService } from '../../../services/auth/authService';
 import PortalSidebar from './PortalSidebar';
 
-const mockNavigate = vi.fn();
+const toggleTheme = vi.fn();
 const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true };
 
-vi.mock('react-router-dom', async () => ({
-  ...(await vi.importActual('react-router-dom')),
-  useNavigate: () => mockNavigate,
-}));
-vi.mock('../../../services/auth/authService', () => ({ authService: { logout: vi.fn() } }));
 vi.mock('../../../features/access/hooks/useAccessControl', () => ({
   default: () => ({ can: () => false, role: { label: 'Аналитик' } }),
 }));
@@ -19,66 +13,54 @@ vi.mock('../../../features/appearance/hooks/useAppearance', () => ({
   default: () => ({
     isDark: false,
     mode: 'light',
-    toggleResolvedTheme: vi.fn(),
+    toggleResolvedTheme: toggleTheme,
   }),
 }));
 vi.mock('../navigation', () => ({
-  navigationPrimary: [],
-  navigationGroups: [{
-    id: 'reputation',
-    label: 'Репутация',
-    Icon: () => null,
-    items: [{
-      to: '/reviews',
-      label: 'Отзывы',
-      permission: 'reviews.view',
-      Icon: () => null,
-    }],
-  }],
+  navigationPrimary: [
+    { to: '/dashboard', label: 'Главная', Icon: () => null },
+    { to: '/reviews', label: 'Отзывы', permission: 'reviews.view', Icon: () => null },
+  ],
   navigationHelp: { to: '/faq', label: 'Помощь', permission: 'support.view', Icon: () => null },
 }));
 
-function renderSidebar() {
+function renderSidebar(props = {}) {
   return render(
-    <MemoryRouter future={routerFuture}>
-      <PortalSidebar />
+    <MemoryRouter future={routerFuture} initialEntries={['/dashboard']}>
+      <PortalSidebar {...props} />
     </MemoryRouter>,
   );
 }
 
-describe('PortalSidebar logout and permission-aware navigation', () => {
-  beforeEach(() => {
-    authService.logout.mockReset();
-    mockNavigate.mockReset();
-  });
+describe('PortalSidebar compact navigation', () => {
+  beforeEach(() => toggleTheme.mockReset());
 
-  test('redirects only after the backend has revoked the session', async () => {
-    authService.logout.mockResolvedValue(null);
+  test('shows only destinations allowed for the current role', () => {
     renderSidebar();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
-
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/auth?mode=login', { replace: true }));
-    expect(authService.logout).toHaveBeenCalledTimes(1);
-  });
-
-  test('shows a retryable error when server logout fails', async () => {
-    authService.logout.mockRejectedValue(new Error('Сессия не завершена'));
-    renderSidebar();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Сессия не завершена');
-    expect(screen.getByRole('button', { name: 'Выйти' })).toBeEnabled();
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  test('does not overload the sidebar with destinations unavailable to the current role', () => {
-    renderSidebar();
-
+    expect(screen.getByText('Главная')).toBeInTheDocument();
     expect(screen.queryByText('Отзывы')).not.toBeInTheDocument();
-    expect(screen.queryByText('Репутация')).not.toBeInTheDocument();
     expect(screen.queryByText('Помощь')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
+  });
+
+  test('does not duplicate logout or cabinet lock actions in the sidebar', () => {
+    renderSidebar();
+
+    expect(screen.queryByRole('button', { name: /Выйти/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Заблокировать/i })).not.toBeInTheDocument();
+  });
+
+  test('keeps theme control as a low-priority utility action', () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Включить тёмную тему' }));
+    expect(toggleTheme).toHaveBeenCalledTimes(1);
+  });
+
+  test('replaces normal navigation with onboarding guidance while setup is locked', () => {
+    renderSidebar({ navigationLocked: true });
+
+    expect(screen.getByText('Настройка организации')).toBeInTheDocument();
+    expect(screen.queryByText('Главная')).not.toBeInTheDocument();
   });
 });
