@@ -78,9 +78,9 @@ export const reviewsRoutes: FastifyPluginAsync = async (app) => {
     return rejectReply(app, request, reviewId, replyId, reason);
   });
 
-  app.post('/reviews/:reviewId/replies/:replyId/publish', { preHandler: [app.authenticate, app.authorize('reviews.approve')] }, async (request) => {
+  app.post('/reviews/:reviewId/replies/:replyId/publish', { preHandler: [app.authenticate, app.authorize('reviews.approve')] }, async (request, reply) => {
     const { reviewId, replyId } = reviewReplyIdParamsSchema.parse(request.params);
-    return requestPublishReply(app, request, reviewId, replyId);
+    return reply.code(202).send(await requestPublishReply(app, request, reviewId, replyId));
   });
 
   app.post('/reviews/:reviewId/assignments', { preHandler: [app.authenticate, app.authorize('reviews.moderate')] }, async (request) => {
