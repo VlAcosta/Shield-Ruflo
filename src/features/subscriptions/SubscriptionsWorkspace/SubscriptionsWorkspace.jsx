@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useState } from 'react';
 import Button from '../../../components/ui/Button';
 import CurrentPlan from '../CurrentPlan';
 import PlanLimits from '../PlanLimits';
@@ -87,8 +87,6 @@ function SubscriptionsWorkspace() {
     paymentProviderConfigured,
     availablePlans = [],
   } = subscription.snapshot;
-  const proPlan = availablePlans.find((item) => item.code === 'PRO');
-  const selectedModules = useMemo(() => new Set(constructor.modules), [constructor.modules]);
 
   const toggleModule = (id) => {
     setConstructor((current) => ({
@@ -203,7 +201,7 @@ function SubscriptionsWorkspace() {
 
           <div className="subscriptions-constructor__modules">
             {CONSTRUCTOR_MODULES.map((module) => {
-              const selected = selectedModules.has(module.id);
+              const selected = constructor.modules.includes(module.id);
               return (
                 <button
                   type="button"
