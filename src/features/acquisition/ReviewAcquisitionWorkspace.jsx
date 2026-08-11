@@ -124,19 +124,19 @@ export default function ReviewAcquisitionWorkspace() {
   const selectedPublicUrl = useMemo(() => publicUrl(selected), [selected]);
 
   useEffect(() => {
-    if (!selected) {
+    if (!selectedId) {
       setMetrics(null);
       setQrDataUrl('');
       return undefined;
     }
     const controller = new AbortController();
-    getAcquisitionMetrics(selected.id, { signal: controller.signal }).then(setMetrics).catch((nextError) => {
+    getAcquisitionMetrics(selectedId, { signal: controller.signal }).then(setMetrics).catch((nextError) => {
       if (nextError?.name !== 'AbortError') setError(nextError?.message || 'Не удалось загрузить метрики');
     });
     QRCode.toDataURL(selectedPublicUrl, { width: 320, margin: 2, errorCorrectionLevel: 'M' }).then(setQrDataUrl).catch(() => setQrDataUrl(''));
     setInvite(null);
     return () => controller.abort();
-  }, [selected?.id, selectedPublicUrl]);
+  }, [selectedId, selectedPublicUrl]);
 
   const replaceCampaign = (next) => {
     setCampaigns((current) => current.some((item) => item.id === next.id)
