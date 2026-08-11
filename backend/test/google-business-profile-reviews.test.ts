@@ -11,7 +11,7 @@ function response(body: unknown, status = 200) {
   });
 }
 
-describe('P17 Google Business Profile reviews transport', () => {
+describe('P17/P19 Google Business Profile reviews transport', () => {
   it('requests one provider page with the documented max page size and page token', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -96,5 +96,42 @@ describe('P17 Google Business Profile reviews transport', () => {
       statusCode: 400,
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('publishes a reply with PUT and preserves provider moderation state', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('https://mybusiness.googleapis.com/v4/accounts/a/locations/l/reviews/r/reply');
+      expect(init?.method).toBe('PUT');
+      expect(JSON.parse(String(init?.body))).toEqual({ comment: 'Спасибо за отзыв' });
+      return response({
+        comment: 'Спасибо за отзыв',
+        updateTime: '2026-08-11T08:00:00Z',
+        reviewReplyState: 'PUBLISHED',
+        policyViolation: { type: 'NONE' },
+      });
+    }) as unknown as typeof fetch;
+    const client = new GoogleBusinessReviewsClient({ timeoutMs: 5_000, fetcher });
+    await expect(client.updateReply('token', 'accounts/a/locations/l/reviews/r', 'Спасибо за отзыв')).resolves.toEqual({
+      status: 'CONFIRMED',
+      reply: expect.objectContaining({ reviewReplyState: 'PUBLISHED', policyViolation: { type: 'NONE' } }),
+    });
+  });
+
+  it('returns UNKNOWN for an ambiguous mutation timeout instead of fake failure', async () => {
+    const fetcher = vi.fn(async () => { throw new DOMException('timeout', 'AbortError'); }) as unknown as typeof fetch;
+    const client = new GoogleBusinessReviewsClient({ timeoutMs: 5_000, fetcher });
+    await expect(client.updateReply('token', 'accounts/a/locations/l/reviews/r', 'Ответ')).resolves.toEqual({ status: 'UNKNOWN' });
+  });
+
+  it('reads the review back for reconciliation', async () => {
+    const fetcher = vi.fn(async () => response({
+      name: 'accounts/a/locations/l/reviews/r',
+      reviewId: 'r',
+      reviewReply: { comment: 'Подтверждённый ответ', reviewReplyState: 'PUBLISHED' },
+    })) as unknown as typeof fetch;
+    const client = new GoogleBusinessReviewsClient({ timeoutMs: 5_000, fetcher });
+    await expect(client.getReview('token', 'accounts/a/locations/l/reviews/r')).resolves.toEqual(expect.objectContaining({
+      reviewReply: expect.objectContaining({ comment: 'Подтверждённый ответ' }),
+    }));
   });
 });
