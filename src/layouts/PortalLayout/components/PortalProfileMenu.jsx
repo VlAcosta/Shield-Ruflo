@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import usePortalProfile from '../hooks/usePortalProfile';
-import { LockIcon, ProfileIcon, SubscriptionsIcon, FaqIcon } from '../icons';
+import { ProfileIcon, SubscriptionsIcon, FaqIcon } from '../icons';
 import useOrganizationContext from '../../../features/access/hooks/useOrganizationContext';
 import useAccessControl from '../../../features/access/hooks/useAccessControl';
 import { findFirstAllowedRoute, getCurrentAccessContext, getRoleLabel } from '../../../services/access/rbacService';
@@ -9,7 +9,7 @@ import './PortalProfileMenuRecovery.scss';
 
 const focusableSelector = 'button:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])';
 
-function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
+function PortalProfileMenu({ open, onClose, triggerRef }) {
   const navigate = useNavigate();
   const profile = usePortalProfile();
   const access = useAccessControl();
@@ -136,10 +136,6 @@ function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
           </button>
         ) : null}
       </div>
-
-      <button type="button" className="portal-profile-menu__simpleLock" onClick={() => { onClose(); onLock?.(); }}>
-        <LockIcon /><span>Заблокировать кабинет</span>
-      </button>
     </div>
   );
 }
