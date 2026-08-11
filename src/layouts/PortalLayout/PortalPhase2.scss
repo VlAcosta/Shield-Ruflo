@@ -1,0 +1,121 @@
+/* Phase 2 UX layer: readable typography and lower visual density. */
+.portal {
+  font-size: 15px;
+}
+
+.portal__page {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.portal__page button,
+.portal__page input,
+.portal__page select,
+.portal__page textarea {
+  font-family: inherit;
+}
+
+.portal__title {
+  font-size: clamp(22px, 1.55vw, 28px);
+  font-weight: 760;
+  line-height: 1.08;
+  letter-spacing: -.03em;
+}
+
+.portal__subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .055em;
+}
+
+.portal__search > span,
+.portal__profileCopy strong,
+.portal__lockQuick span {
+  font-size: 13px;
+}
+
+.portal__profileCopy small {
+  font-size: 11px;
+}
+
+.portal__reviewsBtn--compact {
+  min-width: 128px;
+  height: 44px;
+  padding: 0 11px 0 6px;
+  gap: 8px;
+}
+
+.portal__reviewsBtn--compact .portal__reviewsBtnIcon {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border-radius: 10px;
+}
+
+.portal__reviewsBtn--compact .portal__reviewsBtnCopy {
+  gap: 1px;
+}
+
+.portal__reviewsBtn--compact .portal__reviewsBtnCopy strong {
+  order: 0;
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1.1;
+}
+
+.portal__reviewsBtn--compact .portal__reviewsBtnCopy small {
+  order: 1;
+  color: #9099af;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.portal__reviewsBtn--compact .portal__reviewsCounter {
+  display: none;
+}
+
+.portal__sidebar--simple .portal__navItem--primary {
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 620;
+}
+
+.portal__sidebar--simple .portal__utilityLink {
+  font-size: 13px;
+}
+
+@media (min-width: 1920px) {
+  .portal,
+  .portal__page {
+    font-size: 16px;
+  }
+
+  .portal__sidebar--simple .portal__navItem--primary {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 1240px) {
+  .portal__search {
+    width: clamp(170px, 18vw, 230px);
+  }
+
+  .portal__reviewsBtn--compact {
+    min-width: 116px;
+  }
+}
+
+@media (max-width: 980px) {
+  .portal__reviewsBtn--compact .portal__reviewsBtnCopy small {
+    display: none;
+  }
+
+  .portal__reviewsBtn--compact {
+    min-width: auto;
+    padding-right: 9px;
+  }
+}
