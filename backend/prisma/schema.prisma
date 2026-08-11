@@ -325,6 +325,37 @@ enum AcquisitionInviteStatus {
   @@map("acquisition_invite_status")
 }
 
+enum CompetitiveCompetitorStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+
+  @@map("competitive_competitor_status")
+}
+
+enum CompetitiveSourceProvider {
+  MANUAL
+  GOOGLE_PLACES
+
+  @@map("competitive_source_provider")
+}
+
+enum CompetitiveStoragePolicy {
+  PERSISTABLE
+  LIVE_ONLY
+
+  @@map("competitive_storage_policy")
+}
+
+enum CompetitiveSourceStatus {
+  CONFIGURED
+  DEGRADED
+  ERROR
+  DISABLED
+
+  @@map("competitive_source_status")
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -381,6 +412,8 @@ model User {
   reputationCaseActivities   ReputationCaseActivity[] @relation("ReputationCaseActivityActor")
   createdAcquisitionCampaigns ReviewAcquisitionCampaign[] @relation("AcquisitionCampaignCreator")
   createdAcquisitionInvites   ReviewAcquisitionInvite[] @relation("AcquisitionInviteCreator")
+  createdCompetitiveCompetitors CompetitiveCompetitor[] @relation("CompetitiveCompetitorCreator")
+  createdCompetitiveSnapshots CompetitiveMetricSnapshot[] @relation("CompetitiveSnapshotCreator")
   notifications              Notification[]        @relation("NotificationUser")
 
   @@index([status], map: "users_status_idx")
@@ -448,6 +481,10 @@ model Organization {
   acquisitionFeedback     ReviewAcquisitionFeedback[]
   acquisitionInvites      ReviewAcquisitionInvite[]
   acquisitionEvents       ReviewAcquisitionEvent[]
+  competitiveCompetitors  CompetitiveCompetitor[]
+  competitiveLocations    CompetitiveLocation[]
+  competitiveSources      CompetitiveSource[]
+  competitiveSnapshots    CompetitiveMetricSnapshot[]
   subscriptions          Subscription[]
   usageRecords           Usage[]
 
@@ -1187,6 +1224,99 @@ model ReviewAcquisitionEvent {
   @@index([campaignId, type, createdAt], map: "review_acquisition_events_campaign_type_created_idx")
   @@index([organizationId, createdAt], map: "review_acquisition_events_org_created_idx")
   @@map("review_acquisition_events")
+}
+
+model CompetitiveCompetitor {
+  id              String                      @id @default(uuid()) @db.Uuid
+  organizationId  String                      @map("organization_id") @db.Uuid
+  name            String                      @db.VarChar(180)
+  website         String?                     @db.Text
+  status          CompetitiveCompetitorStatus @default(ACTIVE)
+  notes           String                      @default("") @db.Text
+  createdByUserId String?                     @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+  archivedAt      DateTime?                   @map("archived_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("CompetitiveCompetitorCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  locations    CompetitiveLocation[]
+
+  @@index([organizationId, status, createdAt], map: "competitive_competitors_org_status_idx")
+  @@map("competitive_competitors")
+}
+
+model CompetitiveLocation {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  competitorId   String   @map("competitor_id") @db.Uuid
+  name           String   @db.VarChar(180)
+  addressLabel   String?  @map("address_label") @db.VarChar(500)
+  city           String?  @db.VarChar(180)
+  region         String?  @db.VarChar(180)
+  countryCode    String?  @map("country_code") @db.VarChar(2)
+  website        String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  competitor      CompetitiveCompetitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  sources         CompetitiveSource[]
+  metricSnapshots CompetitiveMetricSnapshot[]
+
+  @@index([organizationId, competitorId, createdAt], map: "competitive_locations_org_competitor_idx")
+  @@map("competitive_locations")
+}
+
+model CompetitiveSource {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  organizationId       String                   @map("organization_id") @db.Uuid
+  competitorLocationId String                   @map("competitor_location_id") @db.Uuid
+  provider             CompetitiveSourceProvider
+  externalId           String?                  @map("external_id") @db.VarChar(512)
+  storagePolicy        CompetitiveStoragePolicy @map("storage_policy")
+  status               CompetitiveSourceStatus  @default(CONFIGURED)
+  lastCheckedAt        DateTime?                @map("last_checked_at")
+  lastErrorCode        String?                  @map("last_error_code") @db.VarChar(120)
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  competitorLocation CompetitiveLocation @relation(fields: [competitorLocationId], references: [id], onDelete: Cascade)
+  metricSnapshots    CompetitiveMetricSnapshot[]
+
+  @@unique([competitorLocationId, provider], map: "competitive_sources_location_provider_key")
+  @@index([organizationId, provider, status], map: "competitive_sources_org_provider_status_idx")
+  @@map("competitive_sources")
+}
+
+model CompetitiveMetricSnapshot {
+  id                   String   @id @default(uuid()) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  competitorLocationId String   @map("competitor_location_id") @db.Uuid
+  sourceId             String   @map("source_id") @db.Uuid
+  observedAt           DateTime @map("observed_at")
+  averageRating        Float?   @map("average_rating")
+  reviewCount          Int?     @map("review_count")
+  reviewVelocity30d    Float?   @map("review_velocity_30d")
+  positiveShare        Float?   @map("positive_share")
+  negativeShare        Float?   @map("negative_share")
+  responseRate         Float?   @map("response_rate")
+  reputationScore      Float?   @map("reputation_score")
+  notes                String   @default("") @db.VarChar(2000)
+  dedupeKey            String?  @map("dedupe_key") @db.VarChar(240)
+  createdByUserId      String?  @map("created_by_user_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  competitorLocation CompetitiveLocation @relation(fields: [competitorLocationId], references: [id], onDelete: Cascade)
+  source             CompetitiveSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  createdBy          User?               @relation("CompetitiveSnapshotCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceId, dedupeKey], map: "competitive_metric_snapshots_source_dedupe_key")
+  @@index([competitorLocationId, observedAt], map: "competitive_metric_snapshots_location_observed_idx")
+  @@index([organizationId, observedAt], map: "competitive_metric_snapshots_org_observed_idx")
+  @@map("competitive_metric_snapshots")
 }
 
 model Task {

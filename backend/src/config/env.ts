@@ -99,6 +99,10 @@ const envSchema = z
     GOOGLE_BUSINESS_RETURN_URL: optionalUrl,
     GOOGLE_BUSINESS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
 
+    GOOGLE_PLACES_ENABLED: booleanFromString.default(false),
+    GOOGLE_PLACES_API_KEY: z.string().trim().default(''),
+    GOOGLE_PLACES_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+
     AI_REVIEW_INTELLIGENCE_ENABLED: booleanFromString.default(false),
     AI_OPENAI_API_KEY: z.string().default(''),
     AI_OPENAI_MODEL: z.string().default(''),
