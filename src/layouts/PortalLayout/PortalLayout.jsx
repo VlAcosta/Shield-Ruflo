@@ -11,6 +11,7 @@ import useAutomationRuntime from '../../features/automations/hooks/useAutomation
 import useAppearance from '../../features/appearance/hooks/useAppearance';
 import { PIN_CODE_KEY, PIN_UNLOCK_KEY } from './constants';
 import './PortalLayout.scss';
+import './PortalPhase2.scss';
 import '../../styles/dashboardDark.scss';
 import '../../styles/portalAppearance.scss';
 
@@ -119,7 +120,7 @@ export default function PortalLayout({
       ref={portalRef}
       className={`portal ${locked ? 'portal--locked' : ''} ${navigationLocked ? 'portal--navigation-locked' : ''} ${immersive ? 'portal--immersive' : ''} ${appearance.isDark ? 'portal--theme-dark' : 'portal--theme-light'}`.trim()}
     >
-      {!immersive ? <PortalSidebar onLock={lockPortal} navigationLocked={navigationLocked} /> : null}
+      {!immersive ? <PortalSidebar navigationLocked={navigationLocked} /> : null}
 
       <div className="portal__contentWrap">
         {!immersive ? (
