@@ -59,6 +59,29 @@ jobs:
       - name: Apply Ruflo P18 vertical slice
         run: python3 scripts/p18-agent-apply.py
 
+      - name: Apply compiler review fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          service = Path('backend/src/modules/ai/review-intelligence.service.ts')
+          text = service.read_text(encoding='utf-8')
+          old = "          moderationResult: result.moderationResult ? json(result.moderationResult) : undefined,\n"
+          new = "          ...(result.moderationResult ? { moderationResult: json(result.moderationResult) } : {}),\n"
+          if old not in text:
+              raise SystemExit('P18 compiler fix anchor missing: moderationResult')
+          service.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          ingestion = Path('backend/src/modules/integrations/review-ingestion.service.ts')
+          text = ingestion.read_text(encoding='utf-8')
+          old = "  if (previousMarker.runId === syncRunId && previousMarker.disposition) {\n    return { disposition: previousMarker.disposition, sourceId: source.id };\n  }\n"
+          new = "  if (existing && previousMarker.runId === syncRunId && previousMarker.disposition) {\n    return { disposition: previousMarker.disposition, sourceId: source.id, reviewId: existing.id };\n  }\n"
+          if old not in text:
+              raise SystemExit('P18 compiler fix anchor missing: ingestion replay return')
+          ingestion.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -124,6 +147,7 @@ jobs:
             backend/src/core/rbac/permissions.ts \
             backend/src/app.ts \
             backend/src/worker.ts \
+            backend/src/modules/ai/review-intelligence.service.ts \
             backend/src/modules/integrations/review-ingestion.service.ts \
             src/features/reviews/ReviewsIntelligence/hooks/useReviewsIntelligence.js \
             src/features/reviews/ReviewsIntelligence/ReviewsIntelligenceWorkspace.jsx \
