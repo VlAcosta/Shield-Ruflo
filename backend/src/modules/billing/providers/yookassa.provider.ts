@@ -15,6 +15,7 @@ const providerPaymentSchema = z.object({
   confirmation: z.object({
     confirmation_url: z.string().url().optional(),
   }).optional(),
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 function toProviderPayment(payload: unknown): ProviderPayment {
@@ -27,6 +28,7 @@ function toProviderPayment(payload: unknown): ProviderPayment {
     currency: payment.amount.currency,
     confirmationUrl: payment.confirmation?.confirmation_url ?? null,
     test: payment.test,
+    metadata: Object.fromEntries(Object.entries(payment.metadata ?? {}).map(([key, value]) => [key, String(value)])),
   };
 }
 
