@@ -27,6 +27,7 @@ import { operationsRoutes } from './modules/operations/operations.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
+import { replyCopilotRoutes } from './modules/ai/reply-copilot.routes.js';
 import { registerAiProviders } from './modules/ai/providers/index.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -82,6 +83,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(teamRoutes, { prefix: '/api/v1' });
   await app.register(reviewsRoutes, { prefix: '/api/v1' });
   await app.register(reviewIntelligenceRoutes, { prefix: '/api/v1' });
+  await app.register(replyCopilotRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/v1' });
   await app.register(tasksRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
