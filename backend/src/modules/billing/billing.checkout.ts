@@ -247,7 +247,7 @@ async function createOrLoadLocalPayment(app: FastifyInstance, organizationId: st
         amountCents: quote.amountCents,
         currency: quote.currency,
         description: quote.description,
-        checkoutPayload: quote.payload,
+        checkoutPayload: JSON.parse(JSON.stringify(quote.payload)),
       },
     });
   });
@@ -327,7 +327,7 @@ export async function processYooKassaWebhook(app: FastifyInstance, body: unknown
       eventKey,
       eventType: notification.event,
       providerObjectId,
-      payload: notification,
+      payload: JSON.parse(JSON.stringify(notification)),
     },
     update: {},
   });
