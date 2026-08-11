@@ -9,16 +9,20 @@ text = text.replace(
 );
 text = text.replace('function AuthSide({ selectedPlan, invitation }) {', 'function AuthSide({ invitation }) {');
 
-const proofBlock = `      {invitation ? (\n        <div className="auth-v2__invite-side-card">\n          <span>Доступ в компанию</span>\n          <strong>{invitation.company?.title || 'Компания'}</strong>\n          <small>{getRoleLabel(invitation.role)}</small>\n          <i>Организация уже настроена владельцем</i>\n        </div>\n      ) : (\n        <div className="auth-v2__proof">\n          <div><strong>98%</strong><span>положительных результатов</span></div>\n          <div><strong>10k+</strong><span>обработанных отзывов</span></div>\n          <div><strong>24/7</strong><span>мониторинг и поддержка</span></div>\n        </div>\n      )}\n      {selectedPlan && !invitation ? <div className="auth-v2__plan"><span>Выбран тариф</span><strong>{selectedPlan.title || selectedPlan.name}</strong><small>{selectedPlan.total ? \`${Number(selectedPlan.total).toLocaleString('ru-RU')} ₽\` : 'Условия сохранены'}</small></div> : null}`;
+// Keep the protected invitation card, but remove unverified proof metrics from normal auth.
+const proofPattern = /(\s*\{invitation \? \(\s*<div className="auth-v2__invite-side-card">[\s\S]*?<\/div>\s*\)) : \(\s*<div className="auth-v2__proof">[\s\S]*?<\/div>\s*\)\}/;
+if (!proofPattern.test(text)) throw new Error('Auth side proof block anchor not found');
+text = text.replace(proofPattern, '$1 : null}');
 
-const simplerSide = `      {invitation ? (\n        <div className="auth-v2__invite-side-card">\n          <span>Доступ в компанию</span>\n          <strong>{invitation.company?.title || 'Компания'}</strong>\n          <small>{getRoleLabel(invitation.role)}</small>\n          <i>Организация уже настроена владельцем</i>\n        </div>\n      ) : null}`;
+// The old pre-login tariff card was driven by localStorage and must not exist anymore.
+text = text
+  .split('\n')
+  .filter((line) => !(line.includes('selectedPlan') && line.includes('auth-v2__plan')))
+  .join('\n');
 
-if (!text.includes(proofBlock)) throw new Error('Auth side proof/plan block anchor not found');
-text = text.replace(proofBlock, simplerSide);
-
-const selectedPlanMemo = `  const selectedPlan = useMemo(() => {\n    if (invitationMode) return null;\n    try { return JSON.parse(localStorage.getItem('selectedPlan') || 'null'); } catch { return null; }\n  }, [invitationMode]);\n\n`;
-if (!text.includes(selectedPlanMemo)) throw new Error('selectedPlan memo anchor not found');
-text = text.replace(selectedPlanMemo, '');
+const selectedPlanMemo = /\n\s*const selectedPlan = useMemo\(\(\) => \{[\s\S]*?\n\s*\}, \[invitationMode\]\);\n/;
+if (!selectedPlanMemo.test(text)) throw new Error('selectedPlan memo anchor not found');
+text = text.replace(selectedPlanMemo, '\n');
 
 text = text.replace(
   "authService.requestCode({ phone: fullPhone, mode: invitationMode ? 'register' : mode, planId: selectedPlan?.id, invitationToken: inviteToken || undefined })",
@@ -36,6 +40,7 @@ text = text.replace('<AuthSide selectedPlan={selectedPlan} invitation={invitatio
 text = text.replace(/^\s*localStorage\.removeItem\(['"]selectedPlan['"]\);\s*\n/gm, '');
 
 if (text.includes('selectedPlan')) throw new Error('Legacy selectedPlan references remain after patch');
+if (text.includes('98%') || text.includes('10k+')) throw new Error('Unverified auth proof metrics remain after patch');
 
 fs.writeFileSync(path, text);
-console.log('Auth plan selection removed; tariff selection now belongs to post-onboarding billing.');
+console.log('Auth tariff/proof cleanup complete; tariff selection now belongs to post-onboarding billing.');
