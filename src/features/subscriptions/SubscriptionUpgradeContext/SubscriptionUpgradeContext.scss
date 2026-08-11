@@ -1,0 +1,60 @@
+.subscription-upgrade-context {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(101, 84, 255, .18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(101,84,255,.065), rgba(142,99,246,.025)), #fff;
+
+  &__mark {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 15px;
+    color: #fff;
+    background: linear-gradient(135deg, #655cf6, #8f58f0);
+    font-size: 10px;
+    font-weight: 900;
+    box-shadow: 0 12px 26px rgba(101, 92, 246, .2);
+  }
+
+  > div { display: grid; gap: 3px; }
+  small { color: #6554ff; font-size: 9px; font-weight: 820; letter-spacing: .06em; text-transform: uppercase; }
+  h2 { margin: 0; color: #222a4d; font-size: 16px; letter-spacing: -.02em; }
+  p { margin: 0; color: #7c87a2; font-size: 11px; line-height: 1.5; }
+  p strong { color: #4f5878; }
+
+  > button {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 11px;
+    color: #7d86a0;
+    background: rgba(117, 126, 153, .08);
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  > button:hover { color: #6554ff; background: rgba(101,84,255,.08); }
+}
+
+[data-theme='dark'] .subscription-upgrade-context {
+  border-color: rgba(139, 126, 255, .2);
+  background: linear-gradient(135deg, rgba(125,104,255,.11), rgba(142,99,246,.035)), #181d2c;
+  h2 { color: #eef1f8; }
+  p { color: #adb6cd; }
+  p strong { color: #d8dcef; }
+  > button { color: #aeb7ce; background: #22283a; }
+}
+
+@media (max-width: 680px) {
+  .subscription-upgrade-context {
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    > button { grid-column: 2; justify-self: end; margin-top: -42px; }
+  }
+}
