@@ -217,7 +217,12 @@ describeWithPostgres('P21 Review Acquisition', () => {
     expect(storedInvite.tokenHash).not.toContain(inviteToken!);
     expect(storedInvite.tokenHash).toMatch(/^[a-f0-9]{64}$/);
 
-    const publicPage = await app.inject({ method: 'GET', url: `/api/v1${publicPath}&session=session-metrics` });
+    // The invite's publicPath intentionally points to the frontend `/r/:slug` route.
+    // Backend integration tests call the API surface directly while preserving the same token.
+    const publicPage = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/review-acquisition/${campaign.publicSlug}?invite=${encodeURIComponent(inviteToken!)}&session=session-metrics`,
+    });
     expect(publicPage.statusCode).toBe(200);
     await expect(app.prisma.reviewAcquisitionInvite.findUniqueOrThrow({ where: { id: storedInvite.id } })).resolves.toMatchObject({ status: 'OPENED' });
 
