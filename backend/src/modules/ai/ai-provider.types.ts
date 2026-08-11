@@ -1,4 +1,5 @@
 import type { ReviewIntelligenceOutput } from './review-intelligence.schemas.js';
+import type { AiReplyOutput, ReplyGenerationMode } from './reply-copilot.schemas.js';
 
 export type AiProviderAvailability = {
   configured: boolean;
@@ -30,12 +31,31 @@ export type AnalyzeReviewResult = {
   moderationResult: Record<string, unknown> | null;
 };
 
+export type GenerateReplyInput = AnalyzeReviewInput & {
+  mode: ReplyGenerationMode;
+  instructions: string;
+  brandVoice: Record<string, unknown>;
+  insight: Record<string, unknown>;
+};
+
+export type GenerateReplyResult = {
+  output: AiReplyOutput;
+  provider: string;
+  model: string;
+  modelVersion: string | null;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostMicros: number | null;
+};
+
 export interface AiReviewIntelligenceProvider {
   readonly id: string;
   readonly model: string;
   readonly promptVersion: string;
   availability(): AiProviderAvailability;
   analyzeReview(input: AnalyzeReviewInput): Promise<AnalyzeReviewResult>;
+  generateReply?(input: GenerateReplyInput): Promise<GenerateReplyResult>;
   healthCheck(): Promise<AiProviderAvailability>;
 }
 
