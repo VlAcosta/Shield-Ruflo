@@ -1,0 +1,137 @@
+name: P18 Ruflo Agent Implementation
+
+on:
+  push:
+    branches:
+      - feat/product-v2-p18-ai-review-intelligence
+    paths:
+      - scripts/p18-agent-apply.py
+      - .github/workflows/p18-agent-apply.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: p18-ruflo-agent-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  implement-and-validate:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: business_shield
+          POSTGRES_PASSWORD: business_shield_test
+          POSTGRES_DB: business_shield_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U business_shield -d business_shield_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      TEST_DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      AUTH_SECRET: ci-only-business-shield-auth-secret-0123456789
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_OTP_PROVIDER: console
+      AUTH_OTP_FIXED_CODE: ""
+      AUTH_EXPOSE_DEBUG_CODE: "false"
+      COMPANY_LOOKUP_PROVIDER: disabled
+      INTEGRATION_CREDENTIALS_KEY: ci-only-integration-credential-key-0123456789
+      PLATFORM_ADMIN_IDENTITIES: ci-platform-admin@example.test
+      SWAGGER_ENABLED: "false"
+      CORS_ORIGINS: http://localhost:3000
+      AI_REVIEW_INTELLIGENCE_ENABLED: "false"
+
+    steps:
+      - name: Checkout P18 branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply Ruflo P18 vertical slice
+        run: python3 scripts/p18-agent-apply.py
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Apply P18 migrations
+        working-directory: backend
+        run: npm run db:deploy
+
+      - name: Verify migration status
+        working-directory: backend
+        run: npm run db:status
+
+      - name: Backend typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Backend tests
+        working-directory: backend
+        run: npm test
+
+      - name: Backend build
+        working-directory: backend
+        run: npm run build
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend typecheck
+        run: npm run typecheck
+
+      - name: Frontend lint
+        run: npm run lint
+
+      - name: Frontend tests
+        run: npm run test:ci
+
+      - name: Frontend production build
+        run: npm run build
+
+      - name: Commit validated P18 integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            backend/prisma/schema.prisma \
+            backend/src/config/env.ts \
+            backend/.env.example \
+            backend/src/core/rbac/permissions.ts \
+            backend/src/app.ts \
+            backend/src/worker.ts \
+            backend/src/modules/integrations/review-ingestion.service.ts \
+            src/features/reviews/ReviewsIntelligence/hooks/useReviewsIntelligence.js \
+            src/features/reviews/ReviewsIntelligence/ReviewsIntelligenceWorkspace.jsx \
+            src/features/reviews/ReviewsIntelligence/components/ReviewInspector.jsx \
+            src/features/reviews/ReviewsIntelligence/ReviewsIntelligenceWorkspace.scss
+          if git diff --cached --quiet; then
+            echo "No P18 integration changes to commit"
+            exit 0
+          fi
+          git commit -m "feat(p18): integrate Shield AI review intelligence"
+          git push origin HEAD:feat/product-v2-p18-ai-review-intelligence
