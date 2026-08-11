@@ -92,7 +92,13 @@ CREATE INDEX "ai_operations_org_status_created_idx" ON "ai_operations"("organiza
 CREATE INDEX "ai_operations_review_created_idx" ON "ai_operations"("review_id", "created_at");
 CREATE INDEX "ai_operations_input_idx" ON "ai_operations"("review_id", "input_hash", "prompt_version", "model");
 
+-- AI intelligence is a server-enforced paid capability. Keep FREE disabled by default
+-- and enable it for PRO. Platform admins can manage plan entitlements later without
+-- changing application code.
 INSERT INTO "entitlements" ("id", "plan_id", "key", "value", "updated_at")
-SELECT gen_random_uuid(), p."id", 'ai.review_intelligence', 'true'::jsonb, CURRENT_TIMESTAMP
-FROM "plans" p WHERE p."code" IN ('FREE', 'PRO')
+SELECT gen_random_uuid(), p."id", 'ai.review_intelligence',
+       CASE WHEN p."code" = 'PRO' THEN 'true'::jsonb ELSE 'false'::jsonb END,
+       CURRENT_TIMESTAMP
+FROM "plans" p
+WHERE p."code" IN ('FREE', 'PRO')
 ON CONFLICT ("plan_id", "key") DO NOTHING;
