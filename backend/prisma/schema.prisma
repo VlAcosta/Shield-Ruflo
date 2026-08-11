@@ -367,6 +367,23 @@ enum SubscriptionStatus {
   @@map("subscription_status")
 }
 
+enum PaymentStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  CANCELED
+  FAILED
+
+  @@map("payment_status")
+}
+
+enum BillingCheckoutKind {
+  PLAN
+  CONSTRUCTOR
+
+  @@map("billing_checkout_kind")
+}
+
 model ServiceMetadata {
   key       String   @id @db.VarChar(120)
   value     Json
@@ -494,6 +511,7 @@ model Organization {
   aiVisibilityCitations    AiVisibilityCitation[]
   aiVisibilityCompetitors  AiVisibilityCompetitor[]
   subscriptions          Subscription[]
+  payments               Payment[]
   usageRecords           Usage[]
 
   @@index([status], map: "organizations_status_idx")
@@ -1661,8 +1679,9 @@ model Plan {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  entitlements Entitlement[]
+  entitlements  Entitlement[]
   subscriptions Subscription[]
+  payments      Payment[]
 
   @@map("plans")
 }
@@ -1697,10 +1716,59 @@ model Subscription {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments     Payment[]
 
   @@index([organizationId, status], map: "subscriptions_org_status_idx")
   @@unique([provider, externalSubscriptionId], map: "subscriptions_provider_external_key")
   @@map("subscriptions")
+}
+
+model Payment {
+  id                String              @id @default(uuid()) @db.Uuid
+  organizationId    String              @map("organization_id") @db.Uuid
+  subscriptionId    String?             @map("subscription_id") @db.Uuid
+  planId            String?             @map("plan_id") @db.Uuid
+  provider          String              @db.VarChar(80)
+  providerPaymentId String?             @map("provider_payment_id") @db.VarChar(240)
+  idempotencyKey    String              @unique @map("idempotency_key") @db.VarChar(160)
+  checkoutKind      BillingCheckoutKind @map("checkout_kind")
+  status            PaymentStatus       @default(CREATED)
+  providerStatus    String?             @map("provider_status") @db.VarChar(80)
+  amountCents       Int                 @map("amount_cents")
+  currency          String              @default("RUB") @db.VarChar(3)
+  description       String              @db.VarChar(240)
+  confirmationUrl   String?             @map("confirmation_url") @db.Text
+  test              Boolean             @default(false)
+  checkoutPayload   Json?               @map("checkout_payload")
+  providerMetadata  Json?               @map("provider_metadata")
+  paidAt            DateTime?           @map("paid_at")
+  canceledAt        DateTime?           @map("canceled_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  plan         Plan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerPaymentId], map: "payments_provider_external_key")
+  @@index([organizationId, createdAt], map: "payments_org_created_idx")
+  @@index([organizationId, status, createdAt], map: "payments_org_status_created_idx")
+  @@map("payments")
+}
+
+model BillingWebhookEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  provider         String   @db.VarChar(80)
+  eventKey         String   @unique @map("event_key") @db.VarChar(160)
+  eventType        String   @map("event_type") @db.VarChar(120)
+  providerObjectId String   @map("provider_object_id") @db.VarChar(240)
+  payload          Json
+  receivedAt       DateTime @default(now()) @map("received_at")
+  processedAt      DateTime? @map("processed_at")
+  errorCode        String?  @map("error_code") @db.VarChar(120)
+
+  @@index([provider, providerObjectId], map: "billing_webhook_provider_object_idx")
+  @@map("billing_webhook_events")
 }
 
 model Usage {
