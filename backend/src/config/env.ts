@@ -78,12 +78,17 @@ const envSchema = z
     AUTH_OTP_RESEND_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
     AUTH_OTP_IP_MAX_REQUESTS: z.coerce.number().int().min(1).max(100).default(10),
     AUTH_OTP_IP_WINDOW_SECONDS: z.coerce.number().int().min(60).max(86_400).default(600),
-    AUTH_OTP_PROVIDER: z.enum(['console', 'webhook']).default('console'),
+    AUTH_OTP_PROVIDER: z.enum(['console', 'webhook', 'exolve_voice']).default('console'),
     AUTH_OTP_FIXED_CODE: z.union([z.literal(''), z.string().regex(/^\d{4}$/)]).default(''),
     AUTH_EXPOSE_DEBUG_CODE: booleanFromString.default(false),
     AUTH_OTP_WEBHOOK_URL: optionalUrl,
     AUTH_OTP_WEBHOOK_TOKEN: z.string().default(''),
     AUTH_OTP_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+    EXOLVE_API_KEY: z.string().trim().default(''),
+    EXOLVE_SOURCE_NUMBER: z.union([z.literal(''), z.string().regex(/^\d{10,15}$/)]).default(''),
+    EXOLVE_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+    EXOLVE_TTS_VOICE: z.coerce.number().int().min(1).max(15).default(2),
+    EXOLVE_TTS_SPEED: z.coerce.number().min(0.1).max(3).default(0.85),
 
     COMPANY_LOOKUP_PROVIDER: z.enum(['disabled', 'mock', 'webhook']).default('disabled'),
     COMPANY_LOOKUP_WEBHOOK_URL: optionalUrl,
@@ -125,6 +130,15 @@ const envSchema = z
         path: ['AUTH_OTP_WEBHOOK_URL'],
         message: 'AUTH_OTP_WEBHOOK_URL is required when AUTH_OTP_PROVIDER=webhook',
       });
+    }
+
+    if (value.AUTH_OTP_PROVIDER === 'exolve_voice') {
+      if (!value.EXOLVE_API_KEY) {
+        ctx.addIssue({ code: 'custom', path: ['EXOLVE_API_KEY'], message: 'Exolve voice OTP requires an application API key' });
+      }
+      if (!value.EXOLVE_SOURCE_NUMBER) {
+        ctx.addIssue({ code: 'custom', path: ['EXOLVE_SOURCE_NUMBER'], message: 'Exolve voice OTP requires a source number owned by the application' });
+      }
     }
 
     if (value.AI_REVIEW_INTELLIGENCE_ENABLED) {
