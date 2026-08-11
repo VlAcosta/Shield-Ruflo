@@ -253,7 +253,8 @@ export default function AuthWorkspace() {
         authService.persistSession({ user });
         localStorage.removeItem('onboarding_completed');
         localStorage.removeItem('portal_pin_unlocked');
-        setSuccessText('Аккаунт создан. Осталось настроить рабочее пространство.');
+        navigate('/onboarding', { replace: true });
+        return;
       }
       setStep('success');
     } catch (err) { setError(err?.message || 'Не удалось создать аккаунт'); } finally { setBusy(false); }

@@ -1,13 +1,13 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LockIcon, MoonIcon, SunIcon } from '../icons';
 import BrandMark from '../../../components/brand/BrandMark';
-import { navigationItems } from '../navigation';
+import { navigationGroups, navigationHelp, navigationPrimary } from '../navigation';
 import useAccessControl from '../../../features/access/hooks/useAccessControl';
 import { findFirstAllowedRoute } from '../../../services/access/rbacService';
 import useAppearance from '../../../features/appearance/hooks/useAppearance';
-import { APPEARANCE_MODES } from '../../../services/appearance/appearanceService';
 import { authService } from '../../../services/auth/authService';
+import './PortalSidebarRecovery.scss';
 
 function PortalSidebar({ onLock, navigationLocked = false }) {
   const location = useLocation();
@@ -16,8 +16,24 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
   const appearance = useAppearance();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
-  const [lockedHint, setLockedHint] = useState('');
   const brandTarget = navigationLocked ? '/onboarding' : findFirstAllowedRoute(access);
+
+  const allowed = (item) => !item.permission || access.can(item.permission);
+  const visibleGroups = navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.permission || access.can(item.permission)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const activeGroup = visibleGroups.find((group) => group.items.some(({ to }) => (
+    location.pathname === to || location.pathname.startsWith(`${to}/`)
+  )))?.id || '';
+  const [openGroup, setOpenGroup] = useState(activeGroup || 'reputation');
+  const HelpIcon = navigationHelp.Icon;
+
+  useEffect(() => {
+    if (activeGroup) setOpenGroup(activeGroup);
+  }, [activeGroup]);
 
   const logout = async () => {
     if (loggingOut) return;
@@ -32,115 +48,106 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
     }
   };
 
+  const renderDirect = ({ to, label, Icon, accent, permission }) => {
+    if (permission && !access.can(permission)) return null;
+    const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
+    return (
+      <NavLink key={to} to={to} className={`portal__navItem portal__navItem--primary ${accent ? 'portal__navItem--accent' : ''} ${active ? 'is-active' : ''}`}>
+        <span className="portal__navIcon"><Icon /></span>
+        <span className="portal__navText">{label}</span>
+      </NavLink>
+    );
+  };
+
   return (
-    <aside className="portal__sidebar">
-      <Link
-        to={brandTarget}
-        className="portal__brand"
-        aria-label={navigationLocked ? 'Настройки первого входа' : 'Главная'}
-      >
+    <aside className="portal__sidebar portal__sidebar--simple">
+      <Link to={brandTarget} className="portal__brand" aria-label={navigationLocked ? 'Настройка организации' : 'Главная'}>
         <span className="portal__shield"><BrandMark size={32} /></span>
         <span className="portal__brandName">БИЗНЕС<br />ЩИТ</span>
       </Link>
 
-      <nav className="portal__nav" aria-label="Навигация кабинета">
-        {navigationItems.map(({ to, label, Icon, permission }) => {
-          const allowed = !permission || access.can(permission);
-          const isActive = !navigationLocked && (location.pathname === to || location.pathname.startsWith(`${to}/`));
+      {navigationLocked ? (
+        <div className="portal__onboardingNav">
+          <NavLink to="/onboarding" className="portal__navItem is-active">
+            <span className="portal__navIcon"><LockIcon /></span>
+            <span className="portal__navText"><strong>Настройка организации</strong><small>Завершите 3 шага</small></span>
+          </NavLink>
+          <p>Основные разделы появятся после первичной настройки.</p>
+        </div>
+      ) : (
+        <nav className="portal__nav portal__nav--grouped" aria-label="Навигация кабинета">
+          {navigationPrimary.map(renderDirect)}
 
-          if (navigationLocked) {
-            const explanation = 'Доступ откроется после завершения настройки';
-            return (
-              <button
-                key={to}
-                type="button"
-                className="portal__navItem portal__navItem--locked"
-                aria-disabled="true"
-                aria-describedby={lockedHint ? 'portal-navigation-lock-hint' : undefined}
-                title={explanation}
-                onClick={() => setLockedHint(explanation)}
-                onFocus={() => setLockedHint(explanation)}
-              >
-                <span className="portal__navIcon"><Icon /></span>
-                <span className="portal__navText">{label}</span>
-                <span className="portal__navLock" aria-hidden="true"><LockIcon /></span>
-              </button>
-            );
-          }
-
-          if (!allowed) {
-            const explanation = `Нет доступа. Текущая роль: ${access.role?.label || 'роль организации'}`;
-            return (
-              <button
-                key={to}
-                type="button"
-                className="portal__navItem portal__navItem--permission-locked"
-                aria-disabled="true"
-                aria-describedby={lockedHint ? 'portal-navigation-lock-hint' : undefined}
-                title={explanation}
-                onClick={() => setLockedHint(explanation)}
-                onFocus={() => setLockedHint(explanation)}
-              >
-                <span className="portal__navIcon"><Icon /></span>
-                <span className="portal__navText">{label}</span>
-                <span className="portal__navLock" aria-hidden="true"><LockIcon /></span>
-              </button>
-            );
-          }
-
-          return (
-            <NavLink key={to} to={to} className={`portal__navItem ${isActive ? 'is-active' : ''}`}>
-              <span className="portal__navIcon"><Icon /></span>
-              <span className="portal__navText">{label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-      {lockedHint ? <p id="portal-navigation-lock-hint" className="portal__navLockedHint" role="status" aria-live="polite">{lockedHint}</p> : null}
+          <div className="portal__navGroups">
+            {visibleGroups.map((group) => {
+              const GroupIcon = group.Icon;
+              const expanded = openGroup === group.id;
+              const groupActive = activeGroup === group.id;
+              return (
+                <section className={`portal__navGroup ${groupActive ? 'is-active' : ''}`} key={group.id}>
+                  <button
+                    type="button"
+                    className="portal__navGroupButton"
+                    aria-expanded={expanded}
+                    onClick={() => setOpenGroup((current) => current === group.id ? '' : group.id)}
+                  >
+                    <span className="portal__navIcon"><GroupIcon /></span>
+                    <span>{group.label}</span>
+                    <span className="portal__navChevron" aria-hidden="true">⌄</span>
+                  </button>
+                  {expanded ? (
+                    <div className="portal__navChildren">
+                      {group.items.map(({ to, label, Icon }) => {
+                        const ChildIcon = Icon;
+                        const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
+                        return (
+                          <NavLink key={to} to={to} className={`portal__navItem portal__navItem--child ${active ? 'is-active' : ''}`}>
+                            <span className="portal__navIcon"><ChildIcon /></span>
+                            <span className="portal__navText">{label}</span>
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+        </nav>
+      )}
 
       {!navigationLocked ? (
-        <div className="portal__appearanceDock">
+        <div className="portal__sidebarUtility">
+          {allowed(navigationHelp) ? (
+            <NavLink to={navigationHelp.to} className="portal__utilityLink">
+              <HelpIcon />
+              <span>{navigationHelp.label}</span>
+            </NavLink>
+          ) : null}
           <button
             type="button"
-            className={`portal__appearanceQuick ${appearance.isDark ? 'is-dark' : 'is-light'}`}
+            className="portal__utilityLink"
             onClick={appearance.toggleResolvedTheme}
-            aria-pressed={appearance.isDark}
             aria-label={appearance.isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
-            title={appearance.isDark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему'}
           >
-            <span className="portal__appearanceQuickIcon" aria-hidden="true">
-              {appearance.isDark ? <MoonIcon /> : <SunIcon />}
-            </span>
-            <span className="portal__appearanceQuickCopy">
-              <small>{appearance.mode === APPEARANCE_MODES.system ? 'Системная тема' : 'Оформление'}</small>
-              <strong>{appearance.isDark ? 'Тёмная' : 'Светлая'}</strong>
-            </span>
-            <span className="portal__appearanceQuickSwitch" aria-hidden="true"><i /></span>
+            {appearance.isDark ? <MoonIcon /> : <SunIcon />}
+            <span>{appearance.isDark ? 'Тёмная тема' : 'Светлая тема'}</span>
           </button>
-          <Link className="portal__appearanceSettings" to="/profile?tab=appearance" aria-label="Открыть настройки оформления">
-            Настроить
-          </Link>
+          {typeof onLock === 'function' ? (
+            <button type="button" className="portal__utilityLink" onClick={onLock}>
+              <LockIcon /><span>Заблокировать</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="portal__logoutDock">
-        {logoutError ? <div className="portal__logoutError" role="alert" aria-live="assertive">{logoutError}</div> : null}
+      <div className="portal__logoutDock portal__logoutDock--simple">
+        {logoutError ? <div className="portal__logoutError" role="alert">{logoutError}</div> : null}
         <button type="button" className="portal__logoutButton" onClick={logout} disabled={loggingOut}>
           <span aria-hidden="true">↪</span>
-          <strong>{loggingOut ? 'Завершаем сессию…' : 'Выйти из аккаунта'}</strong>
+          <strong>{loggingOut ? 'Выходим…' : 'Выйти'}</strong>
         </button>
       </div>
-
-      {navigationLocked ? (
-        <div className="portal__sidebarNotice">
-          <span className="portal__sidebarNoticeIcon"><LockIcon /></span>
-          <div>
-            <strong>Кабинет закрыт</strong>
-            <small>Завершите 3 шага настройки</small>
-          </div>
-        </div>
-      ) : null}
-
     </aside>
   );
 }

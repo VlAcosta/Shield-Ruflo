@@ -7,6 +7,7 @@ import { parseRegistrationDate, validateCompanyIdentifiers } from '../../shared/
 import { presentUser, publicUserInclude } from '../auth/auth.presenter.js';
 import { verifyCompanyLookupEvidence, type CompanyLookupResult } from '../company/company.service.js';
 import { env } from '../../config/env.js';
+import { ensureFreeSubscription } from '../billing/billing.service.js';
 
 export async function getOnboardingState(app: FastifyInstance, organizationId: string) {
   const organization = await app.prisma.organization.findUnique({
@@ -99,9 +100,10 @@ export async function completeOnboarding(
     organizationId,
     userId: request.auth.userId,
   }, now.getTime());
-  const registryTrusted = env.COMPANY_LOOKUP_PROVIDER === 'webhook' && verifiedEvidence?.provider === 'webhook';
+  const trustedProviders = new Set(['webhook', 'dadata', 'fns_npd']);
+  const registryTrusted = Boolean(verifiedEvidence && trustedProviders.has(verifiedEvidence.provider));
   const registrySource = registryTrusted
-    ? verifiedEvidence.source
+    ? verifiedEvidence!.source
     : (verifiedEvidence?.provider === 'mock' ? 'demo' : 'manual');
 
   await app.prisma.$transaction(async (tx) => {
@@ -208,6 +210,8 @@ export async function completeOnboarding(
       },
     });
   });
+
+  await ensureFreeSubscription(app, organizationId);
 
   const user = await app.prisma.user.findUniqueOrThrow({ where: { id: request.auth.userId }, include: publicUserInclude });
   return {

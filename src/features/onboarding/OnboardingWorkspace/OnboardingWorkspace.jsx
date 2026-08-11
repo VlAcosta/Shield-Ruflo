@@ -14,6 +14,7 @@ import {
   startOnboarding,
 } from '../../../services/onboarding/onboardingService';
 import './OnboardingWorkspace.scss';
+import './OnboardingRecovery.scss';
 
 const onlyDigits = (value, limit) => String(value || '').replace(/\D/g, '').slice(0, limit);
 
@@ -99,7 +100,7 @@ function OrganizationResult({ organization, onConfirm, onEdit }) {
       <dl className="organization-result__grid">
         <div><dt>ИНН</dt><dd>{organization.inn || '—'}</dd></div>
         {organization.type === 'ul' ? <div><dt>КПП</dt><dd>{organization.kpp || '—'}</dd></div> : null}
-        <div><dt>ОГРН</dt><dd>{organization.ogrn || '—'}</dd></div>
+        {organization.ogrn ? <div><dt>ОГРН</dt><dd>{organization.ogrn}</dd></div> : null}
         <div><dt>Адрес</dt><dd>{organization.address || '—'}</dd></div>
         <div><dt>Регистрация</dt><dd>{organization.registrationDate || '—'}</dd></div>
         <div><dt>Источник</dt><dd>{organization.source || (organization.demo ? 'Демо-режим' : 'Не указан')}</dd></div>
@@ -147,14 +148,14 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
     if (!validInn) return;
     setLookupState({ loading: true, error: '' });
     try {
-      const result = await lookupOrganizationByInn(organization.inn);
+      const result = await lookupOrganizationByInn(organization.inn, organization.type);
       const found = result.company || {};
       setDraft((prev) => ({
         ...prev,
         organization: {
           ...prev.organization,
-          type: found.type === 'ip' ? 'ip' : 'ul',
-          title: found.shortTitle || found.title || '',
+          type: found.type === 'smz' ? 'smz' : (found.type === 'ip' ? 'ip' : 'ul'),
+          title: found.type === 'smz' ? '' : (found.shortTitle || found.title || ''),
           inn: found.inn || prev.organization.inn,
           kpp: found.kpp || '',
           ogrn: found.ogrn || '',
@@ -167,7 +168,7 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
           demo: Boolean(result.demo),
         },
       }));
-      setManualMode(false);
+      setManualMode(found.type === 'smz');
     } catch (error) {
       setLookupState({ loading: false, error: error.message || 'Не удалось выполнить поиск' });
       return;
@@ -177,7 +178,7 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
 
   const manualReady = Boolean(organization.title.trim())
     && validInn
-    && (organization.type === 'ip' ? organization.ogrn.length === 15 : organization.kpp.length === 9);
+    && (organization.type === 'smz' ? true : (organization.type === 'ip' ? organization.ogrn.length === 15 : organization.kpp.length === 9));
 
   const confirmManual = () => {
     if (!manualReady) return;
@@ -215,8 +216,8 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
     <div className="onboarding-step onboarding-step--organization">
       <div className="onboarding-step__heading">
         <span className="onboarding-kicker">Шаг 1 · организация</span>
-        <h2>{manualMode ? 'Заполните реквизиты вручную' : 'Найдём вашу организацию по ИНН'}</h2>
-        <p>{manualMode ? 'Используйте ручной режим, если поиск временно недоступен.' : 'Введите ИНН — остальные официальные данные попробуем получить автоматически.'}</p>
+        <h2>{organization.type === 'smz' ? 'Подключим самозанятого к Бизнес Щит' : (manualMode ? 'Заполните реквизиты вручную' : 'Найдём вашу организацию по ИНН')}</h2>
+        <p>{organization.type === 'smz' ? 'Проверим действующий статус НПД в ФНС, затем попросим только название магазина или бренда.' : (manualMode ? 'Используйте ручной режим, если поиск временно недоступен.' : 'Введите ИНН — реквизиты ЕГРЮЛ/ЕГРИП получим автоматически.')}</p>
       </div>
 
       <div className="organization-layout">
@@ -235,6 +236,13 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
               onClick={() => invalidateConfirmation({ type: 'ip', inn: '', kpp: '', ogrn: '', title: '' })}
             >
               <strong>ИП</strong><span>ИНН 12 цифр</span>
+            </button>
+            <button
+              type="button"
+              className={organization.type === 'smz' ? 'is-active' : ''}
+              onClick={() => invalidateConfirmation({ type: 'smz', inn: '', kpp: '', ogrn: '', title: '' })}
+            >
+              <strong>Самозанятый</strong><span>НПД · маркетплейсы</span>
             </button>
           </div>
 
@@ -264,28 +272,31 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
             >
               <span className="organization-searchBtn__icon"><Icon name="search" size={19} /></span>
               <span>
-                <strong>{lookupState.loading ? 'Ищем организацию…' : 'Найти организацию'}</strong>
-                <small>Поиск через настроенный серверный источник</small>
+                <strong>{lookupState.loading ? 'Проверяем данные…' : (organization.type === 'smz' ? 'Проверить статус НПД' : 'Найти организацию')}</strong>
+                <small>{organization.type === 'smz' ? 'Официальная проверка ФНС' : 'ЕГРЮЛ / ЕГРИП'}</small>
               </span>
               <Icon name="arrow" size={18} />
             </button>
           ) : (
             <div className="organization-manualFields">
+              {organization.type === 'smz' && organization.status ? (
+                <div className="organization-npd-status"><Icon name="check" size={15} /><span><strong>Статус НПД подтверждён</strong><small>{organization.status}</small></span></div>
+              ) : null}
               <label className="onboarding-field">
-                <span>Наименование</span>
-                <input value={organization.title} onChange={(event) => invalidateConfirmation({ title: event.target.value })} placeholder="ООО «Название»" />
+                <span>{organization.type === 'smz' ? 'Название магазина / бренда' : 'Наименование'}</span>
+                <input value={organization.title} onChange={(event) => invalidateConfirmation({ title: event.target.value })} placeholder={organization.type === 'smz' ? 'Например, Acosta Store' : 'ООО «Название»'} />
               </label>
               {organization.type === 'ul' ? (
                 <label className="onboarding-field">
                   <span>КПП</span>
                   <input value={organization.kpp} onChange={(event) => invalidateConfirmation({ kpp: onlyDigits(event.target.value, 9) })} inputMode="numeric" placeholder="9 цифр" />
                 </label>
-              ) : (
+              ) : organization.type === 'ip' ? (
                 <label className="onboarding-field">
                   <span>ОГРН</span>
                   <input value={organization.ogrn} onChange={(event) => invalidateConfirmation({ ogrn: onlyDigits(event.target.value, 15) })} inputMode="numeric" placeholder="15 цифр" />
                 </label>
-              )}
+              ) : null}
               <label className="onboarding-field onboarding-field--wide">
                 <span>Юридический адрес <em>необязательно</em></span>
                 <input value={organization.address} onChange={(event) => invalidateConfirmation({ address: event.target.value })} placeholder="г. Москва" />

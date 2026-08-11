@@ -1,27 +1,18 @@
 import React, { memo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import usePortalProfile from '../hooks/usePortalProfile';
-import { LockIcon, ProfileIcon, ShieldMiniIcon } from '../icons';
+import { LockIcon, ProfileIcon, SubscriptionsIcon, FaqIcon } from '../icons';
 import useOrganizationContext from '../../../features/access/hooks/useOrganizationContext';
+import useAccessControl from '../../../features/access/hooks/useAccessControl';
 import { findFirstAllowedRoute, getCurrentAccessContext, getRoleLabel } from '../../../services/access/rbacService';
+import './PortalProfileMenuRecovery.scss';
 
-function CompanyIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 19V6.5H14V19M14 10H18V19M9 9H11M9 12H11M9 15H11M16 13H17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-}
-
-function AppearanceIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4.2a7.8 7.8 0 1 0 0 15.6h1.1c1.2 0 2-1.2 1.5-2.3-.5-1.1.3-2.3 1.5-2.3h1.1A2.8 2.8 0 0 0 20 12.4 8.2 8.2 0 0 0 12 4.2Z" stroke="currentColor" strokeWidth="1.6"/><circle cx="8.2" cy="10" r="1" fill="currentColor"/><circle cx="11.2" cy="7.8" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg>;
-}
-
-function UsersIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="2.8" stroke="currentColor" strokeWidth="1.6"/><path d="M4.8 18C5.7 15.6 7.1 14.4 9 14.4C10.9 14.4 12.3 15.6 13.2 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><path d="M14.8 7.2C16.5 7.2 17.7 8.4 17.7 10C17.7 11.5 16.6 12.6 15.2 12.8M15.5 15C17.4 15.3 18.7 16.3 19.3 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>;
-}
-
-const focusableSelector = 'button:not(:disabled), a[href], input:not(:disabled), [tabindex]:not([tabindex="-1"])';
+const focusableSelector = 'button:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])';
 
 function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
   const navigate = useNavigate();
   const profile = usePortalProfile();
+  const access = useAccessControl();
   const organizations = useOrganizationContext({ enabled: open });
   const rootRef = useRef(null);
 
@@ -67,6 +58,7 @@ function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
   };
 
   const switchOrganization = async (organizationId) => {
+    if (organizationId === organizations.activeOrganizationId || organizations.switchingId) return;
     try {
       const user = await organizations.select(organizationId);
       if (!user) return;
@@ -74,12 +66,14 @@ function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
       const completed = user.membership?.organization?.onboardingStatus === 'COMPLETED';
       navigate(completed ? findFirstAllowedRoute(getCurrentAccessContext(user.membership)) : '/onboarding', { replace: true });
     } catch {
-      // The hook keeps the previous organization active and exposes a retryable error.
+      // Keep previous tenant active; hook exposes the recoverable error.
     }
   };
 
+  const activeWorkspace = organizations.items.find(({ organization }) => organization.id === organizations.activeOrganizationId);
+
   return (
-    <div id="portal-profile-menu" ref={rootRef} className="portal-popover portal-popover--profile" role="dialog" aria-modal="false" aria-label="Профиль и рабочее пространство" tabIndex="-1">
+    <div id="portal-profile-menu" ref={rootRef} className="portal-popover portal-popover--profile portal-profile-menu--simple" role="dialog" aria-modal="false" aria-label="Аккаунт" tabIndex="-1">
       <div className="portal-profile-menu__identity">
         <div className="portal-profile-menu__avatar">
           {profile.avatar ? <img src={profile.avatar} alt="" /> : profile.initials}
@@ -90,86 +84,62 @@ function PortalProfileMenu({ open, onClose, onLock, triggerRef }) {
         </div>
       </div>
 
-      <section className="portal-profile-menu__organizations" aria-labelledby="organization-switcher-title">
-        <span className="portal-profile-menu__live" role="status" aria-live="polite" aria-atomic="true">{organizations.announcement}</span>
-        <div className="portal-profile-menu__organizationsTitle">
-          <strong id="organization-switcher-title">Рабочее пространство</strong>
-          {organizations.state === 'loading' ? <span role="status">Загружаем…</span> : null}
+      {organizations.error ? <div className="portal-profile-menu__notice" role="alert">{organizations.error}</div> : null}
+
+      {activeWorkspace ? (
+        <div className="portal-profile-menu__workspaceSummary">
+          <span>{String(activeWorkspace.organization.name || 'О').trim().slice(0, 1).toUpperCase()}</span>
+          <div><small>Рабочее пространство</small><strong>{activeWorkspace.organization.name}</strong></div>
+          {organizations.items.length > 1 ? <em>{organizations.items.length}</em> : <i>✓</i>}
         </div>
-        {organizations.state === 'error' ? (
-          <div className="portal-profile-menu__organizationsError" role="alert">
-            <span>{organizations.error}</span>
-            <button type="button" onClick={() => organizations.load()}>Повторить</button>
-          </div>
-        ) : null}
-        {organizations.items.length ? (
-          <ul className="portal-profile-menu__organizationList">
+      ) : organizations.items.length === 0 ? (
+        <div className="portal-profile-menu__workspaceRecovery">
+          <div><strong>Нет активных организаций</strong><small>Обновите список или завершите настройку рабочего пространства.</small></div>
+          <button type="button" onClick={() => organizations.load?.()}>Обновить</button>
+        </div>
+      ) : null}
+
+      {organizations.items.length > 1 ? (
+        <details className="portal-profile-menu__workspacePicker" open>
+          <summary>Сменить пространство</summary>
+          <div>
             {organizations.items.map(({ organization, membership }) => {
               const active = organization.id === organizations.activeOrganizationId;
-              const switching = organization.id === organizations.switchingId;
               return (
-                <li key={organization.id}>
-                  <button
-                    type="button"
-                    className={active ? 'is-active' : ''}
-                    onClick={() => { if (!active) switchOrganization(organization.id); }}
-                    disabled={!active && Boolean(organizations.switchingId)}
-                    aria-disabled={active ? 'true' : undefined}
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={`${organization.name}. ${active ? 'Текущее рабочее пространство' : getRoleLabel(membership?.role)}`}
-                  >
-                    <span>{String(organization.name || 'О').trim().slice(0, 1).toUpperCase()}</span>
-                    <div><strong>{organization.name}</strong><small>{active ? 'Текущее' : getRoleLabel(membership?.role)}</small></div>
-                    <i aria-hidden="true">{switching ? '…' : (active ? '✓' : '›')}</i>
-                  </button>
-                </li>
+                <button
+                  key={organization.id}
+                  type="button"
+                  aria-disabled={active ? 'true' : undefined}
+                  disabled={!active && Boolean(organizations.switchingId)}
+                  onClick={() => switchOrganization(organization.id)}
+                >
+                  <span>{organization.name}</span><small>{active ? 'Текущее' : getRoleLabel(membership?.role)}</small>
+                </button>
               );
             })}
-          </ul>
-        ) : null}
-        {organizations.state === 'ready' && !organizations.items.length ? (
-          <div className="portal-profile-menu__organizationsEmpty" role="status">
-            <strong>Нет активных организаций</strong>
-            <span>Проверьте статус доступа или обновите список.</span>
-            <button type="button" onClick={() => organizations.load()}>Обновить</button>
           </div>
-        ) : null}
-        {organizations.error && organizations.state !== 'error' ? <p role="alert">{organizations.error}</p> : null}
-      </section>
+        </details>
+      ) : null}
 
-      <div className="portal-profile-menu__section">
+      <div className="portal-profile-menu__simpleActions">
         <button type="button" onClick={() => go('/profile')}>
-          <span><ProfileIcon /></span>
-          <div><strong>Аккаунт</strong><small>Профиль, контакты и настройки</small></div>
+          <span><ProfileIcon /></span><div><strong>Настройки</strong><small>Аккаунт, компания, команда и безопасность</small></div>
         </button>
-        {profile.capabilities.canViewCompany ? (
-          <button type="button" onClick={() => go('/profile?tab=company')}>
-            <span><CompanyIcon /></span>
-            <div><strong>Компания</strong><small>Реквизиты организации</small></div>
+        {access.can('billing.view') ? (
+          <button type="button" onClick={() => go('/subscriptions')}>
+            <span><SubscriptionsIcon /></span><div><strong>Тариф и оплата</strong><small>План, лимиты и PRO</small></div>
           </button>
         ) : null}
-        {profile.capabilities.canViewUsers ? (
-          <button type="button" onClick={() => go('/profile?tab=users')}>
-            <span><UsersIcon /></span>
-            <div><strong>Команда</strong><small>Роли, доступы и безопасность</small></div>
+        {access.can('support.view') ? (
+          <button type="button" onClick={() => go('/faq')}>
+            <span><FaqIcon /></span><div><strong>Помощь</strong><small>FAQ и поддержка</small></div>
           </button>
         ) : null}
-        <button type="button" onClick={() => go('/profile?tab=security')}>
-          <span><ShieldMiniIcon /></span>
-          <div><strong>Безопасность</strong><small>PIN и активные сессии</small></div>
-        </button>
-        <button type="button" onClick={() => go('/profile?tab=appearance')}>
-          <span><AppearanceIcon /></span>
-          <div><strong>Оформление</strong><small>Светлая, тёмная или системная тема</small></div>
-        </button>
       </div>
 
-      <div className="portal-profile-menu__lock">
-        <button type="button" onClick={() => { onClose(); onLock?.(); }}>
-          <span><LockIcon /></span>
-          <div><strong>Заблокировать кабинет</strong><small>Для продолжения потребуется PIN</small></div>
-        </button>
-      </div>
+      <button type="button" className="portal-profile-menu__simpleLock" onClick={() => { onClose(); onLock?.(); }}>
+        <LockIcon /><span>Заблокировать кабинет</span>
+      </button>
     </div>
   );
 }

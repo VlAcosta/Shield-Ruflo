@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { authService } from '../../../services/auth/authService';
 import PortalSidebar from './PortalSidebar';
@@ -23,12 +23,19 @@ vi.mock('../../../features/appearance/hooks/useAppearance', () => ({
   }),
 }));
 vi.mock('../navigation', () => ({
-  navigationItems: [{
-    to: '/reviews',
-    label: 'Отзывы',
-    permission: 'reviews.view',
+  navigationPrimary: [],
+  navigationGroups: [{
+    id: 'reputation',
+    label: 'Репутация',
     Icon: () => null,
+    items: [{
+      to: '/reviews',
+      label: 'Отзывы',
+      permission: 'reviews.view',
+      Icon: () => null,
+    }],
   }],
+  navigationHelp: { to: '/faq', label: 'Помощь', permission: 'support.view', Icon: () => null },
 }));
 
 function renderSidebar() {
@@ -39,7 +46,7 @@ function renderSidebar() {
   );
 }
 
-describe('PortalSidebar logout', () => {
+describe('PortalSidebar logout and permission-aware navigation', () => {
   beforeEach(() => {
     authService.logout.mockReset();
     mockNavigate.mockReset();
@@ -49,7 +56,7 @@ describe('PortalSidebar logout', () => {
     authService.logout.mockResolvedValue(null);
     renderSidebar();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Выйти из аккаунта' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/auth?mode=login', { replace: true }));
     expect(authService.logout).toHaveBeenCalledTimes(1);
@@ -59,23 +66,19 @@ describe('PortalSidebar logout', () => {
     authService.logout.mockRejectedValue(new Error('Сессия не завершена'));
     renderSidebar();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Выйти из аккаунта' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Сессия не завершена');
-    expect(screen.getByRole('button', { name: 'Выйти из аккаунта' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Выйти' })).toBeEnabled();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  test('keeps a permission-locked destination focusable and explains why it cannot navigate', () => {
+  test('does not overload the sidebar with destinations unavailable to the current role', () => {
     renderSidebar();
 
-    const locked = screen.getByRole('button', { name: /Отзывы/ });
-    expect(locked).not.toBeDisabled();
-    expect(locked).toHaveAttribute('aria-disabled', 'true');
-    act(() => locked.focus());
-    expect(locked).toHaveFocus();
-    expect(screen.getByRole('status')).toHaveTextContent('Нет доступа. Текущая роль: Аналитик');
-    fireEvent.click(locked);
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByText('Отзывы')).not.toBeInTheDocument();
+    expect(screen.queryByText('Репутация')).not.toBeInTheDocument();
+    expect(screen.queryByText('Помощь')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
   });
 });

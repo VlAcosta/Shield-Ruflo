@@ -9,6 +9,7 @@ import {
   updateCompanyProfileSchema,
 } from './company.schemas.js';
 import { secureHashEquals } from '../../shared/security/tokens.js';
+import { lookupDadataCompany, lookupFnsNpdStatus, type CompanyLookupKind } from './company-registry.providers.js';
 import {
   formatRegistrationDate,
   inferLegalType,
@@ -22,7 +23,7 @@ type LookupEvidencePayload = {
   version: 1;
   expiresAt: number;
   source: string;
-  provider: 'mock' | 'webhook';
+  provider: 'mock' | 'webhook' | 'dadata' | 'fns_npd';
   organizationId: string;
   userId: string;
   company: CompanyLookupResult;
@@ -55,7 +56,7 @@ function evidenceCompany(company: CompanyLookupResult): CompanyLookupResult {
 export function createCompanyLookupEvidence(
   company: CompanyLookupResult,
   source: string,
-  provider: 'mock' | 'webhook',
+  provider: 'mock' | 'webhook' | 'dadata' | 'fns_npd',
   context: CompanyLookupContext,
   now = Date.now(),
 ): string {
@@ -77,7 +78,7 @@ export function verifyCompanyLookupEvidence(
   expectedCompany: CompanyLookupResult,
   context: CompanyLookupContext,
   now = Date.now(),
-): { source: string; provider: 'mock' | 'webhook' } | null {
+): { source: string; provider: 'mock' | 'webhook' | 'dadata' | 'fns_npd' } | null {
   if (!evidence) return null;
   const [encodedPayload, suppliedSignature, ...rest] = evidence.split('.');
   if (!encodedPayload || !suppliedSignature || rest.length > 0) return null;
@@ -88,7 +89,7 @@ export function verifyCompanyLookupEvidence(
     if (!rawPayload || typeof rawPayload !== 'object') return null;
     const payload = rawPayload as Partial<LookupEvidencePayload>;
     if (payload.version !== 1 || typeof payload.expiresAt !== 'number' || payload.expiresAt < now || typeof payload.source !== 'string') return null;
-    if (payload.provider !== 'mock' && payload.provider !== 'webhook') return null;
+    if (payload.provider !== 'mock' && payload.provider !== 'webhook' && payload.provider !== 'dadata' && payload.provider !== 'fns_npd') return null;
     if (payload.organizationId !== context.organizationId || payload.userId !== context.userId) return null;
     const company = companyLookupResultSchema.safeParse(payload.company);
     const expected = companyLookupResultSchema.safeParse(expectedCompany);
@@ -126,7 +127,14 @@ const DEV_COMPANIES: Record<string, CompanyLookupResult> = {
 export async function lookupCompanyByInn(
   inn: string,
   context: CompanyLookupContext,
+  kind: CompanyLookupKind = 'auto',
 ): Promise<{ company: CompanyLookupResult; source: string; demo: boolean; lookupEvidence: string }> {
+  if (kind === 'smz') {
+    const company = await lookupFnsNpdStatus(inn);
+    const source = 'ФНС России · НПД';
+    return { company, source, demo: false, lookupEvidence: createCompanyLookupEvidence(company, source, 'fns_npd', context) };
+  }
+
   if (env.COMPANY_LOOKUP_PROVIDER === 'disabled') {
     throw new AppError({
       code: 'COMPANY_LOOKUP_UNAVAILABLE',
@@ -148,6 +156,15 @@ export async function lookupCompanyByInn(
     return { company, source, demo: true, lookupEvidence: createCompanyLookupEvidence(company, source, 'mock', context) };
   }
 
+  if (env.COMPANY_LOOKUP_PROVIDER === 'dadata') {
+    const company = await lookupDadataCompany(inn, kind);
+    if (!company) {
+      throw new AppError({ code: 'COMPANY_NOT_FOUND', message: 'Организация или ИП с таким ИНН не найдены', statusCode: 404 });
+    }
+    const source = 'DaData · ЕГРЮЛ/ЕГРИП';
+    return { company, source, demo: false, lookupEvidence: createCompanyLookupEvidence(company, source, 'dadata', context) };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.COMPANY_LOOKUP_WEBHOOK_TIMEOUT_MS);
   try {
@@ -157,7 +174,7 @@ export async function lookupCompanyByInn(
         'content-type': 'application/json',
         ...(env.COMPANY_LOOKUP_WEBHOOK_TOKEN ? { authorization: `Bearer ${env.COMPANY_LOOKUP_WEBHOOK_TOKEN}` } : {}),
       },
-      body: JSON.stringify({ inn }),
+      body: JSON.stringify({ inn, kind }),
       signal: controller.signal,
     });
     if (response.status === 404) {
@@ -247,7 +264,9 @@ export async function updateCompanyProfile(
   const nextInn = Object.prototype.hasOwnProperty.call(input, 'inn') ? input.inn || null : current.inn;
   const nextKpp = Object.prototype.hasOwnProperty.call(input, 'kpp') ? input.kpp || null : current.kpp;
   const nextOgrn = Object.prototype.hasOwnProperty.call(input, 'ogrn') ? input.ogrn || null : current.ogrn;
-  const legalType = inferLegalType(nextInn) ?? (current.legalType === 'ul' || current.legalType === 'ip' ? current.legalType : null);
+  const legalType = (current.legalType === 'ul' || current.legalType === 'ip' || current.legalType === 'smz')
+    ? current.legalType
+    : inferLegalType(nextInn);
   validateCompanyIdentifiers({ inn: nextInn, kpp: nextKpp, ogrn: nextOgrn, legalType });
 
   const registryIdentityChanged = nextInn !== current.inn || nextKpp !== current.kpp || nextOgrn !== current.ogrn;

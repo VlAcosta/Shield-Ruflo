@@ -8,11 +8,11 @@ export const companyRoutes: FastifyPluginAsync = async (app) => {
     if (!request.auth?.organizationId) {
       throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
     }
-    const { inn } = companyLookupSchema.parse(request.body);
+    const { inn, kind = 'auto' } = companyLookupSchema.parse(request.body);
     return lookupCompanyByInn(inn, {
       organizationId: request.auth.organizationId,
       userId: request.auth.userId,
-    });
+    }, kind);
   });
 
   app.get('/company/profile', {

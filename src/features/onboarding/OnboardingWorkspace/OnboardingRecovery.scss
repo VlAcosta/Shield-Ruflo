@@ -1,0 +1,45 @@
+.onboarding-step--organization {
+  .organization-type {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .organization-type button {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+
+  .organization-type button strong { font-size: 14px; }
+  .organization-type button span { font-size: 11px; }
+
+  .organization-npd-status {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 11px 13px;
+    border: 1px solid rgba(26, 168, 103, .22);
+    border-radius: 13px;
+    color: #15895a;
+    background: rgba(26, 168, 103, .07);
+  }
+
+  .organization-npd-status > span { display: grid; gap: 2px; }
+  .organization-npd-status strong { font-size: 13px; }
+  .organization-npd-status small { color: #668878; font-size: 11px; line-height: 1.35; }
+
+  .onboarding-step__heading h2 { max-width: 720px; }
+  .onboarding-step__heading p { max-width: 760px; }
+}
+
+@media (max-width: 760px) {
+  .onboarding-step--organization .organization-type {
+    grid-template-columns: 1fr;
+  }
+}
+
+[data-theme='dark'] .onboarding-step--organization .organization-npd-status {
+  background: rgba(38, 193, 125, .1);
+  border-color: rgba(38, 193, 125, .25);
+  color: #66d7a6;
+}
