@@ -66,6 +66,7 @@ export default function SystemProfile({ access }) {
               type="button"
               className={activeSection === item.id ? 'is-active' : ''}
               aria-current={activeSection === item.id ? 'page' : undefined}
+              aria-label={item.state === 'plan_locked' ? `${item.label} · доступно в PRO` : item.label}
               onClick={() => selectSection(item.id)}
             >
               <span>{item.label}</span>
