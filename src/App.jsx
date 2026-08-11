@@ -29,6 +29,7 @@ const AuthPage = lazy(() => import('./pages/AuthPage'));
 const PricingPage = lazy(() => import('./pages/PricingPage'));
 const ReviewsPage = lazy(() => import('./pages/portal/ReviewsPage'));
 const ReputationPage = lazy(() => import('./pages/portal/ReputationPage'));
+const CasesPage = lazy(() => import('./pages/portal/CasesPage'));
 const AutomationsPage = lazy(() => import('./pages/portal/AutomationsPage'));
 const IntegrationsPage = lazy(() => import('./pages/portal/IntegrationsPage'));
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
@@ -40,7 +41,7 @@ const AdminSubscriptionsPage = lazy(() => import('./pages/admin/AdminSubscriptio
 const AdminAnalyticsPage = lazy(() => import('./pages/admin/AdminAnalyticsPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 
-const protectedPortalPaths = ['/onboarding','/dashboard','/reviews','/reputation','/automations','/integrations','/subscriptions','/reports','/tasks','/profile','/knowledge-base','/notifications','/chat','/video-consultations','/faq','/blocked','/access-denied'];
+const protectedPortalPaths = ['/onboarding','/dashboard','/reviews','/reputation','/cases','/automations','/integrations','/subscriptions','/reports','/tasks','/profile','/knowledge-base','/notifications','/chat','/video-consultations','/faq','/blocked','/access-denied'];
 
 function RouteFallback({ tone = 'portal' }) {
   return <div className={`route-fallback route-fallback--${tone}`} role="status" aria-live="polite" aria-label="Загрузка раздела"><span /><span /><span /></div>;
@@ -195,6 +196,7 @@ function App() {
         <Route path="/dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
         <Route path="/reviews" element={<LazyRoute><ReviewsPage /></LazyRoute>} />
         <Route path="/reputation" element={<LazyRoute><ReputationPage /></LazyRoute>} />
+        <Route path="/cases" element={<LazyRoute><CasesPage /></LazyRoute>} />
         <Route path="/automations" element={<LazyRoute><AutomationsPage /></LazyRoute>} />
         <Route path="/integrations" element={<LazyRoute><IntegrationsPage /></LazyRoute>} />
         <Route path="/subscriptions" element={<LazyRoute><SubscriptionsPage /></LazyRoute>} />
