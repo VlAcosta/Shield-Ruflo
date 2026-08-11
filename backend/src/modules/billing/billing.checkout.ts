@@ -118,6 +118,7 @@ async function ensureConstructorPlan(tx: FastifyInstance['prisma'], organization
   const plan = await tx.plan.upsert({
     where: { code: customPlanCode(organizationId) },
     create: {
+      organizationId,
       code: customPlanCode(organizationId),
       name: 'Индивидуальный',
       priceCents: payment.amountCents,
@@ -125,6 +126,7 @@ async function ensureConstructorPlan(tx: FastifyInstance['prisma'], organization
       active: false,
     },
     update: {
+      organizationId,
       name: 'Индивидуальный',
       priceCents: payment.amountCents,
       currency: 'RUB',

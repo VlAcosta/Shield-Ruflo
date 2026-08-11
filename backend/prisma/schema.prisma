@@ -511,6 +511,7 @@ model Organization {
   aiVisibilityCitations    AiVisibilityCitation[]
   aiVisibilityCompetitors  AiVisibilityCompetitor[]
   subscriptions          Subscription[]
+  customPlans             Plan[] @relation("OrganizationPlans")
   payments               Payment[]
   usageRecords           Usage[]
 
