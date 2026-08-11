@@ -213,14 +213,22 @@ export async function processReviewAnalysisJob(
     });
     const completedAt = new Date();
     const outputHash = stableHash(result.output);
-    const latest = await prisma.reviewInsight.findFirst({
-      where: { organizationId: payload.organizationId, reviewId: payload.reviewId },
-      orderBy: { analysisVersion: 'desc' },
-      select: { analysisVersion: true },
-    });
-    const analysisVersion = (latest?.analysisVersion ?? 0) + 1;
 
     const insight = await prisma.$transaction(async (tx) => {
+      // Multiple worker processes may finish forced reanalysis for the same review
+      // concurrently. Serialize only version allocation for that review so history
+      // keeps a deterministic monotonic analysisVersion without a global lock.
+      await tx.$queryRaw<Array<{ acquired: number }>>`
+        SELECT 1::int AS acquired
+        FROM (SELECT pg_advisory_xact_lock(hashtext(${payload.reviewId}), 18)) AS advisory_lock
+      `;
+      const latest = await tx.reviewInsight.findFirst({
+        where: { organizationId: payload.organizationId, reviewId: payload.reviewId },
+        orderBy: { analysisVersion: 'desc' },
+        select: { analysisVersion: true },
+      });
+      const analysisVersion = (latest?.analysisVersion ?? 0) + 1;
+
       const created = await tx.reviewInsight.create({
         data: {
           organizationId: payload.organizationId,
