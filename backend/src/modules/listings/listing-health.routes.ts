@@ -3,6 +3,7 @@ import { AppError } from '../../core/errors/app-error.js';
 import {
   createListingSourceSchema,
   listingOverviewQuerySchema,
+  listingProviderAccountParamsSchema,
   listingSourceIdParamsSchema,
   locationIdParamsSchema,
   updateCanonicalListingSchema,
@@ -14,6 +15,10 @@ import {
   listingHealthOverview,
   updateCanonicalLocation,
 } from './listing-health.service.js';
+import {
+  listListingProviderAccounts,
+  listListingProviderLocations,
+} from './listing-provider.service.js';
 
 function tenant(request: FastifyRequest) {
   if (!request.auth?.organizationId) {
@@ -23,6 +28,21 @@ function tenant(request: FastifyRequest) {
 }
 
 export const listingHealthRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/listing-health/provider-accounts', {
+    preHandler: [app.authenticate, app.authorize('locations.view')],
+  }, async (request) => {
+    const context = tenant(request);
+    return listListingProviderAccounts(app, context.organizationId);
+  });
+
+  app.get('/listing-health/provider-accounts/:accountId/locations', {
+    preHandler: [app.authenticate, app.authorize('integrations.manage')],
+  }, async (request) => {
+    const context = tenant(request);
+    const { accountId } = listingProviderAccountParamsSchema.parse(request.params);
+    return listListingProviderLocations(app, context.organizationId, accountId);
+  });
+
   app.get('/listing-health/locations', {
     preHandler: [app.authenticate, app.authorize('locations.view')],
   }, async (request) => {
