@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import BrandMark from '../../components/brand/BrandMark';
 import { authService } from '../../services/auth/authService';
@@ -41,7 +41,7 @@ function ArrowIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-function AuthSide({ selectedPlan, invitation }) {
+function AuthSide({ invitation }) {
   return (
     <aside className="auth-v2__side">
       <Link to="/" className="auth-v2__brand"><BrandMark size={46} /><span><strong>БИЗНЕС ЩИТ</strong><small>reputation operating system</small></span></Link>
@@ -57,14 +57,7 @@ function AuthSide({ selectedPlan, invitation }) {
           <small>{getRoleLabel(invitation.role)}</small>
           <i>Организация уже настроена владельцем</i>
         </div>
-      ) : (
-        <div className="auth-v2__proof">
-          <div><strong>98%</strong><span>положительных результатов</span></div>
-          <div><strong>10k+</strong><span>обработанных отзывов</span></div>
-          <div><strong>24/7</strong><span>мониторинг и поддержка</span></div>
-        </div>
-      )}
-      {selectedPlan && !invitation ? <div className="auth-v2__plan"><span>Выбран тариф</span><strong>{selectedPlan.title || selectedPlan.name}</strong><small>{selectedPlan.total ? `${Number(selectedPlan.total).toLocaleString('ru-RU')} ₽` : 'Условия сохранены'}</small></div> : null}
+      ) : null}
       <div className="auth-v2__orb auth-v2__orb--one" aria-hidden="true" /><div className="auth-v2__orb auth-v2__orb--two" aria-hidden="true" />
     </aside>
   );
@@ -146,11 +139,6 @@ export default function AuthWorkspace() {
   const [inviteError, setInviteError] = useState('');
   const otpRefs = useRef([]);
 
-  const selectedPlan = useMemo(() => {
-    if (invitationMode) return null;
-    try { return JSON.parse(localStorage.getItem('selectedPlan') || 'null'); } catch { return null; }
-  }, [invitationMode]);
-
   const fullPhone = `${country.dial}${onlyDigits(phoneTail).slice(0, country.digits)}`;
   const phoneReady = onlyDigits(phoneTail).length === country.digits;
   const otpReady = code.every(Boolean);
@@ -204,7 +192,7 @@ export default function AuthWorkspace() {
     if (!phoneReady || busy) return;
     setBusy(true); setError('');
     try {
-      const result = await authService.requestCode({ phone: fullPhone, mode: invitationMode ? 'register' : mode, planId: selectedPlan?.id, invitationToken: inviteToken || undefined });
+      const result = await authService.requestCode({ phone: fullPhone, mode: invitationMode ? 'register' : mode, invitationToken: inviteToken || undefined });
       setSessionId(result.session_id || result.sessionId || ''); setCode(['','','','']); setSeconds(60); setStep('otp');
       setTimeout(() => otpRefs.current[0]?.focus(), 80);
     } catch (err) { setError(err?.message || 'Не удалось отправить код'); } finally { setBusy(false); }
@@ -240,8 +228,8 @@ export default function AuthWorkspace() {
     if (!profileReady || busy) return;
     setBusy(true); setError('');
     try {
-      const result = await authService.register({ phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), plan: selectedPlan, invitationToken: inviteToken || undefined });
-      let user = result.user || { phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), plan: selectedPlan };
+      const result = await authService.register({ phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), invitationToken: inviteToken || undefined });
+      let user = result.user || { phone: fullPhone, firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim() };
 
       if (invitationMode) {
         const membership = await acceptCompanyInvitation(inviteToken, user);
@@ -264,7 +252,7 @@ export default function AuthWorkspace() {
 
   return (
     <main className={`auth-v2 ${invitationMode ? 'auth-v2--invitation' : ''}`}>
-      <AuthSide selectedPlan={selectedPlan} invitation={invitation} />
+      <AuthSide invitation={invitation} />
       <section className="auth-v2__main">
         <Link className="auth-v2__mobile-brand" to="/"><BrandMark size={38} /><strong>БИЗНЕС ЩИТ</strong></Link>
         <div className="auth-v2__card">
