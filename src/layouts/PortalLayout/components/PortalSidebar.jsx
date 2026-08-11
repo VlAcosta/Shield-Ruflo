@@ -1,8 +1,8 @@
-import React, { memo, useEffect, useState } from 'react';
+import React, { memo, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LockIcon, MoonIcon, SunIcon } from '../icons';
 import BrandMark from '../../../components/brand/BrandMark';
-import { navigationGroups, navigationHelp, navigationPrimary } from '../navigation';
+import { navigationHelp, navigationPrimary } from '../navigation';
 import useAccessControl from '../../../features/access/hooks/useAccessControl';
 import { findFirstAllowedRoute } from '../../../services/access/rbacService';
 import useAppearance from '../../../features/appearance/hooks/useAppearance';
@@ -19,21 +19,8 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
   const brandTarget = navigationLocked ? '/onboarding' : findFirstAllowedRoute(access);
 
   const allowed = (item) => !item.permission || access.can(item.permission);
-  const visibleGroups = navigationGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => !item.permission || access.can(item.permission)),
-    }))
-    .filter((group) => group.items.length > 0);
-  const activeGroup = visibleGroups.find((group) => group.items.some(({ to }) => (
-    location.pathname === to || location.pathname.startsWith(`${to}/`)
-  )))?.id || '';
-  const [openGroup, setOpenGroup] = useState(activeGroup || 'reputation');
+  const visiblePrimary = navigationPrimary.filter(allowed);
   const HelpIcon = navigationHelp.Icon;
-
-  useEffect(() => {
-    if (activeGroup) setOpenGroup(activeGroup);
-  }, [activeGroup]);
 
   const logout = async () => {
     if (loggingOut) return;
@@ -46,17 +33,6 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
       setLogoutError(error?.message || 'Не удалось завершить сессию. Повторите попытку.');
       setLoggingOut(false);
     }
-  };
-
-  const renderDirect = ({ to, label, Icon, accent, permission }) => {
-    if (permission && !access.can(permission)) return null;
-    const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
-    return (
-      <NavLink key={to} to={to} className={`portal__navItem portal__navItem--primary ${accent ? 'portal__navItem--accent' : ''} ${active ? 'is-active' : ''}`}>
-        <span className="portal__navIcon"><Icon /></span>
-        <span className="portal__navText">{label}</span>
-      </NavLink>
-    );
   };
 
   return (
@@ -75,44 +51,16 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
           <p>Основные разделы появятся после первичной настройки.</p>
         </div>
       ) : (
-        <nav className="portal__nav portal__nav--grouped" aria-label="Навигация кабинета">
-          {navigationPrimary.map(renderDirect)}
-
-          <div className="portal__navGroups">
-            {visibleGroups.map((group) => {
-              const GroupIcon = group.Icon;
-              const expanded = openGroup === group.id;
-              const groupActive = activeGroup === group.id;
-              return (
-                <section className={`portal__navGroup ${groupActive ? 'is-active' : ''}`} key={group.id}>
-                  <button
-                    type="button"
-                    className="portal__navGroupButton"
-                    aria-expanded={expanded}
-                    onClick={() => setOpenGroup((current) => current === group.id ? '' : group.id)}
-                  >
-                    <span className="portal__navIcon"><GroupIcon /></span>
-                    <span>{group.label}</span>
-                    <span className="portal__navChevron" aria-hidden="true">⌄</span>
-                  </button>
-                  {expanded ? (
-                    <div className="portal__navChildren">
-                      {group.items.map(({ to, label, Icon }) => {
-                        const ChildIcon = Icon;
-                        const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
-                        return (
-                          <NavLink key={to} to={to} className={`portal__navItem portal__navItem--child ${active ? 'is-active' : ''}`}>
-                            <span className="portal__navIcon"><ChildIcon /></span>
-                            <span className="portal__navText">{label}</span>
-                          </NavLink>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </section>
-              );
-            })}
-          </div>
+        <nav className="portal__nav portal__nav--compact" aria-label="Основные разделы">
+          {visiblePrimary.map(({ to, label, Icon }) => {
+            const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
+            return (
+              <NavLink key={to} to={to} className={`portal__navItem portal__navItem--primary ${active ? 'is-active' : ''}`}>
+                <span className="portal__navIcon"><Icon /></span>
+                <span className="portal__navText">{label}</span>
+              </NavLink>
+            );
+          })}
         </nav>
       )}
 
