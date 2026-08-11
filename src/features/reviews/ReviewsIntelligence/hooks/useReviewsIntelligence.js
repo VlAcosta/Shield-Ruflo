@@ -8,19 +8,22 @@ import {
   REVIEW_WORKFLOW,
 } from '../../model/reviewData';
 import { getReviewIntelligence, reanalyzeReview } from '../../../../services/reviews/reviewInsightService';
+import { generateAiReply, waitForAiReply } from '../../../../services/reviews/replyCopilotService';
+import {
+  approveReviewReply,
+  publishReviewReply,
+  rejectReviewReply,
+  submitReplyForApproval,
+} from '../../../../services/reviews/reviewsService';
 import {
   REVIEW_SETTINGS_CHANGED_EVENT,
-  approveReviewDraft,
   delegateReviewToShield,
   ensureNegativeReviewTask,
-  generateAiDraft,
   getReviewSettings,
   getReviewSentiment,
   getReviewSla,
   openLegalReviewCase,
-  publishThroughProvider,
   readReviewSettings,
-  requestReviewDraftChanges,
   saveReviewSettings,
 } from '../../../../services/reviews/reviewIntelligenceService';
 
@@ -65,7 +68,7 @@ export default function useReviewsIntelligence() {
     ...(filters.queue === 'inbox' ? { status: 'new,deferred' } : {}),
   }), [deferredQuery, filters.queue, filters.rating, filters.sentiment]);
   const reviewsState = useReviews(serverQuery);
-  const { reviews, patchReview, replyToReview } = reviewsState;
+  const { reviews, patchReview, replyToReview, reload, pagination } = reviewsState;
   const [selectedId, setSelectedId] = useState(() => searchParams.get('review') || '');
   const [working, setWorking] = useState('');
   const [notice, setNotice] = useState(null);
@@ -84,9 +87,6 @@ export default function useReviewsIntelligence() {
       .catch(() => {});
     return () => controller.abort();
   }, []);
-
-  // Negative review task creation is handled by the global Automation Engine.
-
 
   const enrichedReviews = useMemo(() => reviews.map((review) => ({
     ...review,
@@ -197,34 +197,61 @@ export default function useReviewsIntelligence() {
     }
   }, []);
 
-  const generateDraft = useCallback(async (review = selectedReview) => {
+  const reloadCurrent = useCallback(() => reload(pagination.page), [pagination.page, reload]);
+
+  const generateDraft = useCallback(async (review = selectedReview, mode = 'EMPATHETIC') => {
     if (!review) return null;
     return run(`ai:${review.id}`, async () => {
-      const draft = await generateAiDraft(review, settings);
-      await replyToReview(review.id, draft.text);
-      return draft;
-    }, 'Черновик подготовлен');
-  }, [replyToReview, run, selectedReview, settings]);
+      const queued = await generateAiReply(review.id, { mode, instructions: settings.toneInstruction || '' });
+      const operation = await waitForAiReply(review.id, queued.operationId);
+      await reloadCurrent();
+      return operation.reply;
+    }, 'AI-черновик подготовлен');
+  }, [reloadCurrent, run, selectedReview, settings.toneInstruction]);
 
   const saveDraft = useCallback(async (text) => {
-    if (!selectedReview) return;
-    return run(`draft:${selectedReview.id}`, async () => {
-      return replyToReview(selectedReview.id, text);
-    }, 'Черновик сохранён');
+    if (!selectedReview) return null;
+    return run(`draft:${selectedReview.id}`, async () => replyToReview(selectedReview.id, text), 'Черновик сохранён');
   }, [replyToReview, run, selectedReview]);
 
   const delegateToShield = useCallback((note = '') => selectedReview && run(`shield:${selectedReview.id}`, () => delegateReviewToShield(selectedReview.id, note), 'Отзыв передан команде Бизнес Щит'), [run, selectedReview]);
 
   const submitReply = useCallback(async (text) => {
-    if (!selectedReview) return;
+    if (!selectedReview) return null;
     const value = String(text || '').trim();
     if (!value) throw new Error('Напишите ответ');
-    return saveDraft(value);
-  }, [saveDraft, selectedReview]);
+    return run(`submit:${selectedReview.id}`, async () => {
+      let replyId = selectedReview.replyId;
+      if (!replyId || value !== String(selectedReview.reply || '').trim()) {
+        const draft = await replyToReview(selectedReview.id, value);
+        replyId = draft.replyId || draft.replyRecord?.id;
+      }
+      if (!replyId) throw new Error('Сервер не вернул идентификатор черновика');
+      await submitReplyForApproval(selectedReview.id, replyId);
+      await reloadCurrent();
+      return replyId;
+    }, 'Ответ отправлен на согласование');
+  }, [reloadCurrent, replyToReview, run, selectedReview]);
 
-  const approve = useCallback(() => selectedReview && run(`approve:${selectedReview.id}`, () => approveReviewDraft(selectedReview.id), 'Ответ согласован'), [run, selectedReview]);
-  const requestChanges = useCallback((note) => selectedReview && run(`changes:${selectedReview.id}`, () => requestReviewDraftChanges(selectedReview.id, note), 'Ответ возвращён на доработку'), [run, selectedReview]);
-  const publishApproved = useCallback(() => selectedReview && run(`publish:${selectedReview.id}`, () => publishThroughProvider(selectedReview, selectedReview.reply), 'Согласованный ответ опубликован'), [run, selectedReview]);
+  const approve = useCallback(() => selectedReview && run(`approve:${selectedReview.id}`, async () => {
+    if (!selectedReview.replyId) throw new Error('Ответ для согласования не найден');
+    await approveReviewReply(selectedReview.id, selectedReview.replyId);
+    await reloadCurrent();
+  }, 'Ответ согласован'), [reloadCurrent, run, selectedReview]);
+
+  const requestChanges = useCallback((note) => selectedReview && run(`changes:${selectedReview.id}`, async () => {
+    if (!selectedReview.replyId) throw new Error('Ответ для возврата не найден');
+    await rejectReviewReply(selectedReview.id, selectedReview.replyId, note);
+    await reloadCurrent();
+  }, 'Ответ возвращён на доработку'), [reloadCurrent, run, selectedReview]);
+
+  const publishApproved = useCallback(() => selectedReview && run(`publish:${selectedReview.id}`, async () => {
+    if (!selectedReview.replyId) throw new Error('Согласованный ответ не найден');
+    const queued = await publishReviewReply(selectedReview.id, selectedReview.replyId);
+    await reloadCurrent();
+    return queued;
+  }, 'Публикация поставлена в очередь'), [reloadCurrent, run, selectedReview]);
+
   const escalateLegal = useCallback((payload) => selectedReview && run(`legal:${selectedReview.id}`, () => openLegalReviewCase(selectedReview.id, payload), 'Отзыв передан на юридическую проверку'), [run, selectedReview]);
   const ensureTask = useCallback(() => selectedReview && run(`task:${selectedReview.id}`, async () => {
     const taskId = await ensureNegativeReviewTask(selectedReview);
