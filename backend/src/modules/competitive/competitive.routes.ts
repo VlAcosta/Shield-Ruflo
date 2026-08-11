@@ -65,7 +65,14 @@ export const competitiveRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/competitive/competitors/:competitorId', { preHandler: [app.authenticate, app.authorize('competitive.manage')] }, async (request) => {
     const context = tenant(request);
     const { competitorId } = competitorIdParamsSchema.parse(request.params);
-    return { competitor: await updateCompetitor(app, context, competitorId, updateCompetitorSchema.parse(request.body)) };
+    const input = updateCompetitorSchema.parse(request.body);
+    const updates = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.website !== undefined ? { website: input.website } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    };
+    return { competitor: await updateCompetitor(app, context, competitorId, updates) };
   });
 
   app.post('/competitive/competitors/:competitorId/locations/:locationId/snapshots', { preHandler: [app.authenticate, app.authorize('competitive.manage')] }, async (request, reply) => {
