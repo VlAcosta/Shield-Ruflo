@@ -147,17 +147,17 @@ export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
 ]);
 
 const entitlementPermissionGates: Readonly<Record<string, readonly Permission[]>> = Object.freeze({
-  analytics: Object.freeze(['analytics.view']),
-  automations: Object.freeze(['automations.view', 'automations.manage']),
-  reports: Object.freeze(['reports.view', 'reports.create', 'reports.export']),
-  competitive: Object.freeze(['competitive.view', 'competitive.manage']),
-  aiVisibility: Object.freeze(['ai_visibility.view', 'ai_visibility.manage', 'ai_visibility.run']),
-  aiFeatures: Object.freeze([
+  analytics: ['analytics.view'] as readonly Permission[],
+  automations: ['automations.view', 'automations.manage'] as readonly Permission[],
+  reports: ['reports.view', 'reports.create', 'reports.export'] as readonly Permission[],
+  competitive: ['competitive.view', 'competitive.manage'] as readonly Permission[],
+  aiVisibility: ['ai_visibility.view', 'ai_visibility.manage', 'ai_visibility.run'] as readonly Permission[],
+  aiFeatures: [
     'reviews.intelligence.read',
     'reviews.intelligence.reanalyze',
     'ai.brand_voice.manage',
     'ai.autopilot.manage',
-  ]),
+  ] as readonly Permission[],
 });
 
 export function isPermission(value: string): value is Permission {
