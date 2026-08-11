@@ -1,0 +1,118 @@
+name: P22 Ruflo Recovery
+
+on:
+  push:
+    branches:
+      - feat/product-v2-p22-competitive-intelligence
+    paths:
+      - scripts/p22-recovery.py
+      - .github/workflows/p22-recovery.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: p22-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: business_shield
+          POSTGRES_PASSWORD: business_shield_test
+          POSTGRES_DB: business_shield_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U business_shield -d business_shield_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      TEST_DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      AUTH_SECRET: ci-only-business-shield-auth-secret-0123456789
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_OTP_PROVIDER: console
+      AUTH_OTP_FIXED_CODE: ""
+      AUTH_EXPOSE_DEBUG_CODE: "false"
+      COMPANY_LOOKUP_PROVIDER: disabled
+      INTEGRATION_CREDENTIALS_KEY: ci-only-integration-credential-key-0123456789
+      PLATFORM_ADMIN_IDENTITIES: ci-platform-admin@example.test
+      SWAGGER_ENABLED: "false"
+      CORS_ORIGINS: http://localhost:3000
+      AI_REVIEW_INTELLIGENCE_ENABLED: "false"
+      GOOGLE_PLACES_ENABLED: "false"
+      GOOGLE_PLACES_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply P22 backend integration with current env recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q '^model CompetitiveCompetitor {' backend/prisma/schema.prisma; then
+            set +e
+            python3 scripts/p22-agent-apply.py
+            agent_status=$?
+            set -e
+            if [ "$agent_status" -ne 0 ]; then
+              echo "Legacy agent stopped at its known env anchor; validating partial product patch before recovery."
+            fi
+          fi
+          python3 scripts/p22-recovery.py
+          python3 scripts/p22-type-fix.py
+          grep -q '^model CompetitiveCompetitor {' backend/prisma/schema.prisma
+          grep -q "'competitive.view'" backend/src/core/rbac/permissions.ts
+          grep -q 'competitiveRoutes' backend/src/app.ts
+          grep -q 'GOOGLE_PLACES_ENABLED:' backend/src/config/env.ts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+      - name: Prisma generate
+        working-directory: backend
+        run: npm run prisma:generate
+      - name: Apply migrations
+        working-directory: backend
+        run: npm run db:deploy
+      - name: Migration status
+        working-directory: backend
+        run: npm run db:status
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck
+      - name: Tests
+        working-directory: backend
+        run: npm test
+      - name: Build
+        working-directory: backend
+        run: npm run build
+      - name: Commit validated P22 backend product integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            backend/prisma/schema.prisma \
+            backend/src/app.ts \
+            backend/src/core/rbac/permissions.ts \
+            backend/src/config/env.ts
+          if git diff --cached --quiet; then
+            echo "P22 backend product integration already committed"
+            exit 0
+          fi
+          git commit -m "feat(p22): integrate competitive intelligence backend"
+          git push origin HEAD:feat/product-v2-p22-competitive-intelligence
