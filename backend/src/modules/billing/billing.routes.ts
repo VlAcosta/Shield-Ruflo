@@ -19,10 +19,7 @@ function orgId(request: FastifyRequest): string {
 function idempotencyKey(request: FastifyRequest): string {
   const value = request.headers['idempotency-key'];
   const normalized = Array.isArray(value) ? value[0] : value;
-  if (!normalized) {
-    throw new AppError({ code: 'IDEMPOTENCY_KEY_REQUIRED', message: 'Для оплаты требуется Idempotency-Key', statusCode: 400 });
-  }
-  return normalized;
+  return normalized ?? '';
 }
 
 export const billingRoutes: FastifyPluginAsync = async (app) => {
