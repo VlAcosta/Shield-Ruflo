@@ -17,7 +17,11 @@ function formatDate(value: unknown): string | undefined {
   if (Number.isNaN(date.getTime())) return undefined;
   const day = String(date.getUTCDate()).padStart(2, '0');
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  return `${day}.${month}.${date.getUTCFullYear()}`;
+  return `${day}.${month}.${UTCFullYear(date)}`;
+}
+
+function UTCFullYear(date: Date): number {
+  return date.getUTCFullYear();
 }
 
 function todayIso(): string {
@@ -39,6 +43,60 @@ function stateLabel(value: unknown): string | undefined {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+/** Pure adapter mapping: transport credentials are deliberately excluded so mapping can be regression-tested safely. */
+export function mapDadataCompanyPayload(
+  payloadValue: unknown,
+  inn: string,
+  kind: CompanyLookupKind,
+): CompanyLookupResult | null {
+  const payload = asRecord(payloadValue);
+  const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+  if (!suggestions.length) return null;
+
+  const suggestion = asRecord(suggestions[0]);
+  const data = asRecord(suggestion.data);
+  if (String(data.inn ?? '') !== inn) return null;
+
+  const apiType = String(data.type ?? '').toUpperCase();
+  const type: 'ul' | 'ip' = apiType === 'INDIVIDUAL' ? 'ip' : 'ul';
+  if (kind === 'ul' && type !== 'ul') return null;
+  if (kind === 'ip' && type !== 'ip') return null;
+
+  const name = asRecord(data.name);
+  const fio = asRecord(data.fio);
+  const address = asRecord(data.address);
+  const addressData = asRecord(address.data);
+  const state = asRecord(data.state);
+  const fallbackPerson = type === 'ip'
+    ? [fio.surname, fio.name, fio.patronymic].filter(Boolean).join(' ')
+    : '';
+  const title = String(
+    name.short_with_opf
+      ?? name.full_with_opf
+      ?? suggestion.value
+      ?? fallbackPerson
+      ?? '',
+  ).trim();
+
+  if (!title) {
+    throw new AppError({ code: 'COMPANY_LOOKUP_INVALID_RESPONSE', message: 'Сервис реестра вернул неполные данные', statusCode: 502 });
+  }
+
+  const registrationDate = formatDate(state.registration_date);
+  const addressValue = addressData.source ?? address.value;
+  return {
+    type,
+    title,
+    shortTitle: String(name.short_with_opf ?? suggestion.value ?? title).trim(),
+    inn,
+    ...(type === 'ul' && typeof data.kpp === 'string' && data.kpp ? { kpp: data.kpp } : {}),
+    ...(typeof data.ogrn === 'string' && data.ogrn ? { ogrn: data.ogrn } : {}),
+    ...(addressValue ? { address: String(addressValue) } : {}),
+    ...(state.status ? { status: stateLabel(state.status) } : {}),
+    ...(registrationDate ? { registrationDate } : {}),
+  };
 }
 
 export async function lookupDadataCompany(inn: string, kind: CompanyLookupKind): Promise<CompanyLookupResult | null> {
@@ -74,48 +132,7 @@ export async function lookupDadataCompany(inn: string, kind: CompanyLookupKind):
       throw new AppError({ code: 'COMPANY_LOOKUP_FAILED', message: 'Сервис ЕГРЮЛ/ЕГРИП временно недоступен', statusCode: 502 });
     }
 
-    const payload = asRecord(await response.json());
-    const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
-    if (!suggestions.length) return null;
-
-    const suggestion = asRecord(suggestions[0]);
-    const data = asRecord(suggestion.data);
-    if (String(data.inn ?? '') !== inn) return null;
-
-    const apiType = String(data.type ?? '').toUpperCase();
-    const type: 'ul' | 'ip' = apiType === 'INDIVIDUAL' ? 'ip' : 'ul';
-    if (kind === 'ul' && type !== 'ul') return null;
-    if (kind === 'ip' && type !== 'ip') return null;
-
-    const name = asRecord(data.name);
-    const fio = asRecord(data.fio);
-    const address = asRecord(data.address);
-    const addressData = asRecord(address.data);
-    const state = asRecord(data.state);
-
-    const title = String(
-      name.short_with_opf
-      ?? name.full_with_opf
-      ?? suggestion.value
-      ?? (type === 'ip' ? [fio.surname, fio.name, fio.patronymic].filter(Boolean).join(' ') : '')
-      ?? '',
-    ).trim();
-
-    if (!title) {
-      throw new AppError({ code: 'COMPANY_LOOKUP_INVALID_RESPONSE', message: 'Сервис реестра вернул неполные данные', statusCode: 502 });
-    }
-
-    return {
-      type,
-      title,
-      shortTitle: String(name.short_with_opf ?? suggestion.value ?? title).trim(),
-      inn,
-      ...(type === 'ul' && typeof data.kpp === 'string' && data.kpp ? { kpp: data.kpp } : {}),
-      ...(typeof data.ogrn === 'string' && data.ogrn ? { ogrn: data.ogrn } : {}),
-      ...(addressData.source || address.value ? { address: String(addressData.source ?? address.value) } : {}),
-      ...(state.status ? { status: stateLabel(state.status) } : {}),
-      ...(formatDate(state.registration_date) ? { registrationDate: formatDate(state.registration_date)! } : {}),
-    };
+    return mapDadataCompanyPayload(await response.json(), inn, kind);
   } catch (error) {
     if (error instanceof AppError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
