@@ -1,6 +1,7 @@
 import type { ReviewIntelligenceOutput } from './review-intelligence.schemas.js';
 import type { AiReplyOutput, ReplyGenerationMode } from './reply-copilot.schemas.js';
 import type { VisibilityProviderOutput } from '../ai-visibility/ai-visibility.schemas.js';
+import type { AskShieldEvidence, AskShieldProviderOutput } from '../ask-shield/ask-shield.schemas.js';
 
 export type AiProviderAvailability = {
   configured: boolean;
@@ -78,6 +79,26 @@ export type VisibilityProbeResult = {
   estimatedCostMicros: number | null;
 };
 
+export type AskShieldInput = {
+  organizationId: string;
+  question: string;
+  locale: string;
+  organizationName: string;
+  context: Record<string, unknown>;
+  evidence: AskShieldEvidence[];
+};
+
+export type AskShieldResult = {
+  output: AskShieldProviderOutput;
+  provider: string;
+  model: string;
+  modelVersion: string | null;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostMicros: number | null;
+};
+
 export interface AiReviewIntelligenceProvider {
   readonly id: string;
   readonly model: string;
@@ -86,6 +107,7 @@ export interface AiReviewIntelligenceProvider {
   analyzeReview(input: AnalyzeReviewInput): Promise<AnalyzeReviewResult>;
   generateReply?(input: GenerateReplyInput): Promise<GenerateReplyResult>;
   runVisibilityProbe?(input: VisibilityProbeInput): Promise<VisibilityProbeResult>;
+  answerShieldQuestion?(input: AskShieldInput): Promise<AskShieldResult>;
   healthCheck(): Promise<AiProviderAvailability>;
 }
 
