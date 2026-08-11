@@ -91,7 +91,10 @@ export const acquisitionRoutes: FastifyPluginAsync = async (app) => {
     const context = tenant(request);
     const { campaignId } = campaignIdParamsSchema.parse(request.params);
     const query = acquisitionMetricsQuerySchema.parse(request.query);
-    return acquisitionMetrics(app, context.organizationId, campaignId, query);
+    return acquisitionMetrics(app, context.organizationId, campaignId, {
+      ...(query.from !== undefined ? { from: query.from } : {}),
+      ...(query.to !== undefined ? { to: query.to } : {}),
+    });
   });
 
   // Public endpoints intentionally do not use the authenticated organization context.
@@ -99,19 +102,34 @@ export const acquisitionRoutes: FastifyPluginAsync = async (app) => {
   app.get('/public/review-acquisition/:slug', async (request) => {
     const { slug } = publicCampaignParamsSchema.parse(request.params);
     const query = publicCampaignQuerySchema.parse(request.query);
-    return getPublicCampaign(app, slug, query);
+    return getPublicCampaign(app, slug, {
+      ...(query.invite !== undefined ? { invite: query.invite } : {}),
+      ...(query.session !== undefined ? { session: query.session } : {}),
+    });
   });
 
   app.post('/public/review-acquisition/:slug/feedback', async (request, reply) => {
     const { slug } = publicCampaignParamsSchema.parse(request.params);
     const body = submitFeedbackSchema.parse(request.body);
-    return reply.code(201).send(await submitPublicFeedback(app, slug, body));
+    return reply.code(201).send(await submitPublicFeedback(app, slug, {
+      rating: body.rating,
+      text: body.text,
+      consentToContact: body.consentToContact,
+      ...(body.contactName !== undefined ? { contactName: body.contactName } : {}),
+      ...(body.contactEmail !== undefined ? { contactEmail: body.contactEmail } : {}),
+      ...(body.contactPhone !== undefined ? { contactPhone: body.contactPhone } : {}),
+      ...(body.invite !== undefined ? { invite: body.invite } : {}),
+      ...(body.session !== undefined ? { session: body.session } : {}),
+    }));
   });
 
   app.get('/public/review-acquisition/:slug/targets/:targetId', async (request, reply) => {
     const { slug, targetId } = targetClickParamsSchema.parse(request.params);
     const query = publicCampaignQuerySchema.parse(request.query);
-    const result = await recordReviewTargetClick(app, slug, targetId, query);
+    const result = await recordReviewTargetClick(app, slug, targetId, {
+      ...(query.invite !== undefined ? { invite: query.invite } : {}),
+      ...(query.session !== undefined ? { session: query.session } : {}),
+    });
     return reply.redirect(result.url);
   });
 };

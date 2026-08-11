@@ -132,7 +132,10 @@ export async function createCampaign(
   context: { organizationId: string; userId: string },
   input: CreateAcquisitionCampaignInput,
 ) {
-  await assertScope(app, context.organizationId, input);
+  await assertScope(app, context.organizationId, {
+    ...(input.businessId !== undefined ? { businessId: input.businessId } : {}),
+    ...(input.locationId !== undefined ? { locationId: input.locationId } : {}),
+  });
   const created = await app.prisma.$transaction(async (tx) => {
     const campaign = await tx.reviewAcquisitionCampaign.create({
       data: {
@@ -329,6 +332,7 @@ export async function submitPublicFeedback(
         category: 'first-party-feedback',
         severity,
         origin: 'SURVEY',
+        reviewIds: [],
         locationIds: campaign.locationId ? [campaign.locationId] : [],
         sourceDedupeKey: `acquisition-feedback:${feedback.id}`,
         rootCause: input.text || `First-party feedback ${input.rating}★`,
