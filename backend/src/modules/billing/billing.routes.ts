@@ -39,14 +39,23 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/billing/subscription/auto-renew', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async (request) => {
     const { enabled } = z.object({ enabled: z.boolean() }).parse(request.body);
     const snapshot = await getBillingSnapshot(app, orgId(request));
-    if (snapshot.subscription.provider === null && snapshot.plan.code !== 'FREE') {
-      throw new AppError({ code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', message: 'Платёжный провайдер не настроен', statusCode: 503 });
+
+    if (enabled) {
+      throw new AppError({
+        code: 'RECURRING_BILLING_NOT_AVAILABLE',
+        message: 'Автопродление пока не подключено. Следующий период оплачивается вручную.',
+        statusCode: 409,
+        details: { autoRenew: false, recurringPaymentsConfigured: false },
+      });
     }
-    const subscription = await app.prisma.subscription.update({
+
+    if (!snapshot.subscription.autoRenew) return snapshot;
+
+    await app.prisma.subscription.update({
       where: { id: snapshot.subscription.id },
-      data: { autoRenew: enabled },
+      data: { autoRenew: false },
     });
-    return { plan: { ...snapshot.plan, autoRenew: subscription.autoRenew }, subscription };
+    return getBillingSnapshot(app, orgId(request));
   });
 
   app.post('/billing/subscription/trial', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async (request) => {
