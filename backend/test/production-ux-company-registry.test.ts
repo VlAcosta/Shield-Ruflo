@@ -1,14 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('../src/config/env.js', () => ({
-  env: {
-    DADATA_API_KEY: 'test-dadata-key',
-    DADATA_TIMEOUT_MS: 6_500,
-    FNS_NPD_TIMEOUT_MS: 65_000,
-  },
-}));
-
-import { lookupDadataCompany, lookupFnsNpdStatus } from '../src/modules/company/company-registry.providers.js';
+import { lookupFnsNpdStatus, mapDadataCompanyPayload } from '../src/modules/company/company-registry.providers.js';
 
 const nativeFetch = globalThis.fetch;
 
@@ -18,33 +9,26 @@ afterEach(() => {
 });
 
 describe('production company registry providers', () => {
-  it('maps an exact legal-party result from the ЕГРЮЛ/ЕГРИП provider', async () => {
-    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
-      expect(headers.get('authorization')).toBe('Token test-dadata-key');
-      expect(body).toMatchObject({ query: '7707083893', count: 1, type: 'LEGAL' });
-      return new Response(JSON.stringify({
-        suggestions: [{
-          value: 'ПАО СБЕРБАНК',
-          data: {
-            type: 'LEGAL',
-            inn: '7707083893',
-            kpp: '773601001',
-            ogrn: '1027700132195',
-            name: {
-              short_with_opf: 'ПАО СБЕРБАНК',
-              full_with_opf: 'ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО СБЕРБАНК РОССИИ',
-            },
-            address: { value: 'г Москва', data: { source: 'г Москва' } },
-            state: { status: 'ACTIVE', registration_date: 677376000000 },
+  it('maps an exact legal-party result from the ЕГРЮЛ/ЕГРИП provider', () => {
+    const payload = {
+      suggestions: [{
+        value: 'ПАО СБЕРБАНК',
+        data: {
+          type: 'LEGAL',
+          inn: '7707083893',
+          kpp: '773601001',
+          ogrn: '1027700132195',
+          name: {
+            short_with_opf: 'ПАО СБЕРБАНК',
+            full_with_opf: 'ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО СБЕРБАНК РОССИИ',
           },
-        }],
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
-    });
-    vi.stubGlobal('fetch', fetchMock);
+          address: { value: 'г Москва', data: { source: 'г Москва' } },
+          state: { status: 'ACTIVE', registration_date: 677376000000 },
+        },
+      }],
+    };
 
-    await expect(lookupDadataCompany('7707083893', 'ul')).resolves.toMatchObject({
+    expect(mapDadataCompanyPayload(payload, '7707083893', 'ul')).toMatchObject({
       type: 'ul',
       title: 'ПАО СБЕРБАНК',
       shortTitle: 'ПАО СБЕРБАНК',
@@ -56,12 +40,19 @@ describe('production company registry providers', () => {
     });
   });
 
-  it('does not accept a registry suggestion with another INN', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+  it('does not accept a registry suggestion with another INN', () => {
+    expect(mapDadataCompanyPayload({
       suggestions: [{ value: 'Чужая компания', data: { type: 'LEGAL', inn: '7700000000' } }],
-    }), { status: 200 })));
+    }, '7707083893', 'ul')).toBeNull();
+  });
 
-    await expect(lookupDadataCompany('7707083893', 'ul')).resolves.toBeNull();
+  it('does not mix legal and individual registry records', () => {
+    expect(mapDadataCompanyPayload({
+      suggestions: [{
+        value: 'ИП Иванов',
+        data: { type: 'INDIVIDUAL', inn: '500100732259', ogrn: '325500100000001' },
+      }],
+    }, '500100732259', 'ul')).toBeNull();
   });
 
   it('verifies НПД through FNS without inventing a person name or legal identifiers', async () => {
