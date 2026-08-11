@@ -5,7 +5,10 @@ import { env } from './config/env.js';
 import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
 import { registerGoogleBusinessProfileProvider } from './modules/integrations/providers/google/index.js';
 import { processReviewAnalysisJob } from './modules/ai/review-intelligence.service.js';
+import { processAiReplyGenerationJob } from './modules/ai/reply-copilot.service.js';
 import { registerAiProviders } from './modules/ai/providers/index.js';
+import { processReplyPublishJob, processReplyReconciliationJob } from './modules/reviews/review-publishing.service.js';
+import { replyGenerationModeSchema } from './modules/ai/reply-copilot.schemas.js';
 
 registerGoogleBusinessProfileProvider();
 registerAiProviders();
@@ -72,6 +75,25 @@ async function processJob(job: any) {
     const aiOperationId = String(job.payload?.aiOperationId || '');
     if (!organizationId || !reviewId || !aiOperationId) throw new Error('INVALID_AI_REVIEW_JOB');
     return processReviewAnalysisJob(prisma, { organizationId, reviewId, aiOperationId });
+  }
+  if (job.type === 'ai.generateReply') {
+    const organizationId = String(job.payload?.organizationId || '');
+    const reviewId = String(job.payload?.reviewId || '');
+    const aiOperationId = String(job.payload?.aiOperationId || '');
+    const actorUserId = String(job.payload?.actorUserId || '');
+    const mode = replyGenerationModeSchema.parse(job.payload?.mode);
+    const instructions = String(job.payload?.instructions || '');
+    if (!organizationId || !reviewId || !aiOperationId || !actorUserId) throw new Error('INVALID_AI_REPLY_JOB');
+    return processAiReplyGenerationJob(prisma, { organizationId, reviewId, aiOperationId, actorUserId, mode, instructions });
+  }
+  if (job.type === 'provider.publishReply' || job.type === 'provider.reconcileReply') {
+    const organizationId = String(job.payload?.organizationId || '');
+    const reviewId = String(job.payload?.reviewId || '');
+    const replyId = String(job.payload?.replyId || '');
+    if (!organizationId || !reviewId || !replyId) throw new Error('INVALID_REPLY_PROVIDER_JOB');
+    return job.type === 'provider.publishReply'
+      ? processReplyPublishJob(prisma, { organizationId, reviewId, replyId })
+      : processReplyReconciliationJob(prisma, { organizationId, reviewId, replyId });
   }
   if (job.type === 'report.generate') return processReport(job.payload);
   throw new Error(`UNSUPPORTED_JOB_TYPE:${job.type}`);
@@ -199,3 +221,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+}
