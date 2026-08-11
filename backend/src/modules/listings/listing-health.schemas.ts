@@ -4,6 +4,7 @@ export const LISTING_HEALTH_SCORE_VERSION = 1;
 
 export const locationIdParamsSchema = z.object({ locationId: z.string().uuid() });
 export const listingSourceIdParamsSchema = z.object({ sourceId: z.string().uuid() });
+export const listingProviderAccountParamsSchema = z.object({ accountId: z.string().uuid() });
 
 export const updateCanonicalListingSchema = z.object({
   name: z.string().trim().min(1).max(180).optional(),
