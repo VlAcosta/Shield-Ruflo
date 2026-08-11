@@ -59,7 +59,7 @@ jobs:
       - name: Apply Ruflo P18 vertical slice
         run: python3 scripts/p18-agent-apply.py
 
-      - name: Apply compatibility review fixes
+      - name: Apply compatibility and security review fixes
         shell: bash
         run: |
           python3 - <<'PY'
@@ -80,6 +80,25 @@ jobs:
           if old not in text:
               raise SystemExit('P17 fixture compatibility anchor missing: Location.organizationId')
           legacy_test.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          integrations = Path('backend/src/modules/integrations/integrations.service.ts')
+          text = integrations.read_text(encoding='utf-8')
+          old = "    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)`;\n"
+          new = "    await tx.$queryRaw<Array<{ acquired: number }>>`SELECT 1::int AS acquired FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock`;\n"
+          if old not in text:
+              raise SystemExit('P17 Prisma advisory lock compatibility anchor missing')
+          integrations.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          intelligence = Path('backend/src/modules/ai/review-intelligence.service.ts')
+          text = intelligence.read_text(encoding='utf-8')
+          old = "  const provider = aiProviderRegistry.active();\n  const availability = provider?.availability() ?? { configured: false, available: false, reasonCode: 'AI_PROVIDER_UNAVAILABLE' };\n  const [insight, operation] = await Promise.all([\n"
+          new = "  const provider = aiProviderRegistry.active();\n  const availability = provider?.availability() ?? { configured: false, available: false, reasonCode: 'AI_PROVIDER_UNAVAILABLE' };\n  const entitlementEnabled = await hasEntitlement(prisma, organizationId);\n  const providerState = entitlementEnabled\n    ? availability\n    : { ...availability, available: false, reasonCode: 'AI_ENTITLEMENT_DISABLED', reasonMessage: 'AI Review Intelligence недоступен на текущем тарифе.' };\n  const [insight, operation] = await Promise.all([\n"
+          if old not in text:
+              raise SystemExit('P18 entitlement state anchor missing')
+          text = text.replace(old, new, 1)
+          text = text.replace("else if (operation?.status === 'FAILED') status = availability.available ? 'FAILED' : 'UNAVAILABLE';\n  else if (!availability.available) status = 'UNAVAILABLE';\n", "else if (operation?.status === 'FAILED') status = providerState.available ? 'FAILED' : 'UNAVAILABLE';\n  else if (!providerState.available) status = 'UNAVAILABLE';\n", 1)
+          text = text.replace('    providerState: availability,\n', '    providerState,\n', 1)
+          intelligence.write_text(text, encoding='utf-8')
           PY
 
       - name: Setup Node
@@ -148,6 +167,7 @@ jobs:
             backend/src/app.ts \
             backend/src/worker.ts \
             backend/src/modules/ai/review-intelligence.service.ts \
+            backend/src/modules/integrations/integrations.service.ts \
             backend/src/modules/integrations/review-ingestion.service.ts \
             backend/test/review-ingestion.integration.test.ts \
             src/features/reviews/ReviewsIntelligence/hooks/useReviewsIntelligence.js \
