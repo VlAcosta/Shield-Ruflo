@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
+import { Prisma, type PrismaClient } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { providerRegistry } from '../integrations/providers/provider.registry.js';
 import { loadIntegrationCredentialsFromPrisma } from '../integrations/providers/credential-vault.js';
@@ -85,11 +85,15 @@ export function calculateLocationHealth(location: any, observed: ProviderLocatio
     attributes: observed.attributes ?? null,
     images: observed.images ?? null,
   };
+  const covered = new Set(observed.coveredFields);
   const issues: HealthIssue[] = [];
-  let score = 0;
+  let earnedWeight = 0;
+  let measuredWeight = FIELD_WEIGHTS.freshness;
 
   for (const field of ['name', 'address', 'phone', 'website', 'regularHours', 'categories', 'images'] as const) {
+    if (!covered.has(field)) continue;
     const weight = FIELD_WEIGHTS[field];
+    measuredWeight += weight;
     const expected = canonical[field];
     const actual = provider[field];
     if (expected === null || expected === undefined || comparableJson(expected) === '') {
@@ -104,7 +108,7 @@ export function calculateLocationHealth(location: any, observed: ProviderLocatio
       issues.push(issue({ type: 'MISMATCH', severity: field === 'name' || field === 'address' || field === 'phone' ? 'CRITICAL' : 'WARNING', field, expected: json(expected), observed: json(actual), explanation: `Значение ${field} во внешнем listing отличается от канонического профиля.` }));
       continue;
     }
-    score += weight;
+    earnedWeight += weight;
   }
 
   const freshnessDate = observed.providerUpdatedAt ?? observed.observedAt ?? now;
@@ -112,10 +116,21 @@ export function calculateLocationHealth(location: any, observed: ProviderLocatio
   if (ageMs > STALE_AFTER_MS) {
     issues.push(issue({ type: 'STALE', severity: 'WARNING', field: 'freshness', expected: json('<=30d'), observed: json(`${Math.floor(ageMs / 86_400_000)}d`), explanation: 'Последнее подтверждённое обновление listing старше 30 дней.' }));
   } else {
-    score += FIELD_WEIGHTS.freshness;
+    earnedWeight += FIELD_WEIGHTS.freshness;
   }
 
-  return { score: Math.max(0, Math.min(100, score)), scoreVersion: LISTING_HEALTH_SCORE_VERSION, canonical, provider, issues };
+  const score = measuredWeight > 0 ? Math.round((earnedWeight / measuredWeight) * 100) : 0;
+  const allProfileFields = ['name', 'address', 'phone', 'website', 'regularHours', 'categories', 'attributes', 'images'] as const;
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    scoreVersion: LISTING_HEALTH_SCORE_VERSION,
+    canonical,
+    provider,
+    measuredFields: allProfileFields.filter((field) => covered.has(field)),
+    unmeasuredFields: allProfileFields.filter((field) => !covered.has(field)),
+    measuredWeight,
+    issues,
+  };
 }
 
 async function tenantLocation(prisma: PrismaClient, organizationId: string, locationId: string) {
@@ -145,10 +160,10 @@ export async function updateCanonicalLocation(app: FastifyInstance, actor: Tenan
       ...(input.addressLine1 !== undefined ? { addressLine1: input.addressLine1 } : {}),
       ...(input.addressLine2 !== undefined ? { addressLine2: input.addressLine2 } : {}),
       ...(input.postalCode !== undefined ? { postalCode: input.postalCode } : {}),
-      ...(input.regularHours !== undefined ? { regularHours: input.regularHours === null ? null : json(input.regularHours) } : {}),
-      ...(input.categories !== undefined ? { categories: input.categories === null ? null : json(input.categories) } : {}),
-      ...(input.attributes !== undefined ? { attributes: input.attributes === null ? null : json(input.attributes) } : {}),
-      ...(input.images !== undefined ? { images: input.images === null ? null : json(input.images) } : {}),
+      ...(input.regularHours !== undefined ? { regularHours: input.regularHours === null ? Prisma.DbNull : json(input.regularHours) } : {}),
+      ...(input.categories !== undefined ? { categories: input.categories === null ? Prisma.DbNull : json(input.categories) } : {}),
+      ...(input.attributes !== undefined ? { attributes: input.attributes === null ? Prisma.DbNull : json(input.attributes) } : {}),
+      ...(input.images !== undefined ? { images: input.images === null ? Prisma.DbNull : json(input.images) } : {}),
     },
   });
   await audit(app, actor, 'listing.canonical.updated', locationId, json({ changedFields: Object.keys(input) }));
@@ -214,10 +229,10 @@ export async function processListingSyncJob(prisma: PrismaClient, input: { organ
     const measurement = calculateLocationHealth(source.location, record);
     return await prisma.$transaction(async (tx) => {
       const snapshot = await tx.listingSnapshot.create({
-        data: { organizationId: input.organizationId, locationId: source.locationId, sourceId: source.id, observedAt: record.observedAt ?? new Date(), providerUpdatedAt: record.providerUpdatedAt ?? null, normalized: json(measurement.provider), raw: record.raw ? json(record.raw) : undefined, healthScore: measurement.score, scoreVersion: measurement.scoreVersion },
+        data: { organizationId: input.organizationId, locationId: source.locationId, sourceId: source.id, observedAt: record.observedAt ?? new Date(), providerUpdatedAt: record.providerUpdatedAt ?? null, normalized: json({ ...measurement.provider, coveredFields: record.coveredFields, measuredFields: measurement.measuredFields, unmeasuredFields: measurement.unmeasuredFields }), ...(record.raw ? { raw: json(record.raw) } : {}), healthScore: measurement.score, scoreVersion: measurement.scoreVersion },
       });
       if (measurement.issues.length) {
-        await tx.listingHealthIssue.createMany({ data: measurement.issues.map((item) => ({ organizationId: input.organizationId, locationId: source.locationId, snapshotId: snapshot.id, type: item.type, severity: item.severity, field: item.field, expected: item.expected === null ? undefined : item.expected, observed: item.observed === null ? undefined : item.observed, explanation: item.explanation })) });
+        await tx.listingHealthIssue.createMany({ data: measurement.issues.map((item) => ({ organizationId: input.organizationId, locationId: source.locationId, snapshotId: snapshot.id, type: item.type, severity: item.severity, field: item.field, ...(item.expected !== null ? { expected: item.expected } : {}), ...(item.observed !== null ? { observed: item.observed } : {}), explanation: item.explanation })) });
       }
       const duplicate = await tx.listingSnapshot.findFirst({
         where: { organizationId: input.organizationId, locationId: { not: source.locationId }, source: { provider: source.provider }, normalized: { path: ['address'], equals: measurement.provider.address ?? '__none__' } },
@@ -242,7 +257,7 @@ export async function listingHealthOverview(app: FastifyInstance, organizationId
     include: {
       business: { select: { id: true, name: true } },
       listingSources: {
-        where: input.status ? { status: input.status } : undefined,
+        ...(input.status ? { where: { status: input.status } } : {}),
         include: { snapshots: { orderBy: { observedAt: 'desc' }, take: 1, include: { issues: true } } },
       },
     },

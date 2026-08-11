@@ -3,6 +3,7 @@ import { ProviderAdapterError } from '../provider.errors.js';
 import type {
   ProviderAdapter,
   ProviderConnectionContext,
+  ProviderLocationProfileRecord,
   ProviderReplyInput,
   ProviderReplyReconciliationResult,
   ProviderReplyResult,
@@ -77,6 +78,64 @@ function selectedLocationTitle(context: ProviderConnectionContext, locationName:
   if (!item || typeof item !== 'object' || Array.isArray(item)) return undefined;
   const title = (item as Record<string, unknown>).title;
   return typeof title === 'string' && title.trim() ? title : undefined;
+}
+
+function googlePrimaryPhone(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const primary = (value as Record<string, unknown>).primaryPhone;
+  if (typeof primary === 'string' && primary.trim()) return primary.trim();
+  const additional = (value as Record<string, unknown>).additionalPhones;
+  return Array.isArray(additional) ? additional.find((item): item is string => typeof item === 'string' && Boolean(item.trim()))?.trim() : undefined;
+}
+
+function googleCategoryNames(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const object = value as Record<string, unknown>;
+  const all = [object.primaryCategory, ...(Array.isArray(object.additionalCategories) ? object.additionalCategories : [])];
+  return [...new Set(all.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const category = entry as Record<string, unknown>;
+    const label = typeof category.displayName === 'string' ? category.displayName : typeof category.name === 'string' ? category.name : '';
+    return label.trim() ? [label.trim()] : [];
+  }))];
+}
+
+function googleAddress(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const address = value as Record<string, unknown>;
+  const lines = Array.isArray(address.addressLines) ? address.addressLines.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
+  const parts = [address.regionCode, address.administrativeArea, address.locality, ...lines, address.postalCode]
+    .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .map((item) => item.trim());
+  return parts.length ? parts.join(', ') : undefined;
+}
+
+function googleLocationProfile(location: GoogleBusinessLocation): ProviderLocationProfileRecord | null {
+  if (!location.name || !/^locations\/[A-Za-z0-9_-]+$/.test(location.name)) return null;
+  const categories = googleCategoryNames(location.categories);
+  return {
+    externalId: location.name,
+    title: location.title,
+    address: googleAddress(location.storefrontAddress),
+    phone: googlePrimaryPhone(location.phoneNumbers),
+    website: location.websiteUri,
+    regularHours: location.regularHours,
+    categories: categories.length ? categories : undefined,
+    coveredFields: ['name', 'address', 'phone', 'website', 'regularHours', 'categories'],
+    observedAt: new Date(),
+    raw: {
+      name: location.name,
+      title: location.title ?? null,
+      storeCode: location.storeCode ?? null,
+      phoneNumbers: location.phoneNumbers ?? null,
+      categories: location.categories ?? null,
+      storefrontAddress: location.storefrontAddress ?? null,
+      websiteUri: location.websiteUri ?? null,
+      regularHours: location.regularHours ?? null,
+      openInfo: location.openInfo ?? null,
+      metadata: location.metadata ?? null,
+    },
+  };
 }
 
 function publicAccount(account: GoogleBusinessAccount) {
@@ -263,6 +322,24 @@ export class GoogleBusinessProfileAdapter implements ProviderAdapter {
         googleLocationCount: locations.length,
       },
     };
+  }
+
+  async syncLocationProfiles(context: ProviderConnectionContext): Promise<ProviderLocationProfileRecord[]> {
+    const accountName = selectedAccountName(context);
+    if (!accountName) {
+      throw new ProviderAdapterError({
+        code: 'GOOGLE_LISTING_ACCOUNT_SELECTION_REQUIRED',
+        message: 'Перед синхронизацией listing profile выберите Google Business Profile account.',
+        statusCode: 409,
+        retryable: false,
+      });
+    }
+    const locations = await googleBusinessProfileClient().listLocations(await accessToken(context), accountName);
+    const selected = new Set(selectedLocationNames(context));
+    return locations
+      .filter((location) => selected.size === 0 || selected.has(location.name))
+      .map(googleLocationProfile)
+      .filter((profile): profile is ProviderLocationProfileRecord => Boolean(profile));
   }
 
   async syncReviews(context: ProviderConnectionContext, cursor?: string): Promise<ProviderReviewSyncResult> {

@@ -10,6 +10,7 @@ import { registerAiProviders } from './modules/ai/providers/index.js';
 import { processReplyPublishJob, processReplyReconciliationJob } from './modules/reviews/review-publishing.service.js';
 import { replyGenerationModeSchema } from './modules/ai/reply-copilot.schemas.js';
 import { processVisibilityRunJob } from './modules/ai-visibility/ai-visibility.service.js';
+import { processListingSyncJob } from './modules/listings/listing-health.service.js';
 
 registerGoogleBusinessProfileProvider();
 registerAiProviders();
@@ -92,6 +93,12 @@ async function processJob(job: any) {
     const runId = String(job.payload?.runId || '');
     if (!organizationId || !runId) throw new Error('INVALID_AI_VISIBILITY_JOB');
     return processVisibilityRunJob(prisma, { organizationId, runId });
+  }
+  if (job.type === 'listing.sync') {
+    const organizationId = String(job.payload?.organizationId || '');
+    const sourceId = String(job.payload?.sourceId || '');
+    if (!organizationId || !sourceId) throw new Error('INVALID_LISTING_SYNC_JOB');
+    return processListingSyncJob(prisma, { organizationId, sourceId });
   }
   if (job.type === 'provider.publishReply' || job.type === 'provider.reconcileReply') {
     const organizationId = String(job.payload?.organizationId || '');
