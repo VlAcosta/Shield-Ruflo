@@ -1680,10 +1680,12 @@ model Plan {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
+  organization  Organization? @relation("OrganizationPlans", fields: [organizationId], references: [id], onDelete: Cascade)
   entitlements  Entitlement[]
   subscriptions Subscription[]
   payments      Payment[]
 
+  @@index([organizationId], map: "plans_organization_idx")
   @@map("plans")
 }
 
