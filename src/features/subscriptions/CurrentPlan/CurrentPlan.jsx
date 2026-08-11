@@ -1,10 +1,23 @@
 import React, { memo } from 'react';
-import Button from '../../../components/ui/Button';
 import { CrownIcon, SparkIcon } from '../model/icons';
 import { formatCurrency } from '../model/formatters';
 import './CurrentPlan.scss';
 
-function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
+function formatActiveUntil(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+function CurrentPlan({ plan, canManage = true }) {
+  const activeUntil = formatActiveUntil(plan.activeUntil);
+  const isFree = Number(plan.price || 0) <= 0;
+
   return (
     <section className="current-plan">
       <div className="current-plan__glow current-plan__glow--one" />
@@ -20,32 +33,26 @@ function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
         </div>
 
         <div className="current-plan__meta">
-          <span>Активна до <strong>{plan.activeUntil}</strong></span>
+          <span>{activeUntil ? <>Активен до <strong>{activeUntil}</strong></> : <strong>Без срока действия</strong>}</span>
           <span className="current-plan__divider" aria-hidden="true" />
           <span><strong>{formatCurrency(plan.price)}</strong> / {plan.billingLabel}</span>
         </div>
 
-        {canManage ? <div className="current-plan__actions"><Button variant="ghost" className="current-plan__change">Сменить тариф</Button><Button variant="outline" className="current-plan__renew">Продлить</Button></div> : <div className="current-plan__actions"><span className="current-plan__readonly">Только просмотр</span></div>}
+        <div className="current-plan__actions">
+          {canManage ? (
+            <span className="current-plan__management-note">Сменить тариф или собрать конфигурацию можно ниже</span>
+          ) : (
+            <span className="current-plan__readonly">Только просмотр</span>
+          )}
+        </div>
       </div>
 
       <div className="current-plan__renewal">
         <div>
-          <span>Автопродление</span>
-          <small>{plan.autoRenew ? 'Следующее списание включено' : 'Продление вручную'}</small>
+          <span>{isFree ? 'Оплата не требуется' : 'Оплата периода'}</span>
+          <small>{isFree ? 'Бесплатный тариф · автоматических списаний нет' : 'Автосписание пока не подключено · следующий период оформляется вручную'}</small>
         </div>
-
-        <button
-          type="button"
-          className={`current-plan__switch ${plan.autoRenew ? 'is-on' : ''} ${renewalBusy ? 'is-busy' : ''}`}
-          role="switch"
-          aria-checked={plan.autoRenew}
-          aria-label="Автопродление подписки"
-          disabled={renewalBusy || !canManage}
-          onClick={canManage ? onToggleRenewal : undefined}
-          title={!canManage ? 'Нет права управлять подпиской' : undefined}
-        >
-          <span />
-        </button>
+        <span className="current-plan__manual-mark" aria-hidden="true">{isFree ? '0 ₽' : 'ручн.'}</span>
       </div>
     </section>
   );
