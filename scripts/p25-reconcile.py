@@ -8,11 +8,11 @@ subprocess.run(['python3', str(ROOT / 'scripts/p25-type-fix.py')], check=True)
 
 service = ROOT / 'backend/src/modules/ask-shield/ask-shield.service.ts'
 text = service.read_text(encoding='utf-8')
-old = "status: { notIn: ['DONE', 'ARCHIVED'] }"
-new = "status: { notIn: ['DONE', 'CANCELED'] }"
-if old in text:
-    text = text.replace(old, new, 1)
-elif new not in text:
+expected = "status: { notIn: ['DONE', 'ARCHIVED'] }"
+invalid = "status: { notIn: ['DONE', 'CANCELED'] }"
+if invalid in text:
+    text = text.replace(invalid, expected, 1)
+if expected not in text:
     raise SystemExit('P25 overdue-task status anchor not found')
 service.write_text(text, encoding='utf-8')
-print('P25 backend reconciled; canceled tasks excluded from overdue count')
+print('P25 backend reconciled; DONE and ARCHIVED tasks excluded from overdue count')
