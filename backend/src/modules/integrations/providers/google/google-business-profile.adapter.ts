@@ -361,5 +361,5 @@ export async function listGoogleBusinessLocations(
 ): Promise<GoogleBusinessLocation[]> {
   const client = googleBusinessProfileClient();
   const token = await client.refreshAccessToken(refreshToken);
-  return client.listLocations(token.accessToken);
+  return client.listLocations(token.accessToken, accountName);
 }
