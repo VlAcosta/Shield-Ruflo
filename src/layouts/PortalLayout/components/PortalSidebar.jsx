@@ -1,39 +1,22 @@
-import React, { memo, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import React, { memo } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { LockIcon, MoonIcon, SunIcon } from '../icons';
 import BrandMark from '../../../components/brand/BrandMark';
 import { navigationHelp, navigationPrimary } from '../navigation';
 import useAccessControl from '../../../features/access/hooks/useAccessControl';
 import { findFirstAllowedRoute } from '../../../services/access/rbacService';
 import useAppearance from '../../../features/appearance/hooks/useAppearance';
-import { authService } from '../../../services/auth/authService';
 import './PortalSidebarRecovery.scss';
 
-function PortalSidebar({ onLock, navigationLocked = false }) {
+function PortalSidebar({ navigationLocked = false }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const access = useAccessControl();
   const appearance = useAppearance();
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState('');
   const brandTarget = navigationLocked ? '/onboarding' : findFirstAllowedRoute(access);
 
   const allowed = (item) => !item.permission || access.can(item.permission);
   const visiblePrimary = navigationPrimary.filter(allowed);
   const HelpIcon = navigationHelp.Icon;
-
-  const logout = async () => {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    setLogoutError('');
-    try {
-      await authService.logout();
-      navigate('/auth?mode=login', { replace: true });
-    } catch (error) {
-      setLogoutError(error?.message || 'Не удалось завершить сессию. Повторите попытку.');
-      setLoggingOut(false);
-    }
-  };
 
   return (
     <aside className="portal__sidebar portal__sidebar--simple">
@@ -81,21 +64,8 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
             {appearance.isDark ? <MoonIcon /> : <SunIcon />}
             <span>{appearance.isDark ? 'Тёмная тема' : 'Светлая тема'}</span>
           </button>
-          {typeof onLock === 'function' ? (
-            <button type="button" className="portal__utilityLink" onClick={onLock}>
-              <LockIcon /><span>Заблокировать</span>
-            </button>
-          ) : null}
         </div>
       ) : null}
-
-      <div className="portal__logoutDock portal__logoutDock--simple">
-        {logoutError ? <div className="portal__logoutError" role="alert">{logoutError}</div> : null}
-        <button type="button" className="portal__logoutButton" onClick={logout} disabled={loggingOut}>
-          <span aria-hidden="true">↪</span>
-          <strong>{loggingOut ? 'Выходим…' : 'Выйти'}</strong>
-        </button>
-      </div>
     </aside>
   );
 }
