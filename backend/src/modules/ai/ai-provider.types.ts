@@ -1,5 +1,6 @@
 import type { ReviewIntelligenceOutput } from './review-intelligence.schemas.js';
 import type { AiReplyOutput, ReplyGenerationMode } from './reply-copilot.schemas.js';
+import type { VisibilityProviderOutput } from '../ai-visibility/ai-visibility.schemas.js';
 
 export type AiProviderAvailability = {
   configured: boolean;
@@ -49,6 +50,34 @@ export type GenerateReplyResult = {
   estimatedCostMicros: number | null;
 };
 
+export type VisibilityProbeInput = {
+  organizationId: string;
+  probeId: string;
+  query: string;
+  businessName: string;
+  locationName: string | null;
+  languageCode: string;
+  countryCode: string | null;
+};
+
+export type VisibilityCitation = {
+  url: string;
+  title: string | null;
+};
+
+export type VisibilityProbeResult = {
+  output: VisibilityProviderOutput;
+  citations: VisibilityCitation[];
+  citationMeasurement: 'SUPPORTED' | 'UNSUPPORTED';
+  provider: string;
+  model: string;
+  modelVersion: string | null;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostMicros: number | null;
+};
+
 export interface AiReviewIntelligenceProvider {
   readonly id: string;
   readonly model: string;
@@ -56,6 +85,7 @@ export interface AiReviewIntelligenceProvider {
   availability(): AiProviderAvailability;
   analyzeReview(input: AnalyzeReviewInput): Promise<AnalyzeReviewResult>;
   generateReply?(input: GenerateReplyInput): Promise<GenerateReplyResult>;
+  runVisibilityProbe?(input: VisibilityProbeInput): Promise<VisibilityProbeResult>;
   healthCheck(): Promise<AiProviderAvailability>;
 }
 
