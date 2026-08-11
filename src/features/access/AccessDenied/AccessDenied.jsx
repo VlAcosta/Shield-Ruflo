@@ -12,8 +12,9 @@ export default function AccessDenied() {
   const access = useAccessControl();
   const params = new URLSearchParams(location.search);
   const from = params.get('from') || '';
+  const requestedPath = from.split('?')[0].split('#')[0] || from;
   const fallback = findFirstAllowedRoute(access);
-  const permission = getRoutePermission(from);
+  const permission = getRoutePermission(requestedPath);
   const accessState = permission ? getPermissionAccessState(permission, access) : 'role_denied';
   const planLocked = accessState === 'plan_locked';
   const canViewBilling = access.can('billing.view');
