@@ -1,0 +1,104 @@
+name: Production UX Backend Agent
+
+on:
+  push:
+    branches:
+      - feat/production-ux-onboarding-billing-recovery
+    paths:
+      - 'backend/**'
+      - 'scripts/production-ux-backend-apply.py'
+      - '.github/workflows/production-ux-backend-agent.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: production-ux-backend-agent
+  cancel-in-progress: true
+
+jobs:
+  integrate-and-validate:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: business_shield
+          POSTGRES_PASSWORD: business_shield_test
+          POSTGRES_DB: business_shield_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U business_shield -d business_shield_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      TEST_DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      AUTH_SECRET: ci-only-business-shield-auth-secret-0123456789
+      AUTH_COOKIE_SECURE: 'false'
+      AUTH_OTP_PROVIDER: console
+      AUTH_OTP_FIXED_CODE: ''
+      AUTH_EXPOSE_DEBUG_CODE: 'false'
+      COMPANY_LOOKUP_PROVIDER: disabled
+      INTEGRATION_CREDENTIALS_KEY: ci-only-integration-credential-key-0123456789
+      SWAGGER_ENABLED: 'false'
+      CORS_ORIGINS: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply backend recovery patch
+        run: python3 scripts/production-ux-backend-apply.py
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        working-directory: backend
+        run: npm run db:deploy
+
+      - name: Migration status
+        working-directory: backend
+        run: npm run db:status
+
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Tests
+        working-directory: backend
+        run: npm test
+
+      - name: Build
+        working-directory: backend
+        run: npm run build
+
+      - name: Commit validated backend integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain --untracked-files=normal)" ]; then
+            echo 'No integration changes to commit.'
+            exit 0
+          fi
+          git config user.name 'business-shield-ruflo-agent'
+          git config user.email 'business-shield-ruflo-agent@users.noreply.github.com'
+          git add backend
+          git commit -m 'feat: recover production onboarding and billing backend'
+          git push origin HEAD:feat/production-ux-onboarding-billing-recovery
