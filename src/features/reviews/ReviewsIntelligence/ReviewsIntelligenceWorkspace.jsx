@@ -87,7 +87,7 @@ export default function ReviewsIntelligenceWorkspace() {
         <div className="reviews-intel-hero__copy">
           <span className="reviews-intel-hero__eyebrow"><i /> REPUTATION OPERATIONS</span>
           <h1>Отзывы, которые требуют<br /><em>решения — сейчас.</em></h1>
-          <p>Единый центр для подключённых источников: SLA, локальные черновики, согласование, причины негатива и юридическая эскалация.</p>
+          <p>Единый центр для подключённых источников: SLA, AI-анализ, безопасные ответы, согласование и подтверждённая публикация.</p>
           <div className="reviews-intel-hero__mode">
             <span>Режим ответа</span>
             <strong>{intelligence.responseMode.label}</strong>
@@ -167,7 +167,7 @@ export default function ReviewsIntelligenceWorkspace() {
             canReply={canReply}
             canApprove={canApprove}
             working={intelligence.working}
-            onGenerate={() => intelligence.generateDraft()}
+            onGenerate={(generationMode) => intelligence.generateDraft(intelligence.selectedReview, generationMode)}
             onSaveDraft={intelligence.saveDraft}
             onSubmit={intelligence.submitReply}
             onApprove={intelligence.approve}
