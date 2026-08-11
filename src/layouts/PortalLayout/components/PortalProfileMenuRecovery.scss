@@ -7,6 +7,17 @@
     margin-bottom: 8px;
   }
 
+  .portal-profile-menu__notice {
+    margin: 0 0 8px;
+    padding: 9px 11px;
+    border-radius: 11px;
+    background: rgba(224, 85, 106, .08);
+    border: 1px solid rgba(224, 85, 106, .16);
+    color: #b94355;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
   .portal-profile-menu__workspaceSummary {
     display: grid;
     grid-template-columns: 36px 1fr auto;
@@ -35,6 +46,33 @@
   .portal-profile-menu__workspaceSummary strong { color: #1d2548; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .portal-profile-menu__workspaceSummary em,
   .portal-profile-menu__workspaceSummary i { color: #6554ff; font-style: normal; font-size: 12px; }
+
+  .portal-profile-menu__workspaceRecovery {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 12px;
+    margin-bottom: 8px;
+    border-radius: 14px;
+    background: #f8f9fd;
+    border: 1px solid rgba(121, 132, 169, .14);
+  }
+
+  .portal-profile-menu__workspaceRecovery > div { display: grid; gap: 3px; }
+  .portal-profile-menu__workspaceRecovery strong { color: #273153; font-size: 13px; }
+  .portal-profile-menu__workspaceRecovery small { color: #929db9; font-size: 11px; line-height: 1.35; }
+  .portal-profile-menu__workspaceRecovery button {
+    border: 1px solid rgba(101, 84, 255, .18);
+    border-radius: 10px;
+    background: rgba(101, 84, 255, .07);
+    color: #6554ff;
+    padding: 7px 9px;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
 
   .portal-profile-menu__workspacePicker {
     margin: 0 0 8px;
@@ -114,7 +152,10 @@
   .portal-profile-menu__workspaceSummary { background: rgba(125, 104, 255, .11); }
   .portal-profile-menu__workspaceSummary > span { background: #272d43; }
   .portal-profile-menu__workspaceSummary strong,
-  .portal-profile-menu__simpleActions strong { color: #eef0f8; }
-  .portal-profile-menu__workspacePicker button { background: #252b40; color: #e6e9f3; }
+  .portal-profile-menu__simpleActions strong,
+  .portal-profile-menu__workspaceRecovery strong { color: #eef0f8; }
+  .portal-profile-menu__workspacePicker button,
+  .portal-profile-menu__workspaceRecovery { background: #252b40; color: #e6e9f3; }
   .portal-profile-menu__simpleActions button:hover { background: rgba(125, 104, 255, .10); }
+  .portal-profile-menu__notice { background: rgba(224, 85, 106, .10); color: #ff93a2; }
 }
