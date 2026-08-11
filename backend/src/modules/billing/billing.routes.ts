@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
+import {
+  getPaymentForOrganization,
+  processYooKassaWebhook,
+  quoteBillingConstructor,
+  startBillingCheckout,
+} from './billing.checkout.js';
 import { getBillingSnapshot, startProTrial } from './billing.service.js';
 
 function orgId(request: FastifyRequest): string {
@@ -8,6 +14,15 @@ function orgId(request: FastifyRequest): string {
     throw new AppError({ code: 'ORGANIZATION_CONTEXT_REQUIRED', message: 'Рабочее пространство не выбрано', statusCode: 409 });
   }
   return request.auth.organizationId;
+}
+
+function idempotencyKey(request: FastifyRequest): string {
+  const value = request.headers['idempotency-key'];
+  const normalized = Array.isArray(value) ? value[0] : value;
+  if (!normalized) {
+    throw new AppError({ code: 'IDEMPOTENCY_KEY_REQUIRED', message: 'Для оплаты требуется Idempotency-Key', statusCode: 400 });
+  }
+  return normalized;
 }
 
 export const billingRoutes: FastifyPluginAsync = async (app) => {
@@ -46,12 +61,29 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     return { valid: false, code: code.toUpperCase(), percent: 0, discount: 0, reason: 'PROMO_SYSTEM_NOT_CONFIGURED' };
   });
 
-  app.post('/billing/subscription/checkout', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async () => {
-    throw new AppError({
-      code: 'PAYMENT_PROVIDER_NOT_CONFIGURED',
-      message: 'Онлайн-оплата пока недоступна: production payment provider не настроен',
-      statusCode: 503,
-      details: { status: 'payment_unavailable' },
+  app.post('/billing/constructor/quote', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async (request) => {
+    return quoteBillingConstructor(request.body);
+  });
+
+  app.post('/billing/subscription/checkout', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async (request) => {
+    return startBillingCheckout(app, {
+      organizationId: orgId(request),
+      userId: request.auth?.userId ?? null,
+      idempotencyKey: idempotencyKey(request),
+      body: request.body,
     });
+  });
+
+  app.get('/billing/payments/:paymentId', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async (request) => {
+    const { paymentId } = z.object({ paymentId: z.string().uuid() }).parse(request.params);
+    const { refresh } = z.object({ refresh: z.coerce.boolean().default(false) }).parse(request.query ?? {});
+    return getPaymentForOrganization(app, orgId(request), paymentId, { refresh });
+  });
+
+  // Public provider callback. The body is never trusted as proof of payment: the service re-fetches
+  // the payment from YooKassa before changing subscription state.
+  app.post('/billing/webhooks/yookassa', async (request, reply) => {
+    await processYooKassaWebhook(app, request.body);
+    return reply.code(200).send({ ok: true });
   });
 };
