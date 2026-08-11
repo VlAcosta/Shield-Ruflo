@@ -498,6 +498,9 @@ model Organization {
   @@index([status], map: "organizations_status_idx")
   @@index([inn], map: "organizations_inn_idx")
   @@map("organizations")
+  listingSources           ListingSource[]
+  listingSnapshots         ListingSnapshot[]
+  listingHealthIssues      ListingHealthIssue[]
 }
 
 model OrganizationMember {
@@ -597,6 +600,12 @@ model Location {
   latitude     Float?
   longitude    Float?
   timezone     String?        @db.VarChar(80)
+  phone        String?        @db.VarChar(64)
+  website      String?        @db.Text
+  regularHours Json?          @map("regular_hours")
+  categories   Json?
+  attributes   Json?
+  images       Json?
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
   archivedAt   DateTime?      @map("archived_at")
@@ -613,6 +622,9 @@ model Location {
   @@index([businessId, status], map: "locations_business_status_idx")
   @@index([businessId, isPrimary], map: "locations_business_primary_idx")
   @@map("locations")
+  listingSources ListingSource[]
+  listingSnapshots ListingSnapshot[]
+  listingHealthIssues ListingHealthIssue[]
 }
 
 model Session {
@@ -1471,6 +1483,7 @@ model IntegrationAccount {
   @@unique([organizationId, provider, externalAccountId], map: "integration_accounts_org_provider_external_key")
   @@index([organizationId, status], map: "integration_accounts_org_status_idx")
   @@map("integration_accounts")
+  listingSources ListingSource[]
 }
 
 model IntegrationCredential {
@@ -1851,4 +1864,102 @@ model AiVisibilityCompetitor {
   @@index([resultId, position], map: "ai_visibility_competitors_result_idx")
   @@index([organizationId, createdAt], map: "ai_visibility_competitors_org_created_idx")
   @@map("ai_visibility_competitors")
+}
+
+
+enum ListingSourceStatus {
+  ACTIVE
+  DEGRADED
+  ERROR
+  DISABLED
+
+  @@map("listing_source_status")
+}
+
+enum ListingIssueSeverity {
+  INFO
+  WARNING
+  CRITICAL
+
+  @@map("listing_issue_severity")
+}
+
+enum ListingIssueType {
+  MISSING
+  MISMATCH
+  STALE
+  DUPLICATE
+  UNMAPPED
+
+  @@map("listing_issue_type")
+}
+
+model ListingSource {
+  id                   String              @id @default(uuid()) @db.Uuid
+  organizationId       String              @map("organization_id") @db.Uuid
+  locationId           String              @map("location_id") @db.Uuid
+  integrationAccountId String              @map("integration_account_id") @db.Uuid
+  provider             String              @db.VarChar(80)
+  externalLocationId   String              @map("external_location_id") @db.VarChar(240)
+  status               ListingSourceStatus @default(ACTIVE)
+  lastSyncedAt         DateTime?           @map("last_synced_at")
+  lastErrorCode        String?             @map("last_error_code") @db.VarChar(160)
+  lastErrorMessage     String?             @map("last_error_message") @db.Text
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location           Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  integrationAccount IntegrationAccount @relation(fields: [integrationAccountId], references: [id], onDelete: Cascade)
+  snapshots          ListingSnapshot[]
+
+  @@unique([locationId, provider], map: "listing_sources_location_provider_key")
+  @@unique([integrationAccountId, externalLocationId], map: "listing_sources_account_external_key")
+  @@index([organizationId, status, updatedAt], map: "listing_sources_org_status_idx")
+  @@map("listing_sources")
+}
+
+model ListingSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  locationId        String   @map("location_id") @db.Uuid
+  sourceId          String   @map("source_id") @db.Uuid
+  observedAt        DateTime @default(now()) @map("observed_at")
+  providerUpdatedAt DateTime? @map("provider_updated_at")
+  normalized        Json
+  raw               Json?
+  healthScore       Int      @map("health_score")
+  scoreVersion      Int      @default(1) @map("score_version")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  source       ListingSource        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  issues       ListingHealthIssue[]
+
+  @@index([sourceId, observedAt], map: "listing_snapshots_source_observed_idx")
+  @@index([locationId, observedAt], map: "listing_snapshots_location_observed_idx")
+  @@map("listing_snapshots")
+}
+
+model ListingHealthIssue {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  locationId     String               @map("location_id") @db.Uuid
+  snapshotId     String               @map("snapshot_id") @db.Uuid
+  type           ListingIssueType
+  severity       ListingIssueSeverity
+  field          String               @db.VarChar(80)
+  expected       Json?
+  observed       Json?
+  explanation    String               @db.Text
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  snapshot     ListingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, severity, createdAt], map: "listing_health_issues_location_severity_idx")
+  @@index([snapshotId], map: "listing_health_issues_snapshot_idx")
+  @@map("listing_health_issues")
 }

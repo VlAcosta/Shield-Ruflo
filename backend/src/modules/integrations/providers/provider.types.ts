@@ -34,6 +34,32 @@ export type ProviderDisconnectResult = {
   confirmed: boolean;
 };
 
+export type ProviderLocationProfileField =
+  | 'name'
+  | 'address'
+  | 'phone'
+  | 'website'
+  | 'regularHours'
+  | 'categories'
+  | 'attributes'
+  | 'images';
+
+export type ProviderLocationProfileRecord = {
+  externalId: string;
+  title?: string | undefined;
+  address?: string | undefined;
+  phone?: string | undefined;
+  website?: string | undefined;
+  regularHours?: Record<string, unknown> | undefined;
+  categories?: string[] | undefined;
+  attributes?: Record<string, unknown> | undefined;
+  images?: string[] | undefined;
+  coveredFields: readonly ProviderLocationProfileField[];
+  observedAt?: Date | undefined;
+  providerUpdatedAt?: Date | undefined;
+  raw?: Record<string, unknown> | undefined;
+};
+
 export type ProviderReviewRecord = {
   externalId: string;
   rating: number;
@@ -82,6 +108,7 @@ export interface ProviderAdapter {
   availability(): ProviderAvailability;
   connect(context: ProviderConnectionContext): Promise<ProviderConnectResult>;
   disconnect?(context: ProviderConnectionContext): Promise<ProviderDisconnectResult>;
+  syncLocationProfiles?(context: ProviderConnectionContext): Promise<ProviderLocationProfileRecord[]>;
   syncReviews?(context: ProviderConnectionContext, cursor?: string): Promise<ProviderReviewSyncResult>;
   publishReply?(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyResult>;
   reconcileReply?(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyReconciliationResult>;
