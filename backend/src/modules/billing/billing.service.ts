@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
+import { isBillingProviderConfigured } from './providers/index.js';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] as const;
 const PRO_TRIAL_DAYS = 14;
@@ -35,11 +36,19 @@ function entitlementMap(subscription: any): Record<string, unknown> {
   return Object.fromEntries((subscription.plan?.entitlements ?? []).map((item: any) => [item.key, item.value]));
 }
 
+function paymentStatus(status: string) {
+  if (status === 'SUCCEEDED') return 'paid';
+  if (status === 'CANCELED') return 'canceled';
+  if (status === 'FAILED') return 'failed';
+  return 'pending';
+}
+
 export async function getBillingSnapshot(app: FastifyInstance, organizationId: string) {
   const subscription = await ensureFreeSubscription(app, organizationId);
-  const [plans, priorPro] = await Promise.all([
+  const [plans, priorPro, payments] = await Promise.all([
     app.prisma.plan.findMany({ where: { active: true }, include: { entitlements: true }, orderBy: { priceCents: 'asc' } }),
     app.prisma.subscription.findFirst({ where: { organizationId, plan: { code: 'PRO' } }, select: { id: true } }),
+    app.prisma.payment.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 30 }),
   ]);
   const entitlements = entitlementMap(subscription);
   return {
@@ -76,8 +85,18 @@ export async function getBillingSnapshot(app: FastifyInstance, organizationId: s
       .filter(([, value]) => typeof value === 'number')
       .map(([key, value]) => ({ key, value })),
     packages: [],
-    payments: [],
-    paymentProviderConfigured: false,
+    payments: payments.map((payment) => ({
+      id: payment.id,
+      date: payment.createdAt.toISOString(),
+      title: payment.description,
+      amount: Number((payment.amountCents / 100).toFixed(2)),
+      status: paymentStatus(payment.status),
+      provider: payment.provider,
+      providerStatus: payment.providerStatus,
+      test: payment.test,
+      receiptAvailable: false,
+    })),
+    paymentProviderConfigured: isBillingProviderConfigured(),
     trial: { available: !priorPro && subscription.plan.code === 'FREE', days: PRO_TRIAL_DAYS },
   };
 }
