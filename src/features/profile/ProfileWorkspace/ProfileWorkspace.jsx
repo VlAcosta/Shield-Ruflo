@@ -6,12 +6,13 @@ import CompanyProfile from '../CompanyProfile';
 import SecurityProfile from '../SecurityProfile';
 import AppearanceProfile from '../AppearanceProfile';
 import UsersProfile from '../UsersProfile';
+import SystemProfile from '../SystemProfile/SystemProfile';
 import InviteUserModal from '../InviteUserModal';
 import useProfile from '../hooks/useProfile';
 import { PROFILE_TABS } from '../model/profileData';
 import useAccessControl from '../../access/hooks/useAccessControl';
+import { getPermissionAccessState } from '../../../services/access/planAccessService';
 import './ProfileWorkspace.scss';
-
 
 export default function ProfileWorkspace() {
   const profile = useProfile();
@@ -22,6 +23,10 @@ export default function ProfileWorkspace() {
   const visibleTabs = useMemo(() => PROFILE_TABS.filter((tab) => {
     if (tab.id === 'company') return access.can('company.view');
     if (tab.id === 'users') return access.can('team.view');
+    if (tab.id === 'system') {
+      return access.can('integrations.view')
+        || getPermissionAccessState('automations.view', access) !== 'role_denied';
+    }
     return true;
   }), [access]);
   const visibleTabIds = useMemo(() => new Set(visibleTabs.map((item) => item.id)), [visibleTabs]);
@@ -35,6 +40,7 @@ export default function ProfileWorkspace() {
     const next = new URLSearchParams(searchParams);
     if (tab === 'personal') next.delete('tab');
     else next.set('tab', tab);
+    if (tab !== 'system') next.delete('section');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -108,6 +114,8 @@ export default function ProfileWorkspace() {
             onRemoveUser={profile.removeUser}
           />
         ) : null}
+
+        {activeTab === 'system' ? <SystemProfile access={access} /> : null}
       </div>
 
       <InviteUserModal
