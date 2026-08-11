@@ -12,7 +12,7 @@ import {
 import { saveSecurityPreferences } from '../security/securityPreferencesService';
 
 const API_BASE = String(getRuntimeEnv('API_BASE', '/api/v1')).replace(/\/$/, '');
-const LOOKUP_TIMEOUT = 6500;
+const LOOKUP_TIMEOUT = 65000;
 
 const request = (path, options = {}) => apiRequest(joinEndpoint(API_BASE, path), { ...options, timeout: 9000 });
 
@@ -42,15 +42,19 @@ export function clearOnboardingDraft() {
   }
 }
 
-export async function lookupOrganizationByInn(inn) {
+export async function lookupOrganizationByInn(inn, kind = 'auto') {
   const normalizedInn = String(inn || '').replace(/\D/g, '');
   if (![10, 12].includes(normalizedInn.length)) {
     throw new Error('Для поиска нужен ИНН из 10 или 12 цифр');
   }
 
-  const payload = await request('/company/lookup', { method: 'POST', body: { inn: normalizedInn }, timeout: LOOKUP_TIMEOUT });
+  const payload = await request('/company/lookup', {
+    method: 'POST',
+    body: { inn: normalizedInn, kind },
+    timeout: kind === 'smz' ? LOOKUP_TIMEOUT : 9000,
+  });
   const company = payload?.company || payload;
-  if (!company?.inn) throw new Error('Организация с таким ИНН не найдена');
+  if (!company?.inn) throw new Error(kind === 'smz' ? 'Статус самозанятого не подтверждён' : 'Организация с таким ИНН не найдена');
   return {
     company,
     source: payload.source || 'Источник не указан',
@@ -104,8 +108,6 @@ export async function applyOnboardingConfiguration({ draft, pin }) {
   localStorage.setItem(PIN_UNLOCK_KEY, '1');
   localStorage.setItem(ONBOARDING_COMPLETED_KEY, '1');
   removeScopedValue('business-shield:dashboard:first-run:v1', { scope: getAccountScope() });
-  // Clear the pre-A20 global first-run flag as well; otherwise a scoped reader
-  // could legitimately migrate it back into a newly configured account.
   localStorage.removeItem('business-shield:dashboard:first-run:v1');
   localStorage.removeItem('dashboardBlocks');
 
