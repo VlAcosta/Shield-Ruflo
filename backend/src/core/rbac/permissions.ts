@@ -146,7 +146,7 @@ export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
   'billing.manage',
 ]);
 
-const entitlementPermissionGates: Readonly<Record<string, readonly Permission[]>> = Object.freeze({
+export const entitlementPermissionGates: Readonly<Record<string, readonly Permission[]>> = Object.freeze({
   analytics: ['analytics.view'] as readonly Permission[],
   automations: ['automations.view', 'automations.manage'] as readonly Permission[],
   reports: ['reports.view', 'reports.create', 'reports.export'] as readonly Permission[],
@@ -159,6 +159,13 @@ const entitlementPermissionGates: Readonly<Record<string, readonly Permission[]>
     'ai.autopilot.manage',
   ] as readonly Permission[],
 });
+
+export function entitlementForPermission(permission: Permission): string | null {
+  for (const [entitlement, gatedPermissions] of Object.entries(entitlementPermissionGates)) {
+    if (gatedPermissions.includes(permission)) return entitlement;
+  }
+  return null;
+}
 
 export function isPermission(value: string): value is Permission {
   return (permissions as readonly string[]).includes(value);
