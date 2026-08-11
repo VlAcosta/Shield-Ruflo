@@ -1,23 +1,24 @@
-name: P20 Ruflo Agent Implementation
+name: P20 Ruflo Validation Gate
 
 on:
   push:
     branches:
       - feat/product-v2-p20-reputation-cases
     paths:
-      - scripts/p20-agent-apply.py
-      - scripts/p20-type-fix.py
+      - backend/src/modules/cases/**
+      - backend/src/modules/operations/automation-engine.ts
+      - backend/test/p20-reputation-cases.integration.test.ts
       - .github/workflows/p20-agent-apply.yml
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: p20-ruflo-agent-${{ github.ref }}
-  cancel-in-progress: false
+  group: p20-ruflo-validation-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  integrate-backend:
+  validate-backend:
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -51,12 +52,6 @@ jobs:
       AI_REVIEW_INTELLIGENCE_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Apply Ruflo P20 integration patch
-        run: |
-          python3 scripts/p20-agent-apply.py
-          python3 scripts/p20-type-fix.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22.23.2
@@ -83,23 +78,3 @@ jobs:
       - name: Backend build
         working-directory: backend
         run: npm run build
-      - name: Commit validated P20 integration
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            backend/prisma/schema.prisma \
-            backend/src/app.ts \
-            backend/src/core/rbac/permissions.ts \
-            backend/src/modules/tasks/tasks.service.ts \
-            backend/src/modules/tasks/tasks.routes.ts \
-            backend/src/modules/cases/cases.routes.ts \
-            backend/src/modules/cases/cases.service.ts
-          if git diff --cached --quiet; then
-            echo "No integration changes"
-            exit 0
-          fi
-          git commit -m "feat(p20): integrate reputation cases backend domain"
-          git push origin HEAD:feat/product-v2-p20-reputation-cases
