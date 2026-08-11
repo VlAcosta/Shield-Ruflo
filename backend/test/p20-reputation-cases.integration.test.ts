@@ -247,6 +247,7 @@ describeWithPostgres('P20 Reputation Cases', () => {
         conditions: { rating: 2, topic: 'service-speed', similarReviewsMin: 3, similarWindowDays: 7 },
         actions: [
           { type: 'create_case', config: { category: 'service-speed', severity: 'HIGH', slaMinutes: 240 } },
+          { type: 'create_ai_reply_draft', config: { mode: 'RECOVERY_FOCUSED' } },
           { type: 'create_task', config: { title: 'Разобрать повторяющийся негатив' } },
           { type: 'assign_manager', config: {} },
           { type: 'notify', config: { title: 'Повторяющийся негатив по скорости сервиса' } },
@@ -265,6 +266,9 @@ describeWithPostgres('P20 Reputation Cases', () => {
     const first = await dispatchAutomationEvent(app, event);
     expect(first).toHaveLength(1);
     expect(first[0]).toMatchObject({ automationId: automation.id, status: 'SUCCESS' });
+    const effects = first[0]?.effects as Array<Record<string, unknown>>;
+    expect(effects.some((effect) => effect.type === 'create_ai_reply_draft')).toBe(true);
+    expect(effects.find((effect) => effect.type === 'create_ai_reply_draft')).toMatchObject({ skipped: 'ENTITLEMENT_REQUIRED' });
 
     const caseRow = await app.prisma.reputationCase.findFirstOrThrow({
       where: { organizationId, sourceDedupeKey: `automation:${automation.id}:${event.dedupeKey}` },

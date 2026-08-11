@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { createCaseFromReview } from '../cases/cases.service.js';
+import { enqueueAiReplyGeneration } from '../ai/reply-copilot.service.js';
 
 type AutomationEvent = {
   type: 'new_review' | 'unanswered_age';
@@ -185,6 +186,33 @@ async function executeAction(
     });
     runtime.caseId = result.case.id;
     return { type: action.type, caseId: result.case.id, deduplicated: result.deduplicated };
+  }
+
+  if ((action.type === 'create_ai_reply_draft' || action.type === 'generate_ai_reply') && review) {
+    if (!actorUserId) return { type: action.type, skipped: 'NO_ACTIVE_MEMBER' };
+    const requestedMode = typeof action.config.mode === 'string' ? action.config.mode.toUpperCase() : 'RECOVERY_FOCUSED';
+    const mode = ['CONCISE', 'EMPATHETIC', 'FORMAL', 'RECOVERY_FOCUSED'].includes(requestedMode)
+      ? requestedMode as 'CONCISE' | 'EMPATHETIC' | 'FORMAL' | 'RECOVERY_FOCUSED'
+      : 'RECOVERY_FOCUSED';
+    const instructions = typeof action.config.instructions === 'string'
+      ? action.config.instructions.slice(0, 4000)
+      : `Автоматизация «${automation.name}». Подготовить безопасный черновик ответа для дальнейшего согласования.`;
+    try {
+      const queued = await enqueueAiReplyGeneration(app.prisma, {
+        organizationId: event.organizationId,
+        reviewId: review.id,
+        actorUserId,
+        mode,
+        instructions,
+      });
+      return { type: action.type, operationId: queued.operationId, jobId: queued.jobId, status: queued.status };
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+      if (['ENTITLEMENT_REQUIRED', 'AI_PROVIDER_UNAVAILABLE', 'REVIEW_INTELLIGENCE_REQUIRED'].includes(code)) {
+        return { type: action.type, skipped: code };
+      }
+      throw error;
+    }
   }
 
   if (action.type === 'create_task' && review) {
