@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LockIcon, MoonIcon, SunIcon } from '../icons';
 import BrandMark from '../../../components/brand/BrandMark';
@@ -19,14 +19,17 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
   const brandTarget = navigationLocked ? '/onboarding' : findFirstAllowedRoute(access);
 
   const allowed = (item) => !item.permission || access.can(item.permission);
-  const visibleGroups = useMemo(() => navigationGroups
-    .map((group) => ({ ...group, items: group.items.filter(allowed) }))
-    .filter((group) => group.items.length > 0), [access]);
-
-  const activeGroup = useMemo(() => visibleGroups.find((group) => group.items.some(({ to }) => (
+  const visibleGroups = navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.permission || access.can(item.permission)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const activeGroup = visibleGroups.find((group) => group.items.some(({ to }) => (
     location.pathname === to || location.pathname.startsWith(`${to}/`)
-  )))?.id || '', [location.pathname, visibleGroups]);
+  )))?.id || '';
   const [openGroup, setOpenGroup] = useState(activeGroup || 'reputation');
+  const HelpIcon = navigationHelp.Icon;
 
   useEffect(() => {
     if (activeGroup) setOpenGroup(activeGroup);
@@ -45,8 +48,8 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
     }
   };
 
-  const renderDirect = ({ to, label, Icon, accent }) => {
-    if (!allowed({ to, label, Icon, permission: navigationPrimary.find((item) => item.to === to)?.permission })) return null;
+  const renderDirect = ({ to, label, Icon, accent, permission }) => {
+    if (permission && !access.can(permission)) return null;
     const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
     return (
       <NavLink key={to} to={to} className={`portal__navItem portal__navItem--primary ${accent ? 'portal__navItem--accent' : ''} ${active ? 'is-active' : ''}`}>
@@ -73,7 +76,7 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
         </div>
       ) : (
         <nav className="portal__nav portal__nav--grouped" aria-label="Навигация кабинета">
-          {navigationPrimary.filter(allowed).map(renderDirect)}
+          {navigationPrimary.map(renderDirect)}
 
           <div className="portal__navGroups">
             {visibleGroups.map((group) => {
@@ -117,7 +120,7 @@ function PortalSidebar({ onLock, navigationLocked = false }) {
         <div className="portal__sidebarUtility">
           {allowed(navigationHelp) ? (
             <NavLink to={navigationHelp.to} className="portal__utilityLink">
-              <navigationHelp.Icon />
+              <HelpIcon />
               <span>{navigationHelp.label}</span>
             </NavLink>
           ) : null}
