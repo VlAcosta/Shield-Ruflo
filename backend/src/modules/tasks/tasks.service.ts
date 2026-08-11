@@ -45,6 +45,7 @@ export type TaskMutationInput = {
   businessId?: string | null | undefined;
   locationId?: string | null | undefined;
   reviewId?: string | null | undefined;
+  caseId?: string | null | undefined;
   assigneeMemberIds?: string[] | undefined;
   position?: number | undefined;
 };
@@ -106,6 +107,7 @@ async function assertScopedReferences(
     businessId?: string | null | undefined;
     locationId?: string | null | undefined;
     reviewId?: string | null | undefined;
+    caseId?: string | null | undefined;
   },
 ) {
   if (input.businessId) {
@@ -122,6 +124,10 @@ async function assertScopedReferences(
   if (input.reviewId) {
     const review = await app.prisma.review.findFirst({ where: { id: input.reviewId, organizationId }, select: { id: true } });
     if (!review) throw new AppError({ code: 'REVIEW_NOT_FOUND', message: 'Отзыв не найден', statusCode: 404 });
+  }
+  if (input.caseId) {
+    const reputationCase = await app.prisma.reputationCase.findFirst({ where: { id: input.caseId, organizationId }, select: { id: true } });
+    if (!reputationCase) throw new AppError({ code: 'REPUTATION_CASE_NOT_FOUND', message: 'Репутационный кейс не найден', statusCode: 404 });
   }
 }
 
@@ -148,6 +154,7 @@ function serializeTask(task: any) {
     businessId: task.businessId,
     locationId: task.locationId,
     reviewId: task.reviewId,
+    caseId: task.caseId,
     position: task.position,
     assignees: (task.assignees ?? []).map((item: any) => ({
       memberId: item.organizationMemberId,
@@ -233,6 +240,7 @@ export async function createTask(
       businessId: input.businessId ?? null,
       locationId: input.locationId ?? null,
       reviewId: input.reviewId ?? null,
+      caseId: input.caseId ?? null,
     };
 
     const created = await tx.task.create({ data });
@@ -269,6 +277,7 @@ export async function updateTask(
     businessId: patch.businessId,
     locationId: patch.locationId,
     reviewId: patch.reviewId,
+    caseId: patch.caseId,
   });
   const memberIds = patch.assigneeMemberIds === undefined ? undefined : [...new Set(patch.assigneeMemberIds)];
   if (memberIds) await assertScopedMembers(app, context.organizationId, memberIds);
@@ -285,6 +294,7 @@ export async function updateTask(
   if (patch.businessId !== undefined) activityMetadata.businessId = patch.businessId;
   if (patch.locationId !== undefined) activityMetadata.locationId = patch.locationId;
   if (patch.reviewId !== undefined) activityMetadata.reviewId = patch.reviewId;
+  if (patch.caseId !== undefined) activityMetadata.caseId = patch.caseId;
   if (memberIds !== undefined) activityMetadata.assigneeMemberIds = memberIds;
 
   const updated = await app.prisma.$transaction(async (tx) => {
@@ -300,6 +310,7 @@ export async function updateTask(
         ...(patch.businessId !== undefined ? { businessId: patch.businessId } : {}),
         ...(patch.locationId !== undefined ? { locationId: patch.locationId } : {}),
         ...(patch.reviewId !== undefined ? { reviewId: patch.reviewId } : {}),
+        ...(patch.caseId !== undefined ? { caseId: patch.caseId } : {}),
       },
     });
 

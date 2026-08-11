@@ -236,6 +236,47 @@ enum NotificationStatus {
   @@map("notification_status")
 }
 
+enum ReputationCaseOrigin {
+  REVIEW
+  AI_TREND
+  MANUAL
+  SURVEY
+  AUTOMATION
+
+  @@map("reputation_case_origin")
+}
+
+enum ReputationCaseSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("reputation_case_severity")
+}
+
+enum ReputationCaseStatus {
+  NEW
+  TRIAGED
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  WAITING_INTERNAL
+  RESOLVED
+  VERIFIED
+  CLOSED
+
+  @@map("reputation_case_status")
+}
+
+enum ReputationCaseMetricPhase {
+  BASELINE
+  RESOLUTION
+  VERIFICATION
+
+  @@map("reputation_case_metric_phase")
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -288,6 +329,8 @@ model User {
   createdTasks               Task[]                @relation("TaskCreator")
   taskComments               TaskComment[]         @relation("TaskCommentAuthor")
   taskActivities             TaskActivity[]        @relation("TaskActivityActor")
+  createdReputationCases     ReputationCase[]      @relation("ReputationCaseCreator")
+  reputationCaseActivities   ReputationCaseActivity[] @relation("ReputationCaseActivityActor")
   notifications              Notification[]        @relation("NotificationUser")
 
   @@index([status], map: "users_status_idx")
@@ -348,6 +391,9 @@ model Organization {
   automationExecutions   AutomationExecution[]
   reports                Report[]
   notifications          Notification[]
+  reputationCases        ReputationCase[]
+  reputationCaseActivities ReputationCaseActivity[]
+  reputationCaseMetricSnapshots ReputationCaseMetricSnapshot[]
   subscriptions          Subscription[]
   usageRecords           Usage[]
 
@@ -377,6 +423,7 @@ model OrganizationMember {
   invitedBy          User?              @relation("MembershipInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
   reviewAssignments  ReviewAssignment[] @relation("ReviewAssignmentMember")
   taskAssignments    TaskAssignee[]     @relation("TaskAssigneeMember")
+  ownedReputationCases ReputationCase[] @relation("ReputationCaseOwner")
 
   @@unique([organizationId, userId], map: "organization_members_org_user_key")
   @@index([userId, status], map: "organization_members_user_status_idx")
@@ -459,6 +506,7 @@ model Location {
   reviewSources ReviewSource[]
   reviews       Review[]
   tasks         Task[]
+  reputationCases ReputationCaseLocation[]
 
   @@index([businessId, status], map: "locations_business_status_idx")
   @@index([businessId, isPrimary], map: "locations_business_primary_idx")
@@ -611,6 +659,7 @@ model Review {
   insights      ReviewInsight[]
   aiOperations  AiOperation[]
   tasks         Task[]
+  reputationCases ReputationCaseReview[]
 
   @@unique([sourceId, externalId], map: "reviews_source_external_key")
   @@index([organizationId, status, receivedAt], map: "reviews_org_status_received_idx")
@@ -844,12 +893,117 @@ model ReviewAssignment {
   @@map("review_assignments")
 }
 
+model ReputationCase {
+  id              String                    @id @default(uuid()) @db.Uuid
+  organizationId  String                    @map("organization_id") @db.Uuid
+  title           String                    @db.VarChar(240)
+  category        String                    @db.VarChar(120)
+  severity        ReputationCaseSeverity    @default(MEDIUM)
+  status          ReputationCaseStatus      @default(NEW)
+  origin          ReputationCaseOrigin      @default(MANUAL)
+  ownerMemberId   String?                   @map("owner_member_id") @db.Uuid
+  slaMinutes      Int?                      @map("sla_minutes")
+  dueAt           DateTime?                 @map("due_at")
+  rootCause       String?                   @map("root_cause") @db.Text
+  resolution      String?                   @db.Text
+  outcome         Json?
+  sourceDedupeKey String?                   @map("source_dedupe_key") @db.VarChar(240)
+  reopenedAt      DateTime?                 @map("reopened_at")
+  resolvedAt      DateTime?                 @map("resolved_at")
+  verifiedAt      DateTime?                 @map("verified_at")
+  closedAt        DateTime?                 @map("closed_at")
+  createdByUserId String?                   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  updatedAt       DateTime                  @updatedAt @map("updated_at")
+
+  organization    Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner           OrganizationMember?       @relation("ReputationCaseOwner", fields: [ownerMemberId], references: [id], onDelete: SetNull)
+  createdBy       User?                     @relation("ReputationCaseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviews         ReputationCaseReview[]
+  locations       ReputationCaseLocation[]
+  tasks           Task[]
+  activities      ReputationCaseActivity[]
+  metricSnapshots ReputationCaseMetricSnapshot[]
+
+  @@unique([organizationId, sourceDedupeKey], map: "reputation_cases_org_source_dedupe_key")
+  @@index([organizationId, status, dueAt], map: "reputation_cases_org_status_due_idx")
+  @@index([organizationId, severity, createdAt], map: "reputation_cases_org_severity_created_idx")
+  @@index([ownerMemberId, status], map: "reputation_cases_owner_status_idx")
+  @@index([organizationId, category, createdAt], map: "reputation_cases_org_category_created_idx")
+  @@map("reputation_cases")
+}
+
+model ReputationCaseReview {
+  caseId   String   @map("case_id") @db.Uuid
+  reviewId String   @map("review_id") @db.Uuid
+  addedAt  DateTime @default(now()) @map("added_at")
+
+  case   ReputationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  review Review         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, reviewId])
+  @@index([reviewId, addedAt], map: "reputation_case_reviews_review_idx")
+  @@map("reputation_case_reviews")
+}
+
+model ReputationCaseLocation {
+  caseId     String   @map("case_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  case     ReputationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  location Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, locationId])
+  @@index([locationId, addedAt], map: "reputation_case_locations_location_idx")
+  @@map("reputation_case_locations")
+}
+
+model ReputationCaseActivity {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  caseId         String                @map("case_id") @db.Uuid
+  actorUserId    String?               @map("actor_user_id") @db.Uuid
+  action         String                @db.VarChar(120)
+  fromStatus     ReputationCaseStatus? @map("from_status")
+  toStatus       ReputationCaseStatus? @map("to_status")
+  metadata       Json?
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         ReputationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actor        User?          @relation("ReputationCaseActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt], map: "reputation_case_activities_org_created_idx")
+  @@index([caseId, createdAt], map: "reputation_case_activities_case_created_idx")
+  @@map("reputation_case_activities")
+}
+
+model ReputationCaseMetricSnapshot {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  caseId         String                    @map("case_id") @db.Uuid
+  phase          ReputationCaseMetricPhase
+  periodStart    DateTime                  @map("period_start")
+  periodEnd      DateTime                  @map("period_end")
+  metrics        Json
+  measuredAt     DateTime                  @default(now()) @map("measured_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         ReputationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, phase, measuredAt], map: "reputation_case_metric_snapshots_case_phase_idx")
+  @@index([organizationId, measuredAt], map: "reputation_case_metric_snapshots_org_measured_idx")
+  @@map("reputation_case_metric_snapshots")
+}
+
 model Task {
   id             String       @id @default(uuid()) @db.Uuid
   organizationId String       @map("organization_id") @db.Uuid
   businessId     String?      @map("business_id") @db.Uuid
   locationId     String?      @map("location_id") @db.Uuid
   reviewId       String?      @map("review_id") @db.Uuid
+  caseId         String?      @map("case_id") @db.Uuid
   title          String       @db.VarChar(240)
   description    String?      @db.Text
   status         TaskStatus   @default(NEW)
@@ -866,6 +1020,7 @@ model Task {
   business     Business?     @relation(fields: [businessId], references: [id], onDelete: SetNull)
   location     Location?     @relation(fields: [locationId], references: [id], onDelete: SetNull)
   review       Review?       @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  case         ReputationCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
   createdBy    User          @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   assignees    TaskAssignee[]
   comments     TaskComment[]
@@ -876,6 +1031,7 @@ model Task {
   @@index([organizationId, status, position], map: "tasks_org_status_position_idx")
   @@index([organizationId, priority, deadline], map: "tasks_org_priority_deadline_idx")
   @@index([reviewId], map: "tasks_review_idx")
+  @@index([caseId], map: "tasks_case_idx")
   @@index([businessId, status], map: "tasks_business_status_idx")
   @@index([locationId, status], map: "tasks_location_status_idx")
   @@map("tasks")
