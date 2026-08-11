@@ -9,6 +9,7 @@ import {
 } from '../../../services/subscriptions/subscriptionService';
 import { formatCurrency } from '../model/formatters';
 import { recordCompanyActivity } from '../../../services/activity/companyActivityService';
+import { startProTrial as requestProTrial } from '../../../services/subscriptions/subscriptionTrialService';
 
 const EMPTY_PROMO = Object.freeze({
   code: '',
@@ -24,7 +25,7 @@ export default function useSubscriptions() {
   const [promo, setPromo] = useState(EMPTY_PROMO);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState({ renewal: false, promo: false, checkout: false });
+  const [busy, setBusy] = useState({ renewal: false, promo: false, checkout: false, trial: false });
   const [notice, setNotice] = useState(null);
   const mountedRef = useRef(true);
   const noticeTimerRef = useRef(null);
@@ -225,6 +226,22 @@ export default function useSubscriptions() {
     }
   }, [busy.checkout, cart, cartItems, discount, persistCart, promo, showNotice, subtotal, total, totalItems]);
 
+  const startTrial = useCallback(async () => {
+    if (busy.trial || !snapshot?.trial?.available) return;
+    setBusy((current) => ({ ...current, trial: true }));
+    try {
+      const nextSnapshot = await requestProTrial();
+      setSnapshot(nextSnapshot);
+      setCart({});
+      showNotice('PRO активирован на 14 дней');
+      recordCompanyActivity({ type: 'billing_trial', title: 'Активировал PRO на 14 дней', route: '/subscriptions', tone: 'violet' });
+    } catch (trialError) {
+      showNotice(trialError?.message || 'Не удалось активировать пробный период', 'error');
+    } finally {
+      if (mountedRef.current) setBusy((current) => ({ ...current, trial: false }));
+    }
+  }, [busy.trial, showNotice, snapshot?.trial?.available]);
+
   const downloadReceipt = useCallback(async (payment) => {
     try {
       await downloadPaymentReceipt(payment);
@@ -255,6 +272,7 @@ export default function useSubscriptions() {
     applyPromo,
     removePromo,
     checkout,
+    startTrial,
     downloadReceipt,
     reload: load,
   };
