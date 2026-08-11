@@ -98,7 +98,7 @@ jobs:
           PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
         run: |
           set -euo pipefail
-          remote_check='printf "Production SSH connected\n"; test -d /var/www/bis-shield; command -v node >/dev/null; command -v git >/dev/null; command -v pg_dump >/dev/null; sudo -n true'
+          remote_check='export NVM_DIR="$HOME/.nvm"; if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; nvm use 22 >/dev/null; fi; printf "Production SSH connected\n"; test -d /var/www/bis-shield; command -v node >/dev/null; command -v npm >/dev/null; command -v git >/dev/null; command -v pg_dump >/dev/null; node -e "const [M,m]=process.versions.node.split(\".\").map(Number); if (M<22 || M>=25 || (M===22 && m<12)) process.exit(1)"; node --version; sudo -n true'
 
           if [[ "$AUTH_MODE" == 'key' ]]; then
             ssh \
@@ -132,6 +132,18 @@ jobs:
           APP_DIR="$3"
           PUBLIC_URL="$4"
           API_URL="http://127.0.0.1:8081"
+
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+            # NVM is used by the production account in interactive sessions.
+            . "$NVM_DIR/nvm.sh"
+            nvm use 22 >/dev/null
+          fi
+          hash -r
+
+          node -e 'const [M,m]=process.versions.node.split(".").map(Number); if (M<22 || M>=25 || (M===22 && m<12)) { console.error(`Node.js >=22.12 <25 required, found ${process.versions.node}`); process.exit(1); }'
+          echo "Deployment Node: $(node --version)"
+          echo "Deployment npm:  $(npm --version)"
 
           cd "$APP_DIR"
 
