@@ -1,0 +1,156 @@
+.portal__sidebar--simple {
+  .portal__nav--grouped {
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .portal__navItem--primary {
+    min-height: 46px;
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .portal__navItem--accent {
+    margin-bottom: 8px;
+    border: 1px solid rgba(107, 82, 255, .16);
+    background: rgba(107, 82, 255, .06);
+  }
+
+  .portal__navGroups {
+    display: grid;
+    gap: 6px;
+  }
+
+  .portal__navGroup {
+    border-radius: 16px;
+  }
+
+  .portal__navGroupButton {
+    width: 100%;
+    min-height: 44px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--portal-nav-text, #5f6d91);
+    display: grid;
+    grid-template-columns: 28px 1fr 20px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease;
+  }
+
+  .portal__navGroupButton:hover,
+  .portal__navGroup.is-active > .portal__navGroupButton {
+    color: var(--portal-accent, #6554ff);
+    background: rgba(101, 84, 255, .07);
+  }
+
+  .portal__navChevron {
+    justify-self: end;
+    font-size: 18px;
+    transition: transform .18s ease;
+  }
+
+  .portal__navGroup:has(.portal__navChildren) .portal__navChevron {
+    transform: rotate(180deg);
+  }
+
+  .portal__navChildren {
+    display: grid;
+    gap: 3px;
+    padding: 4px 0 8px 28px;
+  }
+
+  .portal__navItem--child {
+    min-height: 38px;
+    border-radius: 12px;
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+
+  .portal__navItem--child .portal__navIcon {
+    transform: scale(.88);
+  }
+
+  .portal__sidebarUtility {
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 4px 4px;
+    border-top: 1px solid rgba(121, 132, 169, .14);
+  }
+
+  .portal__utilityLink {
+    min-height: 38px;
+    border: 0;
+    background: transparent;
+    color: var(--portal-nav-text, #687494);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 11px;
+    font: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .portal__utilityLink:hover {
+    background: rgba(101, 84, 255, .06);
+    color: var(--portal-accent, #6554ff);
+  }
+
+  .portal__utilityLink svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .portal__logoutDock--simple {
+    padding-top: 6px;
+  }
+
+  .portal__logoutDock--simple .portal__logoutButton {
+    min-height: 42px;
+  }
+
+  .portal__onboardingNav {
+    padding: 8px 2px;
+  }
+
+  .portal__onboardingNav .portal__navItem {
+    min-height: 58px;
+  }
+
+  .portal__onboardingNav .portal__navText {
+    display: grid;
+    gap: 2px;
+  }
+
+  .portal__onboardingNav .portal__navText small,
+  .portal__onboardingNav p {
+    color: #9aa5bf;
+    font-size: 12px;
+  }
+
+  .portal__onboardingNav p {
+    margin: 10px 12px;
+    line-height: 1.45;
+  }
+}
+
+[data-theme='dark'] .portal__sidebar--simple {
+  .portal__navGroupButton,
+  .portal__utilityLink { color: #aeb7ce; }
+  .portal__navGroupButton:hover,
+  .portal__navGroup.is-active > .portal__navGroupButton,
+  .portal__navItem--accent { background: rgba(125, 104, 255, .12); }
+}
