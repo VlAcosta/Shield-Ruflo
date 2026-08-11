@@ -19,6 +19,13 @@ function formatBadge(count) {
   return count > 9 ? '9+' : String(count);
 }
 
+function formatReviewsStatus({ navigationLocked, canViewReviews, pendingReviews }) {
+  if (navigationLocked) return 'Недоступны';
+  if (!canViewReviews) return 'Нет доступа';
+  if (!pendingReviews) return 'Новых нет';
+  return pendingReviews > 99 ? '99+ новых' : `${pendingReviews} новых`;
+}
+
 function PortalTopbar({
   title,
   subtitle,
@@ -37,6 +44,7 @@ function PortalTopbar({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileTriggerRef = useRef(null);
+  const reviewsStatus = formatReviewsStatus({ navigationLocked, canViewReviews, pendingReviews });
 
   const closeFloatingMenus = useCallback(() => {
     setNotificationsOpen(false);
@@ -105,7 +113,7 @@ function PortalTopbar({
 
           <button
             type="button"
-            className={`portal__reviewsBtn ${navigationLocked || !canViewReviews ? 'is-disabled' : ''}`}
+            className={`portal__reviewsBtn portal__reviewsBtn--compact ${navigationLocked || !canViewReviews ? 'is-disabled' : ''}`}
             onMouseEnter={navigationLocked || !canViewReviews ? undefined : onPreloadReviews}
             onFocus={navigationLocked || !canViewReviews ? undefined : onPreloadReviews}
             onClick={() => {
@@ -114,14 +122,13 @@ function PortalTopbar({
               onOpenReviews?.();
             }}
             disabled={navigationLocked || !canViewReviews}
-            aria-label={navigationLocked ? 'Отзывы будут доступны после завершения настройки' : (!canViewReviews ? 'Роль не разрешает просмотр отзывов' : 'Новые отзывы')}
+            aria-label={navigationLocked ? 'Отзывы будут доступны после завершения настройки' : (!canViewReviews ? 'Роль не разрешает просмотр отзывов' : `Отзывы: ${reviewsStatus}`)}
           >
             <span className="portal__reviewsBtnIcon"><ReviewsIcon /></span>
             <span className="portal__reviewsBtnCopy">
-              <small>Отзывы</small>
-              <strong>{navigationLocked ? 'Недоступны' : (!canViewReviews ? 'Нет доступа' : (pendingReviews ? 'Новые' : 'Нет новых'))}</strong>
+              <strong>Отзывы</strong>
+              <small>{reviewsStatus}</small>
             </span>
-            {!navigationLocked && canViewReviews ? <span className="portal__reviewsCounter">{pendingReviews > 99 ? '99+' : pendingReviews}</span> : null}
           </button>
 
           <div className="portal__topbarSlot">
@@ -188,7 +195,6 @@ function PortalTopbar({
               <PortalProfileMenu
                 open={profileOpen}
                 onClose={() => setProfileOpen(false)}
-                onLock={onLock}
                 triggerRef={profileTriggerRef}
               />
             ) : null}
