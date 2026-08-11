@@ -1,0 +1,128 @@
+name: P19 Final Stage Gate
+
+on:
+  workflow_run:
+    workflows:
+      - P19 Publish Reliability Gate
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-clean:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'feat/product-v2-p19-ai-reply-copilot'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: business_shield
+          POSTGRES_PASSWORD: business_shield_test
+          POSTGRES_DB: business_shield_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U business_shield -d business_shield_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CI: "true"
+      NODE_ENV: test
+      DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      TEST_DATABASE_URL: postgresql://business_shield:business_shield_test@127.0.0.1:5432/business_shield_test
+      AUTH_SECRET: ci-only-business-shield-auth-secret-0123456789
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_OTP_PROVIDER: console
+      AUTH_OTP_FIXED_CODE: ""
+      AUTH_EXPOSE_DEBUG_CODE: "false"
+      COMPANY_LOOKUP_PROVIDER: disabled
+      INTEGRATION_CREDENTIALS_KEY: ci-only-integration-credential-key-0123456789
+      PLATFORM_ADMIN_IDENTITIES: ci-platform-admin@example.test
+      SWAGGER_ENABLED: "false"
+      CORS_ORIGINS: http://localhost:3000
+      AI_REVIEW_INTELLIGENCE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/product-v2-p19-ai-reply-copilot
+          fetch-depth: 0
+      - name: Apply remaining frontend cleanup if needed
+        shell: bash
+        run: |
+          if [ -f scripts/p19-frontend-fix.py ]; then
+            python3 scripts/p19-frontend-fix.py
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+      - name: Prisma generate
+        working-directory: backend
+        run: npm run prisma:generate
+      - name: Deploy migrations
+        working-directory: backend
+        run: npm run db:deploy
+      - name: Migration status
+        working-directory: backend
+        run: npm run db:status
+      - name: Backend typecheck
+        working-directory: backend
+        run: npm run typecheck
+      - name: Backend tests
+        working-directory: backend
+        run: npm test
+      - name: Backend build
+        working-directory: backend
+        run: npm run build
+      - name: Install frontend
+        run: npm ci
+      - name: Frontend typecheck
+        run: npm run typecheck
+      - name: Frontend lint
+        run: npm run lint
+      - name: Frontend tests
+        run: npm run test:ci
+      - name: Frontend build
+        run: npm run build
+      - name: Remove all temporary P19 agent infrastructure
+        shell: bash
+        run: |
+          rm -f \
+            scripts/p19-frontend-fix.py \
+            .github/workflows/p19-frontend-agent.yml \
+            .github/workflows/p19-frontend-diagnostics.yml \
+            .github/workflows/p19-agent-finalize.yml \
+            .github/workflows/p19-final-stage-gate.yml
+      - name: Commit clean validated P19 product branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            src/services/reviews/replyCopilotService.ts \
+            src/services/reviews/reviewIntelligenceService.js \
+            src/features/reviews/ReviewsIntelligence/ReviewsIntelligenceWorkspace.scss
+          git add -u -- \
+            scripts/p19-frontend-fix.py \
+            .github/workflows/p19-frontend-agent.yml \
+            .github/workflows/p19-frontend-diagnostics.yml \
+            .github/workflows/p19-agent-finalize.yml \
+            .github/workflows/p19-final-stage-gate.yml || true
+          if git diff --cached --quiet; then
+            echo "P19 branch already clean and validated"
+            exit 0
+          fi
+          git commit -m "fix(p19): finalize validated reply copilot frontend"
+          git push origin HEAD:feat/product-v2-p19-ai-reply-copilot
