@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { PrismaClient } from '../../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { assertEntitlement } from '../billing/billing.service.js';
 import { aiProviderRegistry } from '../ai/ai-provider.registry.js';
@@ -37,7 +37,7 @@ async function assertLocation(app: FastifyInstance, organizationId: string, loca
   return location;
 }
 
-async function audit(app: FastifyInstance, context: ActorContext, action: string, entityId: string, metadata?: Record<string, unknown>) {
+async function audit(app: FastifyInstance, context: ActorContext, action: string, entityId: string, metadata?: Prisma.InputJsonValue) {
   await app.prisma.auditLog.create({
     data: {
       organizationId: context.organizationId,
