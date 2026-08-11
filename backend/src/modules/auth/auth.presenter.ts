@@ -1,5 +1,33 @@
-import { effectivePermissions } from '../../core/rbac/permissions.js';
+import { effectivePermissions, permissionsForEntitlements, type PlanEntitlements } from '../../core/rbac/permissions.js';
 import type { PublicUser } from './auth.types.js';
+
+type SubscriptionForAccess = {
+  status: string;
+  currentPeriodEnd: Date | null;
+  createdAt: Date;
+  plan: {
+    code: string;
+    entitlements: Array<{ key: string; value: unknown }>;
+  };
+};
+
+export type PresentableMembership = {
+  id: string;
+  organizationId: string;
+  role: string;
+  status: string;
+  accessExpiresAt?: Date | null;
+  permissionOverrides?: unknown;
+  createdAt: Date;
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    onboardingStatus: string;
+    subscriptions: SubscriptionForAccess[];
+  };
+};
 
 type UserWithMemberships = {
   id: string;
@@ -15,28 +43,30 @@ type UserWithMemberships = {
   phoneVerifiedAt: Date | null;
   profileCompletedAt: Date | null;
   createdAt: Date;
-  memberships: Array<{
-    id: string;
-    organizationId: string;
-    role: string;
-    status: string;
-    accessExpiresAt?: Date | null;
-    permissionOverrides?: unknown;
-    createdAt: Date;
-    organization: {
-      id: string;
-      name: string;
-      slug: string;
-      status: string;
-      onboardingStatus: string;
-    };
-  }>;
+  memberships: PresentableMembership[];
 };
 
-function membershipIsUsable(membership: UserWithMemberships['memberships'][number], now = new Date()): boolean {
+function membershipIsUsable(membership: PresentableMembership, now = new Date()): boolean {
   return membership.status === 'ACTIVE'
     && membership.organization.status === 'ACTIVE'
     && (!membership.accessExpiresAt || membership.accessExpiresAt > now);
+}
+
+function activePlanEntitlements(membership: PresentableMembership, now = new Date()): PlanEntitlements {
+  const subscription = membership.organization.subscriptions.find((item) => (
+    item.status !== 'TRIALING' || !item.currentPeriodEnd || item.currentPeriodEnd > now
+  ));
+
+  if (!subscription) return {};
+  return Object.fromEntries(subscription.plan.entitlements.map((item) => [item.key, item.value]));
+}
+
+export function presentMembershipPermissions(membership: PresentableMembership, now = new Date()) {
+  const rolePermissions = effectivePermissions(
+    membership.role,
+    membership.permissionOverrides as { allow?: string[]; deny?: string[] } | null,
+  );
+  return permissionsForEntitlements(rolePermissions, activePlanEntitlements(membership, now));
 }
 
 export function presentUser(user: UserWithMemberships, activeOrganizationId?: string | null): PublicUser {
@@ -66,7 +96,7 @@ export function presentUser(user: UserWithMemberships, activeOrganizationId?: st
           organizationId: membership.organizationId,
           role: membership.role,
           status: membership.status,
-          permissions: effectivePermissions(membership.role, membership.permissionOverrides as { allow?: string[]; deny?: string[] } | null),
+          permissions: presentMembershipPermissions(membership, now),
           permissionOverrides: (membership.permissionOverrides as { allow?: string[]; deny?: string[] } | null) || { allow: [], deny: [] },
           accessExpiresAt: membership.accessExpiresAt?.toISOString() ?? null,
           securityStatus: 'active',
@@ -96,6 +126,26 @@ export const publicUserInclude = {
           slug: true,
           status: true,
           onboardingStatus: true,
+          subscriptions: {
+            where: {
+              status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] as const },
+            },
+            orderBy: { createdAt: 'desc' as const },
+            take: 1,
+            select: {
+              status: true,
+              currentPeriodEnd: true,
+              createdAt: true,
+              plan: {
+                select: {
+                  code: true,
+                  entitlements: {
+                    select: { key: true, value: true },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
