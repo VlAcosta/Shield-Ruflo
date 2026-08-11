@@ -128,7 +128,9 @@ export const publicUserInclude = {
           onboardingStatus: true,
           subscriptions: {
             where: {
-              status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] as const },
+              status: {
+                in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] as Array<'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'INCOMPLETE'>,
+              },
             },
             orderBy: { createdAt: 'desc' as const },
             take: 1,
