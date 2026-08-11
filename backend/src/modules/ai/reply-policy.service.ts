@@ -34,6 +34,10 @@ function includesPhrase(text: string, phrase: string): boolean {
   return text.toLocaleLowerCase('ru-RU').includes(phrase.toLocaleLowerCase('ru-RU'));
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 export async function evaluateReplyPolicy(
   prisma: PrismaClient,
   input: {
@@ -65,8 +69,8 @@ export async function evaluateReplyPolicy(
     reasons.push('PUBLIC_REPLY_CONTAINS_PII');
   }
 
-  for (const phrase of voice?.prohibitedPhrases ?? []) {
-    if (typeof phrase === 'string' && phrase.trim() && includesPhrase(text, phrase)) {
+  for (const phrase of stringArray(voice?.prohibitedPhrases)) {
+    if (phrase.trim() && includesPhrase(text, phrase)) {
       violations.push('FORBIDDEN_BRAND_PHRASE');
       reasons.push('BRAND_VOICE_PROHIBITED_PHRASE');
       break;
