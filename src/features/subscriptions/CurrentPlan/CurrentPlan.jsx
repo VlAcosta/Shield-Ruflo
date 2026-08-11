@@ -14,7 +14,7 @@ function formatActiveUntil(value) {
   }).format(date);
 }
 
-function CurrentPlan({ plan, canManage = true }) {
+function CurrentPlan({ plan }) {
   const activeUntil = formatActiveUntil(plan.activeUntil);
   const isFree = Number(plan.price || 0) <= 0;
 
@@ -39,11 +39,7 @@ function CurrentPlan({ plan, canManage = true }) {
         </div>
 
         <div className="current-plan__actions">
-          {canManage ? (
-            <span className="current-plan__badge">Сменить тариф или собрать конфигурацию можно ниже</span>
-          ) : (
-            <span className="current-plan__readonly">Только просмотр</span>
-          )}
+          <span className="current-plan__badge">Подробности и доступные действия — ниже</span>
         </div>
       </div>
 
