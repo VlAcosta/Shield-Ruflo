@@ -30,6 +30,8 @@ describeWithPostgres('P18 Shield AI Review Intelligence', () => {
   const cookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(sessionToken)}`;
   const otherCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(otherSessionToken)}`;
   let reviewId = '';
+  let businessId = '';
+  let sourceId = '';
 
   const provider: AiReviewIntelligenceProvider = {
     id: 'p18-test-ai',
@@ -118,9 +120,11 @@ describeWithPostgres('P18 Shield AI Review Intelligence', () => {
       ],
     });
     const business = await app.prisma.business.create({ data: { organizationId, name: 'P18 Business', status: 'ACTIVE', isPrimary: true } });
+    businessId = business.id;
     const source = await app.prisma.reviewSource.create({
       data: { organizationId, businessId: business.id, provider: 'fixture', name: 'Fixture', externalAccountId: `fixture-${randomUUID()}` },
     });
+    sourceId = source.id;
     const review = await app.prisma.review.create({
       data: {
         organizationId,
@@ -166,6 +170,31 @@ describeWithPostgres('P18 Shield AI Review Intelligence', () => {
     const result = await enqueueReviewAnalysis(app.prisma, { organizationId, reviewId });
     expect(result.queued).toBe(false);
     expect(result.reason).toBe('ALREADY_ANALYZED');
+  });
+
+  it('atomically collapses concurrent enqueue attempts', async () => {
+    const concurrentReview = await app.prisma.review.create({
+      data: {
+        organizationId,
+        businessId,
+        sourceId,
+        externalId: `concurrent-${randomUUID()}`,
+        rating: 1,
+        text: 'Очень долгое ожидание и плохой сервис.',
+        language: 'ru',
+        publishedAt: new Date('2026-08-03T10:00:00.000Z'),
+        providerUpdatedAt: new Date('2026-08-03T10:00:00.000Z'),
+      },
+    });
+
+    const results = await Promise.all([
+      enqueueReviewAnalysis(app.prisma, { organizationId, reviewId: concurrentReview.id }),
+      enqueueReviewAnalysis(app.prisma, { organizationId, reviewId: concurrentReview.id }),
+    ]);
+    expect(results.filter((result) => result.queued)).toHaveLength(1);
+    expect(results.filter((result) => !result.queued && result.reason === 'ALREADY_QUEUED')).toHaveLength(1);
+    expect(await app.prisma.aiOperation.count({ where: { organizationId, reviewId: concurrentReview.id } })).toBe(1);
+    expect(await app.prisma.job.count({ where: { organizationId, type: 'ai.analyzeReview', dedupeKey: { startsWith: `ai:review:${concurrentReview.id}:` } } })).toBe(1);
   });
 
   it('prevents cross-tenant intelligence access', async () => {
