@@ -120,32 +120,6 @@ export async function getSubscriptionSnapshot({ signal } = {}) {
   };
 }
 
-export async function setSubscriptionAutoRenew(enabled, currentState) {
-  if (ENDPOINT) {
-    const result = await request('/auto-renew', { method: 'PATCH', body: JSON.stringify({ enabled }) });
-    const previous = safeReadLocal() || currentState || {};
-    const nextSnapshot = result?.snapshot || (result?.plan ? { ...(previous.snapshot || {}), plan: result.plan } : previous.snapshot);
-    if (nextSnapshot) safeWriteLocal({ ...previous, snapshot: nextSnapshot });
-    else if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SUBSCRIPTION_CHANGED_EVENT, { detail: result }));
-    return result;
-  }
-
-  await delay(120);
-  const nextState = {
-    ...(safeReadLocal() || {}),
-    ...currentState,
-    snapshot: {
-      ...currentState.snapshot,
-      plan: {
-        ...currentState.snapshot.plan,
-        autoRenew: enabled,
-      },
-    },
-  };
-  safeWriteLocal(nextState);
-  return nextState.snapshot.plan;
-}
-
 export async function persistSubscriptionCart(cart, currentState) {
   if (ENDPOINT) return { cart };
 

@@ -6,7 +6,6 @@ import {
   getSubscriptionSnapshot,
   persistSubscriptionCart,
   quoteSubscriptionConstructor,
-  setSubscriptionAutoRenew,
   validatePromoCode,
 } from '../../../services/subscriptions/subscriptionService';
 import { createIdempotencyKey } from '../../../services/core/apiClient';
@@ -29,7 +28,7 @@ export default function useSubscriptions() {
   const [promo, setPromo] = useState(EMPTY_PROMO);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState({ renewal: false, promo: false, checkout: false, trial: false });
+  const [busy, setBusy] = useState({ promo: false, checkout: false, trial: false });
   const [notice, setNotice] = useState(null);
   const mountedRef = useRef(true);
   const noticeTimerRef = useRef(null);
@@ -159,39 +158,6 @@ export default function useSubscriptions() {
       return next;
     });
   }, [persistCart]);
-
-  const toggleAutoRenew = useCallback(async () => {
-    if (!snapshot || busy.renewal) return;
-
-    const previousValue = Boolean(snapshot.plan.autoRenew);
-    const nextValue = !previousValue;
-
-    setSnapshot((current) => ({
-      ...current,
-      plan: { ...current.plan, autoRenew: nextValue },
-    }));
-    setBusy((current) => ({ ...current, renewal: true }));
-
-    try {
-      await setSubscriptionAutoRenew(nextValue, {
-        snapshot: {
-          ...snapshot,
-          plan: { ...snapshot.plan, autoRenew: nextValue },
-        },
-        cart,
-      });
-      showNotice(nextValue ? 'Автопродление включено' : 'Автопродление отключено');
-      recordCompanyActivity({ type: 'billing_auto_renew', title: nextValue ? 'Включил автопродление' : 'Отключил автопродление', route: '/subscriptions', tone: 'indigo' });
-    } catch {
-      setSnapshot((current) => ({
-        ...current,
-        plan: { ...current.plan, autoRenew: previousValue },
-      }));
-      showNotice('Не удалось изменить автопродление', 'error');
-    } finally {
-      if (mountedRef.current) setBusy((current) => ({ ...current, renewal: false }));
-    }
-  }, [busy.renewal, cart, showNotice, snapshot]);
 
   const applyPromo = useCallback(async () => {
     const normalized = promoInput.trim();
@@ -337,7 +303,6 @@ export default function useSubscriptions() {
     setPromoInput,
     changePackageCount,
     setPackageCount,
-    toggleAutoRenew,
     applyPromo,
     removePromo,
     checkoutPlan,
