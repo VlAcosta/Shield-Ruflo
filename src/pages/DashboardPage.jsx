@@ -9,6 +9,7 @@ import useDashboardFirstRun from '../features/dashboard/hooks/useDashboardFirstR
 import useDashboardTheme from '../features/dashboard/hooks/useDashboardTheme';
 import useOrganization from '../hooks/useOrganization';
 import '../styles/dashboard.scss';
+import '../styles/dashboard-responsive.scss';
 
 export default function DashboardPage() {
   const organization = useOrganization();
