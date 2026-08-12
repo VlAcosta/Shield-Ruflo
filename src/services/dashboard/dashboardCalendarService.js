@@ -25,6 +25,12 @@ async function request(path = '', options = {}) {
   });
 }
 
+function requireServerEndpoint() {
+  if (!ENDPOINT) {
+    throw new Error('Календарь требует подключения к серверу. Локальные изменения отключены, чтобы не потерять данные команды.');
+  }
+}
+
 export async function getCalendarEvents() {
   if (!ENDPOINT) return { events: readCache(), source: 'local' };
   try {
@@ -40,20 +46,22 @@ export async function getCalendarEvents() {
 }
 
 export async function createCalendarEvent(payload, currentEvents = []) {
-  const remote = await request('', { method: 'POST', body: payload, idempotencyKey: createIdempotencyKey('calendar-create') });
-  if (remote) {
-    const event = remote.event || remote;
-    const next = [event, ...currentEvents.filter((item) => item.id !== event.id)];
-    writeCache(next);
-    return { event, events: next, source: 'api' };
-  }
-  const event = { ...payload, id: payload.id || `calendar-${Date.now()}`, createdAt: new Date().toISOString() };
-  const next = [...currentEvents, event];
+  requireServerEndpoint();
+  const remote = await request('', {
+    method: 'POST',
+    body: payload,
+    idempotencyKey: createIdempotencyKey('calendar-create'),
+  });
+  if (!remote) throw new Error('Сервер календаря не вернул созданное событие');
+
+  const event = remote.event || remote;
+  const next = [event, ...currentEvents.filter((item) => item.id !== event.id)];
   writeCache(next);
-  return { event, events: next, source: 'local' };
+  return { event, events: next, source: 'api' };
 }
 
 export async function deleteCalendarEvent(eventId, currentEvents = []) {
+  requireServerEndpoint();
   await request(`/${encodeURIComponent(eventId)}`, { method: 'DELETE' });
   const next = currentEvents.filter((item) => item.id !== eventId);
   writeCache(next);
