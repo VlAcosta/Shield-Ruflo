@@ -6,9 +6,11 @@ const API_BASE = String(getRuntimeEnv('API_BASE', '/api/v1')).replace(/\/$/, '')
 
 const BACKEND_PROVIDER_IDS = Object.freeze({
   google: 'google-business-profile',
+  gis: '2gis',
 });
 const CLIENT_PROVIDER_IDS = Object.freeze({
   'google-business-profile': 'google',
+  '2gis': 'gis',
 });
 
 export const PROVIDER_TRUTH_CHANGED_EVENT = 'business-shield:provider-truth-changed';
