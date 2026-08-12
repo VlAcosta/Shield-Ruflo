@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import LandingHeader from './components/LandingHeader';
 import LandingHero from './components/LandingHero';
 import { CapabilitiesSection, ProblemsSection, ProcessSection } from './components/LandingCoreSections';
-import { AdvantagesSection, CasesSection, IndustriesSection, TeamSection } from './components/LandingTrustSections';
+import { MarketFocusSection, OutcomeMetricsSection, ProductTruthSection } from './components/LandingStrategySections';
 import LandingPricing from './components/LandingPricing';
 import { FaqSection, FinalCtaSection, ServicesSection } from './components/LandingServicesFaq';
 import LandingFooter from './components/LandingFooter';
@@ -14,7 +14,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = 'Бизнес Щит — управление репутацией бизнеса';
+    document.title = 'Бизнес Щит — Reputation Operations System';
     return () => { document.title = previousTitle; };
   }, []);
 
@@ -26,11 +26,10 @@ export default function LandingPage() {
         <ProblemsSection />
         <ProcessSection />
         <CapabilitiesSection />
-        <AdvantagesSection />
+        <ProductTruthSection />
+        <MarketFocusSection />
+        <OutcomeMetricsSection />
         <LandingPricing />
-        <TeamSection />
-        <CasesSection />
-        <IndustriesSection />
         <ServicesSection />
         <FaqSection />
         <FinalCtaSection />
