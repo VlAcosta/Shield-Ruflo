@@ -1,4 +1,4 @@
-# Business Shield — Strategic P0 Execution Ledger
+# Business Shield — Strategic P0 / GA Execution Ledger
 
 Date: 2026-08-12
 Source of truth: Strategic Product & Technical Audit + current production/P26 lineage.
@@ -22,7 +22,7 @@ Implemented:
 - usage states at 70/90/100 percent;
 - pricing page derives commercial price/quota truth from backend catalog;
 - software add-ons separated from managed human services;
-- fake local demo checkout and hardcoded promo success removed; checkout fails closed through the backend/HttpOnly-session contract.
+- fake local demo checkout and hardcoded promo success removed.
 
 Invariant: frontend pricing copy may describe outcomes, but price/limits are backend truth.
 
@@ -48,7 +48,7 @@ Status: independently green before integration.
 Implemented:
 - reputation workflow positioning: Detect → Prioritize → Assist → Govern → Escalate → Operate → Measure;
 - core product narrative narrowed to Unified Reviews Inbox, SLA/Triage, AI Reply Intelligence, Approval/Governance, Closed-loop Tasks, Root-cause Analytics and Executive Reports;
-- unsupported vanity claims removed from the active landing surface (including unverified client/review/team/case metrics);
+- unsupported vanity claims removed from the active landing surface;
 - product-truth section added: backend-enforced access, capability-aware integrations, auditable workflow and usage-based packaging;
 - ICP focus narrowed to local business, multi-location networks and marketplace/e-commerce as the second wedge;
 - public proof reframed around measurable product KPIs rather than unsupported business outcome statistics;
@@ -72,34 +72,99 @@ Implemented:
 
 Invariant: quota enforcement must survive direct Prisma/database writes and concurrent requests, not only UI checks.
 
+### 5. Billing Boundary Agent
+
+Status: independently green and integrated.
+
+Implemented:
+- durable sales-assisted purchase request instead of fake checkout success when no self-serve acquiring provider is configured;
+- server-calculated amount/annual discount and plan selection;
+- mandatory idempotency key and durable request history;
+- response explicitly states `paymentCreated=false` and `subscriptionActivated=false`;
+- no subscription state changes merely because a purchase request was recorded;
+- multi-file Prisma schema adopted for new commercial domains;
+- pricing frontend continues the recorded request without representing it as a payment redirect.
+
+Invariant: recording a commercial request is not payment success and never activates a subscription.
+
+Not claimed: self-serve acquiring, provider checkout session, payment webhook validation, reconciliation, refund processing or automatic subscription activation.
+
+### 6. Premium Entitlement Agent
+
+Status: independently green and integrated; combined integration gate green at `282dcd88c5e2f2d1832a9908c1ed5b59f1afdec7`.
+
+Implemented:
+- backend capability gates are additional to RBAC rather than UI visibility checks;
+- Competitive Intelligence requires GROWTH+;
+- AI Visibility requires PRO+;
+- agency portfolio management/client invitation management requires BUSINESS;
+- client consent/revocation safety operations are not commercially blocked by the client's own lower plan;
+- AI Visibility route/service contract uses the canonical `aiVisibility` entitlement key;
+- P22/P26 regression fixtures use real active Plan/Subscription records so tenant isolation is tested behind the entitlement boundary.
+
+Invariant: effective access is role permission ∩ commercial entitlement; client safety operations cannot be held hostage by the agency's commercial state.
+
+## GA Readiness Agent
+
+Branch: `feat/strategy-ga-readiness-v1`
+PR: #33
+Base: `integration/strategy-p0-2026-08-12`
+
+Status: implementation complete enough for final quality gate; **not closed until every PR #33 job is green**.
+
+Implemented in the candidate:
+- migration #22 with PostgreSQL-backed per-user and per-tenant expensive-AI request buckets;
+- transactional limiter for Ask Shield query, AI Reply generation, Review Intelligence re-analysis and AI Visibility runs;
+- `429 AI_RATE_LIMITED` with `Retry-After`, while rejected limiter transactions roll back their tentative increments;
+- private `/internal/metrics` exporter protected by a dedicated operations token;
+- aggregate process/HTTP metrics and persisted AI input/output token + estimated-cost totals without organization/user metric labels;
+- production rejects the development metrics token;
+- validated custom-format PostgreSQL backups with restrictive permissions and SHA-256 manifest;
+- guarded restore drill that refuses non-test/restore/drill/e2e/ci targets;
+- CI restore evidence: migrations → data marker → dump → empty restore DB → restore → marker verification → Prisma migration status;
+- regression tests for limiter rollback/shared tenant budget, metrics privacy, Retry-After and security headers;
+- deployment runbook documenting the operational boundary truthfully.
+
+Already proven by the first GA run: migration #22, Prisma generate/status/typecheck, frontend, secret-scan, Chromium E2E and the complete backup/restore drill. The first backend test run exposed only an invalid test budget fixture; that fixture was corrected without weakening the limiter and the final GA rerun remains mandatory.
+
+Not claimed:
+- Prometheus/Grafana/Sentry/PagerDuty or another external collector is deployed;
+- alert routing/on-call notification is configured;
+- encrypted off-host backup retention is configured;
+- an infrastructure-level RPO/RTO SLO is measured.
+
 ## Integration candidate
 
 Branch: `integration/strategy-p0-2026-08-12`
 PR: #29
 Base: `feat/product-v2-p26-enterprise-agency-v2`
+Last fully green combined SHA before GA merge: `282dcd88c5e2f2d1832a9908c1ed5b59f1afdec7`.
 
-Production deployment: **forbidden until combined PR quality gate is green and a separate production-safe lineage decision is made.**
+Production deployment: **forbidden until the GA agent is green, merged into integration, the combined PR quality gate is green again, and a separate production-safe lineage/deployment decision is made.**
 
-## Remaining P0 / GA blockers
+## Remaining P0 / GA boundaries
 
-The following are not considered closed by this integration candidate:
+The following remain explicitly open even after the repository-side GA candidate:
 
-- payment provider contract: real production checkout/webhook/reconciliation or explicit sales-assisted billing boundary;
-- transactional email/SMS delivery contracts and production retry/observability proof;
+- self-serve payment acquiring/provider checkout/webhook validation/reconciliation; current commercial path is deliberately sales-assisted;
+- transactional email/SMS delivery contracts and production retry/observability proof beyond the currently configured OTP/provider paths;
 - production provider rollout beyond Google Business Profile;
-- final GA secrets/CORS/rate-limit/security-headers review against production environment;
-- backup + restore drill with measured RPO/RTO;
-- error tracking / metrics / alerting thresholds and incident runbook validation;
+- external metrics collector, dashboards, alert thresholds and on-call notification routing;
+- encrypted off-host backup retention/scheduling and periodic infrastructure disaster-recovery exercises;
 - production data-retention/purge behavior matching plan policy;
 - proof methodology for any future public numerical claims/case studies.
 
-## P1 after P0 gate
+## P1 / P26 continuation after GA gate
 
-- full entitlement middleware on premium capabilities (not only capacity limits);
 - usage UI + upgrade/downgrade flows and proration policy;
 - notifications at 70/90/100 usage thresholds;
-- observability dashboards for API, worker, sync providers, AI and billing;
+- external observability dashboards for API, worker, sync providers, AI and billing;
 - expanded E2E: onboarding → source → review → AI draft → approval → reply → task → report;
+- P26 scoped roles/API keys/service accounts;
+- P26 signed outbound webhooks with retries/history/dead-letter/manual retry;
+- P26 white-label/custom domains verification;
+- P26 SAML/OIDC boundary, retention/purge, session/IP/step-up policies and audit export;
+- P26 frontend workspace switcher + consolidated agency portfolio;
 - design-system token consolidation and state-system audit;
 - accessibility/keyboard/focus/reduced-motion pass;
 - performance budgets for dashboard, reviews and analytics routes.
@@ -112,11 +177,12 @@ A candidate can be promoted only when all applicable gates are green:
 2. backend Prisma generate + migrations + migration status + typecheck + tests + build;
 3. secret scan;
 4. browser E2E with HttpOnly session + isolated PostgreSQL;
-5. production preflight on the target host;
-6. external HTTPS smoke (`/`, `/reviews`, `/api/v1/meta`, protected `/api/v1/me`);
-7. exact deployed SHA equals the release manifest SHA;
-8. API and worker systemd units active; nginx config valid;
-9. no rollback-trigger condition active.
+5. isolated PostgreSQL backup/restore drill;
+6. production preflight on the target host;
+7. external HTTPS smoke (`/`, `/reviews`, `/api/v1/meta`, protected `/api/v1/me`);
+8. exact deployed SHA equals the release manifest SHA;
+9. API and worker systemd units active; nginx config valid;
+10. no rollback-trigger condition active.
 
 ## Non-negotiable architecture rules
 
@@ -126,4 +192,7 @@ A candidate can be promoted only when all applicable gates are green:
 - Billing/checkout never fakes success client-side.
 - Human managed services are not silently bundled into software entitlement logic.
 - Critical review handling is not hard-disabled solely because a monthly soft meter was crossed.
-- Enterprise/P26 work must not weaken P0 security, billing truth or tenant boundaries.
+- Expensive AI mutation budgets are shared through PostgreSQL rather than per-process memory.
+- Operational metrics must not introduce tenant/user cardinality or leak identifiers.
+- A backup capability is not considered proven until restore is exercised against an isolated database.
+- Enterprise/P26 work must not weaken P0 security, billing truth, quota enforcement or tenant boundaries.
