@@ -93,10 +93,10 @@ describeWithPostgres('Strategic premium feature entitlements', () => {
 
     const allowed = await app.inject({ method: 'GET', url: '/api/v1/competitive/competitors', headers: { cookie: growth.cookie } });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json()).toMatchObject({ competitors: [] });
+    expect(allowed.json()).toMatchObject({ items: [], nextCursor: null });
   });
 
-  it('blocks AI Visibility on GROWTH but allows it on PRO', async () => {
+  it('blocks AI Visibility on GROWTH but allows read and mutation paths on PRO', async () => {
     const growth = await createWorkspace('GROWTH');
     const pro = await createWorkspace('PRO');
 
@@ -108,7 +108,16 @@ describeWithPostgres('Strategic premium feature entitlements', () => {
 
     const allowed = await app.inject({ method: 'GET', url: '/api/v1/ai-visibility/probes', headers: { cookie: pro.cookie } });
     expect(allowed.statusCode).toBe(200);
-    expect(allowed.json()).toMatchObject({ probes: [] });
+    expect(allowed.json()).toMatchObject({ items: [], nextCursor: null });
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ai-visibility/probes',
+      headers: { cookie: pro.cookie },
+      payload: { name: 'Brand visibility', query: 'Where should I buy this service?', languageCode: 'ru' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ probe: { organizationId: pro.organizationId, name: 'Brand visibility' } });
   });
 
   it('reserves agency management for BUSINESS', async () => {
