@@ -294,8 +294,16 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/notifications/settings', { preHandler: [app.authenticate] }, async (request) => {
-    const { userId } = authContext(request);
+    authContext(request);
     const settings = notificationPreferencesSchema.parse(request.body);
-    return { settings: await updateNotificationConfig(userId, 'settings', settings) };
+    if (Object.keys(settings).length > 0) {
+      throw new AppError({
+        code: 'NOTIFICATION_DELIVERY_NOT_CONFIGURED',
+        message: 'Внешние каналы уведомлений и тихие часы пока не подключены',
+        statusCode: 422,
+        details: { inApp: true, externalDeliveryConfigured: false, quietHoursConfigured: false },
+      });
+    }
+    return { settings: {} };
   });
 };

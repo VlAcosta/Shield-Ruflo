@@ -197,6 +197,24 @@ describeWithPostgres('Operations P10 tenant isolation and permissions', () => {
     expect(foreign.json()).toMatchObject({ error: { code: 'REPORT_NOT_FOUND' } });
   });
 
+  it('rejects fake external notification delivery settings', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/settings',
+      headers: { cookie: ownerCookie },
+      payload: { channels: { email: true, telegram: true }, quietHours: { enabled: true, from: '22:00', to: '09:00' } },
+    });
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'NOTIFICATION_DELIVERY_NOT_CONFIGURED',
+        details: { inApp: true, externalDeliveryConfigured: false, quietHoursConfigured: false },
+      },
+    });
+    const user = await app.prisma.user.findUniqueOrThrow({ where: { id: ownerAId }, select: { notificationPreferences: true } });
+    expect(JSON.stringify(user.notificationPreferences ?? {})).not.toContain('telegram');
+  });
+
   it('keeps notifications tenant and recipient scoped', async () => {
     const list = await app.inject({ method: 'GET', url: '/api/v1/notifications', headers: { cookie: ownerCookie } });
     expect(list.statusCode).toBe(200);
