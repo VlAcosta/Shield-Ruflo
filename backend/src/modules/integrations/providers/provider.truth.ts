@@ -35,16 +35,14 @@ type PlannedProvider = {
   displayName: string;
 };
 
-// Providers intentionally listed in the strategic product surface, but not
-// promoted to a runtime capability until a production adapter is registered
-// and its contract tests pass. This prevents marketing/UI from treating a
-// planned connector as an operational transport.
+// IDs intentionally match the existing client/provider registry so a planned
+// source cannot become a separate shadow identity when a real adapter lands.
 const PLANNED_PROVIDERS: readonly PlannedProvider[] = Object.freeze([
-  { id: 'yandex-business', displayName: 'Яндекс Бизнес' },
+  { id: 'yandex', displayName: 'Яндекс Бизнес' },
   { id: '2gis', displayName: '2GIS' },
   { id: 'ozon', displayName: 'Ozon' },
   { id: 'otzovik', displayName: 'Отзовик' },
-  { id: 'wildberries', displayName: 'Wildberries' },
+  { id: 'wb', displayName: 'Wildberries' },
 ]);
 
 function runtimeTruth(providerId: string): ProviderTruthItem | null {
