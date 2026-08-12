@@ -1,22 +1,25 @@
 import { useEffect, useRef } from 'react';
 
 const DIALOG_SELECTOR = '.calendar-composer__dialog, .checklist-create__card';
-const FOCUSABLE_SELECTOR = [
-  'button:not(:disabled)',
-  'a[href]',
-  'input:not(:disabled)',
-  'select:not(:disabled)',
-  'textarea:not(:disabled)',
-  '[tabindex]:not([tabindex="-1"])',
-].join(', ');
+const FOCUSABLE_CANDIDATE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]';
 const CLOSE_SELECTOR = [
   '.calendar-composer__close',
   '.checklist-create__head button[aria-label="Закрыть"]',
   'button[aria-label="Закрыть"]',
 ].join(', ');
 
+function isFocusableCandidate(node) {
+  if (!node || typeof node.getAttribute !== 'function') return false;
+  if (node.getAttribute('aria-hidden') === 'true') return false;
+  if (node.getAttribute('tabindex') === '-1') return false;
+  if ('disabled' in node && node.disabled) return false;
+  return true;
+}
+
 function getFocusable(dialog) {
-  return dialog ? Array.from(dialog.querySelectorAll(FOCUSABLE_SELECTOR)) : [];
+  return dialog
+    ? Array.from(dialog.querySelectorAll(FOCUSABLE_CANDIDATE_SELECTOR)).filter(isFocusableCandidate)
+    : [];
 }
 
 function getInitialFocus(dialog) {
@@ -125,7 +128,8 @@ export default function useDashboardDialogAccessibility() {
       }
 
       const focusable = getFocusable(dialog);
-      const first = focusable[0] || getInitialFocus(dialog) || dialog;
+      const initial = getInitialFocus(dialog);
+      const first = focusable[0] || initial || dialog;
       const last = focusable[focusable.length - 1] || first;
       const previous = lastFocusedInsideRef.current;
       const destination = previous === first ? last : first;
