@@ -246,6 +246,78 @@
     min-height: 27px;
     font-size: 10.5px;
   }
+
+  // Shared card hierarchy
+  .dashboard-card__header {
+    min-height: 62px;
+    padding-top: 18px;
+  }
+
+  .dashboard-card__icon {
+    width: 36px;
+    height: 36px;
+
+    svg { width: 20px; height: 20px; }
+  }
+
+  .dashboard-card__eyebrow {
+    font-size: 10.5px;
+  }
+
+  .dashboard-card__title {
+    font-size: 15.5px;
+  }
+
+  // Reviews: keep chart density, remove unreadable microcopy.
+  .reviews-chart__period-label { font-size: 11.5px; }
+  .reviews-chart__chart-icon {
+    width: 36px;
+    height: 36px;
+    svg { width: 19px; height: 19px; }
+  }
+  .reviews-chart__value { font-size: 32px; }
+  .reviews-chart__growth strong { font-size: 11.5px; }
+  .reviews-chart__growth span,
+  .reviews-chart__legend span { font-size: 10.5px; }
+  .reviews-chart__tooltip strong { font-size: 11px; }
+  .reviews-chart__tooltip span { font-size: 10px; }
+  .reviews-chart__months span { font-size: 9.5px; }
+
+  // Tasks: labels remain compact, but readable without browser zoom.
+  .tasks-chart__head-icon {
+    width: 36px;
+    height: 36px;
+    svg { width: 19px; height: 19px; }
+  }
+  .tasks-chart__completion strong { font-size: 24px; }
+  .tasks-chart__completion span { font-size: 10px; }
+  .tasks-chart__summary-stats span { font-size: 10px; }
+  .tasks-chart__summary-stats span strong { font-size: 14px; }
+  .tasks-chart__label { font-size: 9.5px; }
+  .tasks-chart__tooltip strong { font-size: 12px; }
+  .tasks-chart__tooltip span,
+  .tasks-chart__tooltip em { font-size: 9.5px; }
+  .tasks-chart__active > div:first-child span { font-size: 9.5px; }
+  .tasks-chart__active > div:first-child strong { font-size: 12px; }
+  .tasks-chart__idle { font-size: 10px; }
+  .tasks-chart__active-metrics span { font-size: 10px; }
+  .tasks-chart__active-metrics strong { font-size: 11px; }
+
+  // Rating: preserve compact analytics while lifting secondary labels.
+  .dashboard-rating__gauge-inner small { font-size: 9.5px; }
+  .dashboard-rating__star { width: 22px; height: 22px; }
+  .dashboard-rating__summary > span { font-size: 10px; }
+  .dashboard-rating__summary > strong { font-size: 19px; }
+  .dashboard-rating__summary p { font-size: 10.5px; }
+  .dashboard-rating__summary small { font-size: 9.5px; }
+  .dashboard-rating__health span { font-size: 9.5px; }
+  .dashboard-rating__health strong { font-size: 11px; }
+  .dashboard-rating__chart-title span { font-size: 9.5px; }
+  .dashboard-rating__chart-title strong { font-size: 11.5px; }
+  .dashboard-rating__chart-title small { font-size: 9.5px; }
+  .dashboard-rating__tooltip strong { font-size: 10.5px; }
+  .dashboard-rating__tooltip span { font-size: 9px; }
+  .dashboard-rating__labels span { font-size: 9.5px; }
 }
 
 @media (min-width: 1600px) {
@@ -269,5 +341,15 @@
 
   .dashboard-page .dashboard-grid__menu-popover > button {
     font-size: 12px;
+  }
+
+  .dashboard-page .dashboard-card__title {
+    font-size: 16px;
+  }
+
+  .dashboard-page .reviews-chart__months span,
+  .dashboard-page .dashboard-rating__labels span,
+  .dashboard-page .tasks-chart__label {
+    font-size: 10px;
   }
 }
