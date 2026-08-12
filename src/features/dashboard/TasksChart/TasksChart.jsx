@@ -8,7 +8,6 @@ import './TasksChart.scss';
 const PERIOD_OPTIONS = Object.freeze([
   { value: 'week', label: 'Неделя', caption: 'Текущие 7 дней' },
   { value: 'month', label: 'Месяц', caption: 'Текущий месяц' },
-  { value: 'quarter', label: 'Квартал', caption: 'Последние 3 месяца' },
 ]);
 
 function ChartIcon() { return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17V13M12 17V8M17 17V5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>; }
