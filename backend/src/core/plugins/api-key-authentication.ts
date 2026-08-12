@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../errors/app-error.js';
 import { sanitizeApiKeyPermissions, type Permission } from '../rbac/permissions.js';
 import { hashSessionToken, secureHashEquals } from '../../shared/security/tokens.js';
+import { assertEntitlement } from '../../modules/billing/billing.service.js';
 
 const TOKEN_PATTERN = /^bsk_live_([a-f0-9]{16})_([A-Za-z0-9_-]{40,})$/;
 
@@ -51,6 +52,10 @@ export const apiKeyAuthenticationPlugin = fp(async (app) => {
       select: { id: true },
     });
     if (!organization) invalidKey();
+
+    // A downgrade must immediately disable previously issued service-account
+    // credentials. Key existence alone never grants an enterprise capability.
+    await assertEntitlement(app, key.organizationId, 'apiAccess');
 
     const accountPermissions = new Set(sanitizeApiKeyPermissions(account.permissions));
     const permissions = sanitizeApiKeyPermissions(key.permissions).filter((permission) => accountPermissions.has(permission));
