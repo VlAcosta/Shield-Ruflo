@@ -21,7 +21,7 @@ function appendPreHandler(route: RouteOptions, handler: Handler): void {
   route.preHandler = [...current, handler];
 }
 
-function isExpensiveAiMutation(method: string, path: string): boolean {
+export function isExpensiveAiMutation(method: string, path: string): boolean {
   if (method !== 'POST') return false;
   return path === '/ask-shield/queries'
     || path === '/reviews/:reviewId/ai-reply'
