@@ -27,6 +27,8 @@ export const permissions = [
   'agency.manage',
   'api_keys.view',
   'api_keys.manage',
+  'webhooks.view',
+  'webhooks.manage',
   'ai.brand_voice.manage',
   'ai.autopilot.manage',
   'tasks.view',
@@ -143,6 +145,7 @@ export type PermissionOverrides = {
 export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
   'billing.manage',
   'api_keys.manage',
+  'webhooks.manage',
 ]);
 
 /**
