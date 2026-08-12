@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 
-const DIALOG_SELECTOR = '.calendar-composer__dialog, .checklist-create__card';
+const DIALOG_SELECTOR = '.calendar-composer__dialog, .checklist-create__card, .competitor-modal__dialog';
 const FOCUSABLE_CANDIDATE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]';
 const CLOSE_SELECTOR = [
   '.calendar-composer__close',
   '.checklist-create__head button[aria-label="Закрыть"]',
+  '.competitor-modal__dialog > header button',
   'button[aria-label="Закрыть"]',
 ].join(', ');
 
