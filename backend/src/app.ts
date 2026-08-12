@@ -5,6 +5,11 @@ import { env } from './config/env.js';
 import { databasePlugin } from './core/plugins/database.js';
 import { authenticationPlugin } from './core/plugins/authentication.js';
 import { authorizationPlugin } from './core/plugins/authorization.js';
+import { apiKeyAuthenticationPlugin } from './core/plugins/api-key-authentication.js';
+import { premiumEntitlementsPlugin } from './core/plugins/premium-entitlements.js';
+import { entitlementEnforcementPlugin } from './core/plugins/entitlement-enforcement.js';
+import { aiRequestBudgetPlugin } from './core/plugins/ai-request-budget.js';
+import { operationalMetricsPlugin } from './core/plugins/operational-metrics.js';
 import { registerErrorHandler } from './core/plugins/error-handler.js';
 import { registerOpenApi } from './core/plugins/openapi.js';
 import { registerSecurity } from './core/plugins/security.js';
@@ -31,6 +36,8 @@ import { aiVisibilityRoutes } from './modules/ai-visibility/ai-visibility.routes
 import { listingHealthRoutes } from './modules/listings/listing-health.routes.js';
 import { askShieldRoutes } from './modules/ask-shield/ask-shield.routes.js';
 import { agencyRoutes } from './modules/agency/agency.routes.js';
+import { apiIdentityRoutes } from './modules/api-identity/api-identity.routes.js';
+import { externalApiRoutes } from './modules/api-identity/external-api.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
@@ -48,6 +55,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         paths: [
           'req.headers.authorization',
           'req.headers.cookie',
+          'req.headers.x-operations-token',
           'res.headers["set-cookie"]',
           '*.password',
           '*.token',
@@ -58,6 +66,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.AUTH_OTP_WEBHOOK_TOKEN',
           '*.COMPANY_LOOKUP_WEBHOOK_TOKEN',
           '*.INTEGRATION_CREDENTIALS_KEY',
+          '*.OPERATIONS_METRICS_TOKEN',
           '*.GOOGLE_BUSINESS_CLIENT_SECRET',
           '*.AI_OPENAI_API_KEY',
           '*.refreshToken',
@@ -76,8 +85,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerSecurity(app);
   await registerOpenApi(app);
   await app.register(databasePlugin);
+  await app.register(operationalMetricsPlugin);
   await app.register(authenticationPlugin);
   await app.register(authorizationPlugin);
+  // Service-account credentials use a deliberately separate principal pipeline
+  // and are accepted only by explicitly registered /external routes.
+  await app.register(apiKeyAuthenticationPlugin);
+  // Commercial capability, quota and expensive-AI budget gates must be
+  // registered before product routes so they append after authenticate/authorize.
+  await app.register(premiumEntitlementsPlugin);
+  await app.register(entitlementEnforcementPlugin);
+  await app.register(aiRequestBudgetPlugin);
 
   await app.register(healthRoutes);
   await app.register(systemRoutes, { prefix: '/api/v1' });
@@ -100,6 +118,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(listingHealthRoutes, { prefix: '/api/v1' });
   await app.register(askShieldRoutes, { prefix: '/api/v1' });
   await app.register(agencyRoutes, { prefix: '/api/v1' });
+  await app.register(apiIdentityRoutes, { prefix: '/api/v1' });
+  await app.register(externalApiRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(googleBusinessProfileRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });

@@ -33,13 +33,17 @@ cd "$BACKEND"
 
 node --input-type=module <<'NODE'
 const { env } = await import('./dist/config/env.js');
-if (env.NODE_ENV !== 'production') {
-  throw new Error(`NODE_ENV must be production for release, got ${env.NODE_ENV}`);
+const { operationsConfig } = await import('./dist/config/operations.config.js');
+if (env.NODE_ENV !== 'production' || operationsConfig.NODE_ENV !== 'production') {
+  throw new Error(`NODE_ENV must be production for release, got app=${env.NODE_ENV}, operations=${operationsConfig.NODE_ENV}`);
 }
 if (!env.PLATFORM_ADMIN_IDENTITIES.length) {
   console.warn('⚠ PLATFORM_ADMIN_IDENTITIES is empty: /admin will be denied for everyone.');
 }
-console.log('✅ Backend production environment passed schema and security validation');
+if (operationsConfig.OPERATIONS_METRICS_TOKEN.length < 32) {
+  throw new Error('OPERATIONS_METRICS_TOKEN must be at least 32 characters');
+}
+console.log('✅ Backend production environment passed schema, security, and operational validation');
 NODE
 
 npm run db:status
