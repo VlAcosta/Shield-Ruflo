@@ -18,6 +18,20 @@ const requestJson = async (path, options = {}, timeoutMs = 6000) => {
   return apiRequest(joinEndpoint(API_BASE, path), { ...options, timeout: timeoutMs });
 };
 
+function directContextFromMembership(membership) {
+  if (!membership?.id || !membership?.organizationId) return null;
+  return {
+    organizationId: membership.organizationId,
+    membershipId: membership.id,
+    role: membership.role || null,
+    permissions: Array.isArray(membership.permissions) ? membership.permissions : [],
+    accessMode: 'DIRECT',
+    agencyOrganizationId: null,
+    delegatedGrantId: null,
+    agencyClientLinkId: null,
+  };
+}
+
 export const authService = {
   async requestCode({ phone, mode, planId, invitationToken }) {
     return requestJson('/auth/request-code', {
@@ -54,9 +68,13 @@ export const authService = {
     localStorage.removeItem('token');
     if (user) {
       const sessionEstablishedAt = new Date().toISOString();
+      const resolvedOrganizationContext = organizationContext
+        || user.organizationContext
+        || directContextFromMembership(user.membership)
+        || null;
       const normalizedUser = {
         ...user,
-        organizationContext: organizationContext || user.organizationContext || null,
+        organizationContext: resolvedOrganizationContext,
         authSessionStartedAt: sessionEstablishedAt,
         ...(user.membership ? {
           membership: {
