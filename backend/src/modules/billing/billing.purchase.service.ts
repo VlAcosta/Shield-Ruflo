@@ -116,9 +116,14 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
     : plan.priceCents;
 
   const request = await app.prisma.$transaction(async (tx) => {
-    // The lock is scoped by organization so repeated browser tabs cannot create
-    // a burst of equivalent commercial requests while preserving idempotency.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing:purchase:${input.organizationId}`}, 0))`;
+    // Reuse the project's proven PostgreSQL advisory-lock pattern: the lock is
+    // transaction-scoped and the SELECT is executed through $queryRaw, not the
+    // mutation-oriented $executeRaw API.
+    const lockKey = `billing:purchase:${input.organizationId}`;
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired
+      FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock
+    `;
 
     const afterLock = await tx.billingPurchaseRequest.findUnique({ where: { idempotencyKey } });
     if (afterLock) return afterLock;
