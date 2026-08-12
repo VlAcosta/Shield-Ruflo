@@ -23,21 +23,6 @@ function readCurrentUser() {
   }
 }
 
-function overlayCurrentUserPersonal(snapshot) {
-  const currentUser = readCurrentUser();
-  if (!currentUser) return snapshot;
-  return normalizeSnapshot({
-    ...snapshot,
-    personal: {
-      ...snapshot.personal,
-      ...(currentUser.firstName ? { firstName: currentUser.firstName } : {}),
-      ...(currentUser.lastName ? { lastName: currentUser.lastName } : {}),
-      ...(currentUser.email ? { email: currentUser.email } : {}),
-      ...(currentUser.phone ? { phone: currentUser.phone } : {}),
-    },
-  });
-}
-
 function mirrorPersonalToCurrentUser(personal) {
   const currentUser = readCurrentUser();
   if (!currentUser) return;
