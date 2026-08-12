@@ -185,8 +185,19 @@ describeWithPostgres('P26 agency consent and delegated workspaces', () => {
         membershipId: null,
         role: null,
         permissions: ['dashboard.view', 'reviews.view', 'reviews.reply'],
+        accessMode: 'DELEGATED',
+        agencyOrganizationId: agencyOrganization.id,
+        delegatedGrantId: accepted.grant.id,
+        agencyClientLinkId: accepted.link.id,
       },
     });
+
+    const reviewsAllowed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reviews',
+      headers: bearer(agencyToken),
+    });
+    expect(reviewsAllowed.statusCode).toBe(200);
 
     const billingDenied = await app.inject({
       method: 'GET',
@@ -194,6 +205,7 @@ describeWithPostgres('P26 agency consent and delegated workspaces', () => {
       headers: bearer(agencyToken),
     });
     expect(billingDenied.statusCode).toBe(403);
+    expect(billingDenied.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
 
     const revokeResponse = await app.inject({
       method: 'POST',
