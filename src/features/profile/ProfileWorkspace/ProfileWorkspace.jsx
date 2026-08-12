@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ProfileTabs from '../ProfileTabs';
 import AccountCenter from '../AccountCenter';
@@ -12,6 +12,19 @@ import { PROFILE_TABS } from '../model/profileData';
 import useAccessControl from '../../access/hooks/useAccessControl';
 import './ProfileWorkspace.scss';
 
+const IntegrationHubWorkspace = lazy(() => import('../../integrations/IntegrationHub'));
+const GoogleBusinessProfileSetup = lazy(() => import('../../integrations/GoogleBusinessProfile/GoogleBusinessProfileSetup'));
+const AutomationsWorkspace = lazy(() => import('../../automations/AutomationsWorkspace'));
+
+function EmbeddedSettingsFallback() {
+  return (
+    <div className="profile-workspace__embedded-loader" role="status" aria-label="Загрузка настроек">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
 
 export default function ProfileWorkspace() {
   const profile = useProfile();
@@ -22,6 +35,8 @@ export default function ProfileWorkspace() {
   const visibleTabs = useMemo(() => PROFILE_TABS.filter((tab) => {
     if (tab.id === 'company') return access.can('company.view');
     if (tab.id === 'users') return access.can('team.view');
+    if (tab.id === 'integrations') return access.can('integrations.view');
+    if (tab.id === 'automations') return access.can('automations.view');
     return true;
   }), [access]);
   const visibleTabIds = useMemo(() => new Set(visibleTabs.map((item) => item.id)), [visibleTabs]);
@@ -107,6 +122,23 @@ export default function ProfileWorkspace() {
             onRevokeUserSession={profile.revokeUserSession}
             onRemoveUser={profile.removeUser}
           />
+        ) : null}
+
+        {activeTab === 'integrations' ? (
+          <Suspense fallback={<EmbeddedSettingsFallback />}>
+            <div className="profile-workspace__embedded-settings">
+              <GoogleBusinessProfileSetup />
+              <IntegrationHubWorkspace />
+            </div>
+          </Suspense>
+        ) : null}
+
+        {activeTab === 'automations' ? (
+          <Suspense fallback={<EmbeddedSettingsFallback />}>
+            <div className="profile-workspace__embedded-settings">
+              <AutomationsWorkspace />
+            </div>
+          </Suspense>
         ) : null}
       </div>
 
