@@ -9,7 +9,6 @@ const FOCUSABLE_SELECTOR = [
   'textarea:not(:disabled)',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
-const INITIAL_FOCUS_SELECTOR = 'input:not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled)';
 const CLOSE_SELECTOR = [
   '.calendar-composer__close',
   '.checklist-create__head button[aria-label="Закрыть"]',
@@ -18,6 +17,14 @@ const CLOSE_SELECTOR = [
 
 function getFocusable(dialog) {
   return dialog ? Array.from(dialog.querySelectorAll(FOCUSABLE_SELECTOR)) : [];
+}
+
+function getInitialFocus(dialog) {
+  return dialog?.querySelector('input:not(:disabled)')
+    || dialog?.querySelector('textarea:not(:disabled)')
+    || dialog?.querySelector('select:not(:disabled)')
+    || dialog?.querySelector('button:not(:disabled)')
+    || null;
 }
 
 function focusElement(node) {
@@ -39,8 +46,7 @@ export default function useDashboardDialogAccessibility() {
       window.cancelAnimationFrame(focusFrame);
       focusFrame = window.requestAnimationFrame(() => {
         if (!dialog?.isConnected) return;
-        const initial = dialog.querySelector(INITIAL_FOCUS_SELECTOR) || getFocusable(dialog)[0] || dialog;
-        focusElement(initial);
+        focusElement(getInitialFocus(dialog) || getFocusable(dialog)[0] || dialog);
       });
     };
 
@@ -52,44 +58,9 @@ export default function useDashboardDialogAccessibility() {
       });
     };
 
-    const syncDialog = () => {
-      const nextDialog = document.querySelector(DIALOG_SELECTOR);
-      const currentDialog = dialogRef.current;
-
-      if (nextDialog === currentDialog) return;
-
-      if (!currentDialog && nextDialog) {
-        const activeElement = document.activeElement;
-        const candidate = lastActivationRef.current;
-        openerRef.current = candidate?.isConnected && !nextDialog.contains(candidate)
-          ? candidate
-          : activeElement?.isConnected && !nextDialog.contains(activeElement)
-            ? activeElement
-            : null;
-        dialogRef.current = nextDialog;
-        focusDialog(nextDialog);
-        return;
-      }
-
-      if (currentDialog && !nextDialog) {
-        dialogRef.current = null;
-        restoreFocus();
-        return;
-      }
-
-      dialogRef.current = nextDialog;
-      if (nextDialog) focusDialog(nextDialog);
-    };
-
-    const rememberActivation = (event) => {
-      if (dialogRef.current) return;
-      const trigger = event.target?.closest?.('button, a[href], [role="button"]');
-      if (trigger) lastActivationRef.current = trigger;
-    };
-
-    const handleKeyDown = (event) => {
-      const dialog = dialogRef.current || document.querySelector(DIALOG_SELECTOR);
-      if (!dialog) return;
+    const handleDialogKeyDown = (event) => {
+      const dialog = event.currentTarget;
+      if (!(dialog instanceof HTMLElement)) return;
 
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -111,30 +82,68 @@ export default function useDashboardDialogAccessibility() {
       const last = focusable[focusable.length - 1];
       const eventTarget = event.target instanceof HTMLElement && dialog.contains(event.target)
         ? event.target
-        : null;
-      const active = eventTarget || document.activeElement;
-      const outside = !active || !dialog.contains(active);
+        : document.activeElement;
 
-      if (event.shiftKey && (active === first || outside)) {
+      if (event.shiftKey && eventTarget === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && (active === last || outside)) {
+      } else if (!event.shiftKey && eventTarget === last) {
         event.preventDefault();
         first.focus();
       }
+    };
+
+    const attachDialog = (dialog) => {
+      dialog?.addEventListener('keydown', handleDialogKeyDown);
+    };
+
+    const detachDialog = (dialog) => {
+      dialog?.removeEventListener('keydown', handleDialogKeyDown);
+    };
+
+    const syncDialog = () => {
+      const nextDialog = document.querySelector(DIALOG_SELECTOR);
+      const currentDialog = dialogRef.current;
+      if (nextDialog === currentDialog) return;
+
+      if (currentDialog) detachDialog(currentDialog);
+
+      if (!currentDialog && nextDialog) {
+        const activeElement = document.activeElement;
+        const candidate = lastActivationRef.current;
+        openerRef.current = candidate?.isConnected && !nextDialog.contains(candidate)
+          ? candidate
+          : activeElement?.isConnected && !nextDialog.contains(activeElement)
+            ? activeElement
+            : null;
+      }
+
+      dialogRef.current = nextDialog;
+
+      if (nextDialog) {
+        attachDialog(nextDialog);
+        focusDialog(nextDialog);
+      } else if (currentDialog) {
+        restoreFocus();
+      }
+    };
+
+    const rememberActivation = (event) => {
+      if (dialogRef.current) return;
+      const trigger = event.target?.closest?.('button, a[href], [role="button"]');
+      if (trigger) lastActivationRef.current = trigger;
     };
 
     const observer = new MutationObserver(syncDialog);
     observer.observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener('click', rememberActivation, true);
-    document.addEventListener('keydown', handleKeyDown, true);
     syncDialog();
 
     return () => {
       observer.disconnect();
       document.removeEventListener('click', rememberActivation, true);
-      document.removeEventListener('keydown', handleKeyDown, true);
+      detachDialog(dialogRef.current);
       window.cancelAnimationFrame(focusFrame);
       window.cancelAnimationFrame(restoreFrame);
       dialogRef.current = null;
