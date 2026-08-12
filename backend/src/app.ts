@@ -22,6 +22,7 @@ import { teamRoutes } from './modules/team/team.routes.js';
 import { reviewsRoutes } from './modules/reviews/reviews.routes.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
 import { tasksRoutes } from './modules/tasks/tasks.routes.js';
+import { calendarRoutes } from './modules/calendar/calendar.routes.js';
 import { integrationsRoutes } from './modules/integrations/integrations.routes.js';
 import { googleBusinessProfileRoutes } from './modules/integrations/providers/google/google-business-profile.routes.js';
 import { registerGoogleBusinessProfileProvider } from './modules/integrations/providers/google/index.js';
@@ -99,6 +100,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(replyCopilotRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/v1' });
   await app.register(tasksRoutes, { prefix: '/api/v1' });
+  await app.register(calendarRoutes, { prefix: '/api/v1' });
   await app.register(casesRoutes, { prefix: '/api/v1' });
   await app.register(acquisitionRoutes, { prefix: '/api/v1' });
   await app.register(competitiveRoutes, { prefix: '/api/v1' });
