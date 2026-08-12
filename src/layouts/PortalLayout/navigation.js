@@ -47,6 +47,14 @@ export const navigationGroups = Object.freeze([
     ],
   },
   {
+    id: 'agency',
+    label: 'Агентство',
+    Icon: ReputationIcon,
+    items: [
+      { to: '/agency', label: 'Портфель клиентов', Icon: ReputationIcon, permission: 'agency.view' },
+    ],
+  },
+  {
     id: 'settings',
     label: 'Настройки',
     Icon: ProfileIcon,
