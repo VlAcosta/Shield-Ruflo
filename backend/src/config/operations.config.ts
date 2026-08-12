@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { z } from 'zod';
 
 const DEVELOPMENT_METRICS_TOKEN = 'development-only-operations-metrics-token-change-me';
