@@ -225,7 +225,7 @@ export async function processVisibilityRunJob(prisma: PrismaClient, input: { org
     const competitorByName = new Map(knownCompetitors.map((item) => [item.name.trim().toLowerCase(), item]));
     const sourceDomains = [...new Set(response.citations.map((item) => item.domain ?? domainFromUrl(item.url)).filter((item): item is string => Boolean(item)))];
     const ranking = response.rankingPosition ?? (response.mentioned ? 1 : null);
-    const visibilityScore = Math.max(0, Math.min(100, Math.round(response.confidence * (response.mentioned ? 82 : 26) + (ranking ? Math.max(0, 18 - (ranking - 1) * 4) : 0)));
+    const visibilityScore = Math.max(0, Math.min(100, Math.round(response.confidence * (response.mentioned ? 82 : 26) + (ranking ? Math.max(0, 18 - (ranking - 1) * 4) : 0))));
 
     await prisma.$transaction(async (tx) => {
       const result = await tx.aiVisibilityResult.upsert({
