@@ -26,4 +26,21 @@ describe('health routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ apiVersion: 'v1' });
   });
+
+  it('returns credential-free provider capability truth without authentication', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/meta/providers' });
+
+    expect(response.statusCode).toBe(200);
+    const providers = response.json().providers;
+    expect(providers.find((item: any) => item.id === 'google-business-profile')).toMatchObject({
+      capabilities: { reviewRead: true, reviewReply: true, reviewDelete: false },
+      sync: { frequency: 'on_demand_job' },
+    });
+    expect(providers.find((item: any) => item.id === 'yandex')).toMatchObject({
+      releaseStage: 'PLANNED',
+      configured: false,
+      connectable: false,
+      capabilities: { reviewRead: false, reviewReply: false },
+    });
+  });
 });
