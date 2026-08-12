@@ -52,13 +52,16 @@ describeWithPostgres('P26 agency consent and delegated workspaces', () => {
     });
     userIds.push(agencyUser.id, clientOwner.id);
 
+    const businessPlan = await app.prisma.plan.findUniqueOrThrow({ where: { code: 'BUSINESS' } });
     const agencyOrganization = await app.prisma.organization.create({
       data: {
         name: 'P26 Agency',
         slug: `p26-agency-${randomUUID()}`,
-        plan: 'BUSINESS',
         members: { create: { userId: agencyUser.id, role: 'OWNER', status: 'ACTIVE', joinedAt: new Date() } },
       },
+    });
+    await app.prisma.subscription.create({
+      data: { organizationId: agencyOrganization.id, planId: businessPlan.id, status: 'ACTIVE', autoRenew: false },
     });
     const clientOrganization = await app.prisma.organization.create({
       data: {
