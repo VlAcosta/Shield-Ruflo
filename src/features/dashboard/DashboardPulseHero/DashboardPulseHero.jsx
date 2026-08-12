@@ -47,14 +47,14 @@ function DashboardPulseHero({ organizationName }) {
 
       <div className="dashboard-pulse-hero__copy">
         <div className="dashboard-pulse-hero__eyebrow">
-          <span className="dashboard-pulse-hero__live"><i /> {status === 'offline' ? 'OFFLINE' : 'LIVE'}</span>
-          <span>REPUTATION CONTROL</span>
+          <span className="dashboard-pulse-hero__live"><i /> {status === 'offline' ? 'НЕТ СВЯЗИ' : 'ОНЛАЙН'}</span>
+          <span>ЦЕНТР РЕПУТАЦИИ</span>
         </div>
         <h2>Репутация под контролем</h2>
         <p>{organizationName || 'Компания'} — единый центр собирает рейтинг, отзывы, задачи и состояние подключённых площадок.</p>
         <div className="dashboard-pulse-hero__actions">
-          <button type="button" className="dashboard-pulse-hero__primary" onClick={() => navigate('/reports')}>Открыть аналитику <ArrowIcon /></button>
-          <button type="button" className="dashboard-pulse-hero__secondary" onClick={() => navigate('/chat?channel=manager')}>Обсудить стратегию</button>
+          <button type="button" className="dashboard-pulse-hero__primary" onClick={() => navigate('/reviews')}>Перейти к отзывам <ArrowIcon /></button>
+          <button type="button" className="dashboard-pulse-hero__secondary" onClick={() => navigate('/reports')}>Открыть отчёты</button>
         </div>
       </div>
 
