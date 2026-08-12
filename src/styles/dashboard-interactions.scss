@@ -78,6 +78,12 @@
       padding-inline: 11px;
       font-size: 12px;
     }
+
+    .dashboard-grid__item:first-child .dashboard-grid__mobile-move button:first-child,
+    .dashboard-grid__item:last-child .dashboard-grid__mobile-move button:last-child {
+      visibility: hidden;
+      pointer-events: none;
+    }
   }
 }
 
