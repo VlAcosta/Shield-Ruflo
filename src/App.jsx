@@ -38,8 +38,6 @@ const AskShieldPage = lazy(() => import('./pages/portal/AskShieldPage'));
 const AgencyPortfolioPage = lazy(() => import('./pages/portal/AgencyPortfolioPage'));
 const AgencyInvitationAcceptPage = lazy(() => import('./pages/portal/AgencyInvitationAcceptPage'));
 const ReviewAcquisitionLandingPage = lazy(() => import('./pages/ReviewAcquisitionLandingPage'));
-const AutomationsPage = lazy(() => import('./pages/portal/AutomationsPage'));
-const IntegrationsPage = lazy(() => import('./pages/portal/IntegrationsPage'));
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
 const AdminClientsPage = lazy(() => import('./pages/admin/AdminClientsPage'));
 const AdminClientDetailsPage = lazy(() => import('./pages/admin/AdminClientDetailsPage'));
@@ -215,8 +213,8 @@ function App() {
         <Route path="/ask-shield" element={<LazyRoute><AskShieldPage /></LazyRoute>} />
         <Route path="/agency" element={<LazyRoute><AgencyPortfolioPage /></LazyRoute>} />
         <Route path="/agency/invite/:token" element={<LazyRoute><AgencyInvitationAcceptPage /></LazyRoute>} />
-        <Route path="/automations" element={<LazyRoute><AutomationsPage /></LazyRoute>} />
-        <Route path="/integrations" element={<LazyRoute><IntegrationsPage /></LazyRoute>} />
+        <Route path="/automations" element={<Navigate to="/profile?tab=automations" replace />} />
+        <Route path="/integrations" element={<Navigate to="/profile?tab=integrations" replace />} />
         <Route path="/subscriptions" element={<LazyRoute><SubscriptionsPage /></LazyRoute>} />
         <Route path="/reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
         <Route path="/tasks" element={<LazyRoute><TasksPage /></LazyRoute>} />
