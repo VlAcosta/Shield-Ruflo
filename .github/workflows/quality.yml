@@ -190,3 +190,81 @@ jobs:
             echo 'Potential secret material found in tracked source.' >&2
             exit 1
           fi
+
+  backup-restore-drill:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: business_shield
+          POSTGRES_PASSWORD: business_shield_restore_ci
+          POSTGRES_DB: business_shield_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U business_shield -d business_shield_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      SOURCE_DATABASE_URL: postgresql://business_shield:business_shield_restore_ci@127.0.0.1:5432/business_shield_test
+      RESTORE_DATABASE_URL: postgresql://business_shield:business_shield_restore_ci@127.0.0.1:5432/business_shield_restore
+      DATABASE_URL: postgresql://business_shield:business_shield_restore_ci@127.0.0.1:5432/business_shield_test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Apply source migrations
+        working-directory: backend
+        run: npm run db:deploy
+
+      - name: Write restore proof marker
+        run: >-
+          psql "$SOURCE_DATABASE_URL" -X -v ON_ERROR_STOP=1 -c
+          "INSERT INTO \"_service_metadata\" (\"key\", \"value\", \"created_at\", \"updated_at\")
+          VALUES ('ga.restore.drill', '{\"proof\":\"source\"}'::jsonb, NOW(), NOW())
+          ON CONFLICT (\"key\") DO UPDATE SET \"value\" = EXCLUDED.\"value\", \"updated_at\" = NOW();"
+
+      - name: Create empty restore database
+        run: >-
+          psql "postgresql://business_shield:business_shield_restore_ci@127.0.0.1:5432/postgres"
+          -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE business_shield_restore;"
+
+      - name: Create validated backup
+        env:
+          BACKUP_FILE: ${{ runner.temp }}/business-shield-restore-drill.dump
+        run: DATABASE_URL="$SOURCE_DATABASE_URL" bash scripts/database-backup.sh
+
+      - name: Restore into isolated database
+        env:
+          BACKUP_FILE: ${{ runner.temp }}/business-shield-restore-drill.dump
+        run: bash scripts/database-restore-drill.sh
+
+      - name: Verify restored data marker
+        run: |
+          set -euo pipefail
+          proof="$(psql "$RESTORE_DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "SELECT value->>'proof' FROM \"_service_metadata\" WHERE key = 'ga.restore.drill';")"
+          test "$proof" = "source"
+
+      - name: Verify restored Prisma migration status
+        working-directory: backend
+        run: DATABASE_URL="$RESTORE_DATABASE_URL" npm run db:status

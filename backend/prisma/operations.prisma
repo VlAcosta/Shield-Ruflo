@@ -1,0 +1,13 @@
+model OperationalRateLimitBucket {
+  key             String   @id @db.VarChar(255)
+  scope           String   @db.VarChar(32)
+  organizationId  String?  @map("organization_id") @db.Uuid
+  userId          String?  @map("user_id") @db.Uuid
+  windowStartedAt DateTime @map("window_started_at")
+  count           Int      @default(0)
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId, windowStartedAt], map: "operational_rate_limit_buckets_org_window_idx")
+  @@index([userId, windowStartedAt], map: "operational_rate_limit_buckets_user_window_idx")
+  @@map("operational_rate_limit_buckets")
+}
