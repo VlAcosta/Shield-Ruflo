@@ -12,6 +12,7 @@ import {
 import PortalNotificationsMenu from './PortalNotificationsMenu';
 import PortalProfileMenu from './PortalProfileMenu';
 import PortalSearch from './PortalSearch';
+import PortalWorkspaceSwitcher from './PortalWorkspaceSwitcher';
 import useAccessControl from '../../../features/access/hooks/useAccessControl';
 
 function formatBadge(count) {
@@ -87,6 +88,8 @@ function PortalTopbar({
         </div>
 
         <div className="portal__topbarRight">
+          <PortalWorkspaceSwitcher navigationLocked={navigationLocked} />
+
           <button
             type="button"
             className={`portal__search ${navigationLocked ? 'is-disabled' : ''}`}

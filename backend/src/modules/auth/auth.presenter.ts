@@ -44,7 +44,9 @@ export function presentUser(user: UserWithMemberships, activeOrganizationId?: st
   const usable = user.memberships.filter((item) => membershipIsUsable(item, now));
   const membership = activeOrganizationId === null
     ? undefined
-    : usable.find((item) => item.organizationId === activeOrganizationId) ?? usable[0];
+    : activeOrganizationId === undefined
+      ? usable[0]
+      : usable.find((item) => item.organizationId === activeOrganizationId);
 
   return {
     id: user.id,

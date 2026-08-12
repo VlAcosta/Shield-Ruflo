@@ -43,5 +43,9 @@ export type AuthContext = {
   role: string | null;
   permissions: Permission[];
   permissionOverrides?: { allow?: string[]; deny?: string[] };
+  accessMode: 'DIRECT' | 'DELEGATED' | 'NONE';
+  agencyOrganizationId: string | null;
+  delegatedGrantId: string | null;
+  agencyClientLinkId: string | null;
   user: PublicUser;
 };

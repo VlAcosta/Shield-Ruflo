@@ -30,6 +30,7 @@ import { competitiveRoutes } from './modules/competitive/competitive.routes.js';
 import { aiVisibilityRoutes } from './modules/ai-visibility/ai-visibility.routes.js';
 import { listingHealthRoutes } from './modules/listings/listing-health.routes.js';
 import { askShieldRoutes } from './modules/ask-shield/ask-shield.routes.js';
+import { agencyRoutes } from './modules/agency/agency.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
@@ -98,6 +99,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(aiVisibilityRoutes, { prefix: '/api/v1' });
   await app.register(listingHealthRoutes, { prefix: '/api/v1' });
   await app.register(askShieldRoutes, { prefix: '/api/v1' });
+  await app.register(agencyRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(googleBusinessProfileRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });
