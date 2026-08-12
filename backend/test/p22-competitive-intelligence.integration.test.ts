@@ -34,8 +34,8 @@ describeWithPostgres('P22 Competitive Intelligence', () => {
     app = await buildApp();
     await app.prisma.organization.createMany({
       data: [
-        { id: organizationId, name: 'P22 Org', slug: `p22-${randomUUID()}` },
-        { id: otherOrganizationId, name: 'P22 Other Org', slug: `p22-other-${randomUUID()}` },
+        { id: organizationId, name: 'P22 Org', slug: `p22-${randomUUID()}`, plan: 'GROWTH' },
+        { id: otherOrganizationId, name: 'P22 Other Org', slug: `p22-other-${randomUUID()}`, plan: 'GROWTH' },
       ],
     });
     await app.prisma.user.createMany({
