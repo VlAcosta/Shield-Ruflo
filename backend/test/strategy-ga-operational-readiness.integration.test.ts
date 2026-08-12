@@ -71,7 +71,7 @@ describeWithPostgres('Strategy GA operational readiness', () => {
 
   it('shares a tenant budget across users and rolls back both buckets when the tenant is full', async () => {
     await app.prisma.operationalRateLimitBucket.deleteMany({ where: { organizationId } });
-    const options = { userLimit: 5, tenantLimit: 2, windowSeconds: 60 };
+    const options = { userLimit: 2, tenantLimit: 2, windowSeconds: 60 };
 
     await expect(assertAiRequestBudget(app, { organizationId, userId }, options)).resolves.toBeUndefined();
     await expect(assertAiRequestBudget(app, { organizationId, userId: secondUserId }, options)).resolves.toBeUndefined();
