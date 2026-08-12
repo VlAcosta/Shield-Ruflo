@@ -22,15 +22,15 @@ export type AgencyActor = {
   organizationId: string;
   userId: string;
   sessionId: string;
-  ipAddress?: string;
-  userAgent?: string;
+  ipAddress: string;
+  userAgent: string;
 };
 
 type InvitationInput = {
   clientOrganizationId: string;
-  granteeUserId?: string;
+  granteeUserId?: string | undefined;
   permissions: string[];
-  grantExpiresAt?: string | null;
+  grantExpiresAt?: string | null | undefined;
 };
 
 function normalizedDelegatedPermissions(input: string[]): Permission[] {
