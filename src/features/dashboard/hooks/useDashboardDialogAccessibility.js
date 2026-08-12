@@ -59,8 +59,8 @@ export default function useDashboardDialogAccessibility() {
     };
 
     const handleDialogKeyDown = (event) => {
-      const dialog = event.currentTarget;
-      if (!(dialog instanceof HTMLElement)) return;
+      const dialog = dialogRef.current || event.currentTarget;
+      if (!dialog?.querySelectorAll) return;
 
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -80,9 +80,8 @@ export default function useDashboardDialogAccessibility() {
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      const eventTarget = event.target instanceof HTMLElement && dialog.contains(event.target)
-        ? event.target
-        : document.activeElement;
+      const target = event.target;
+      const eventTarget = target && dialog.contains?.(target) ? target : document.activeElement;
 
       if (event.shiftKey && eventTarget === first) {
         event.preventDefault();
@@ -94,11 +93,11 @@ export default function useDashboardDialogAccessibility() {
     };
 
     const attachDialog = (dialog) => {
-      dialog?.addEventListener('keydown', handleDialogKeyDown);
+      dialog?.addEventListener('keydown', handleDialogKeyDown, true);
     };
 
     const detachDialog = (dialog) => {
-      dialog?.removeEventListener('keydown', handleDialogKeyDown);
+      dialog?.removeEventListener('keydown', handleDialogKeyDown, true);
     };
 
     const syncDialog = () => {
