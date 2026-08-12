@@ -1,0 +1,102 @@
+name: Business Shield Production Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - .github/workflows/production-smoke.yml
+
+permissions:
+  contents: read
+
+env:
+  PROD_SSH_HOST: bis-shield.ru
+  PROD_SSH_PORT: "22"
+  PROD_SSH_USER: acosta
+  PUBLIC_URL: https://bis-shield.ru
+  APP_DIR: /var/www/bis-shield
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout production control branch
+        uses: actions/checkout@v4
+
+      - name: Configure production SSH
+        shell: bash
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_SSH_PRIVATE_KEY" ]] || { echo 'Missing PROD_SSH_PRIVATE_KEY' >&2; exit 20; }
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+          chmod 600 "$HOME/.ssh/business-shield-production"
+          cp deploy/production-known-hosts "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Verify production host after rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/business-shield-production" \
+            -p "$PROD_SSH_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=10 \
+            "$PROD_SSH_USER@$PROD_SSH_HOST" \
+            "APP_DIR='$APP_DIR' bash -s" <<'REMOTE'
+          set -euo pipefail
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+            . "$NVM_DIR/nvm.sh"
+            nvm use 22 >/dev/null
+          fi
+          cd "$APP_DIR"
+          echo "Production SHA: $(git rev-parse HEAD)"
+          echo "Node: $(node --version)"
+          sudo systemctl is-active --quiet bis-shield-api
+          sudo systemctl is-active --quiet bis-shield-worker
+          curl -fsS --max-time 10 http://127.0.0.1:8081/health >/dev/null
+          curl -fsS --max-time 10 http://127.0.0.1:8081/health/ready >/dev/null
+          bash scripts/production-preflight.sh
+          REMOTE
+
+      - name: Verify public HTTPS surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          check() {
+            local path="$1"
+            local expected="$2"
+            local actual
+            actual="$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' --connect-timeout 5 --max-time 15 --retry 2 --retry-all-errors "$PUBLIC_URL$path")"
+            [[ "$actual" == "$expected" ]] || { echo "$path expected $expected, got $actual" >&2; exit 1; }
+            echo "$path -> $actual"
+          }
+          check / 200
+          check /reviews 200
+          check /api/v1/meta 200
+          check /api/v1/me 401
+
+      - name: Smoke summary
+        if: success()
+        run: |
+          {
+            echo '## Production smoke passed'
+            echo
+            echo '- API service: active'
+            echo '- Worker service: active'
+            echo '- Internal health/readiness: healthy'
+            echo '- Production preflight: passed'
+            echo '- Public HTTPS `/`: 200'
+            echo '- Public HTTPS `/reviews`: 200'
+            echo '- Public HTTPS `/api/v1/meta`: 200'
+            echo '- Public HTTPS `/api/v1/me`: 401 unauthenticated boundary'
+          } >> "$GITHUB_STEP_SUMMARY"
