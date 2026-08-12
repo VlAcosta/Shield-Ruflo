@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dependency-audit:
+  frontend-audit:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,9 +20,7 @@ jobs:
         with:
           node-version: 22.23.2
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
@@ -33,14 +31,24 @@ jobs:
       - name: Frontend production moderate+ gate
         run: npm audit --omit=dev --audit-level=moderate
 
-      - name: Install backend dependencies
+  backend-audit:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
         working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
         run: npm ci
 
       - name: Backend full-tree high/critical gate
-        working-directory: backend
         run: npm audit --audit-level=high
 
       - name: Backend production moderate+ gate
-        working-directory: backend
         run: npm audit --omit=dev --audit-level=moderate
