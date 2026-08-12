@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { databasePlugin } from './core/plugins/database.js';
 import { authenticationPlugin } from './core/plugins/authentication.js';
 import { authorizationPlugin } from './core/plugins/authorization.js';
+import { premiumEntitlementsPlugin } from './core/plugins/premium-entitlements.js';
 import { entitlementEnforcementPlugin } from './core/plugins/entitlement-enforcement.js';
 import { registerErrorHandler } from './core/plugins/error-handler.js';
 import { registerOpenApi } from './core/plugins/openapi.js';
@@ -79,8 +80,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(databasePlugin);
   await app.register(authenticationPlugin);
   await app.register(authorizationPlugin);
-  // Must be registered before product routes: it appends tenant quota checks
-  // after each route's existing authenticate/authorize preHandlers.
+  // Commercial capability gates and quota gates must be registered before
+  // product routes so they can append checks after authenticate/authorize.
+  await app.register(premiumEntitlementsPlugin);
   await app.register(entitlementEnforcementPlugin);
 
   await app.register(healthRoutes);

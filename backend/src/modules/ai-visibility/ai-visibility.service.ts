@@ -6,7 +6,7 @@ import { assertEntitlement } from '../billing/billing.service.js';
 import { aiProviderRegistry } from '../ai/ai-provider.registry.js';
 import { AiProviderError } from '../ai/ai-provider.types.js';
 
-const AI_VISIBILITY_ENTITLEMENT = 'ai_visibility.enabled';
+const AI_VISIBILITY_ENTITLEMENT = 'aiVisibility';
 
 type ActorContext = { organizationId: string; userId: string };
 
