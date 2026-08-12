@@ -1,8 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import BrandMark from '../../components/brand/BrandMark';
-import { BILLING_PERIODS, BUILDER_OPTIONS, PRICING_PLANS, calculatePlanTotal, formatPrice } from './model/pricingData';
+import {
+  BILLING_PERIODS,
+  MANAGED_SERVICES,
+  PRICING_PLANS,
+  SOFTWARE_ADDONS,
+  calculatePlanTotal,
+  formatPrice,
+  mergeServerCatalog,
+} from './model/pricingData';
 import { pricingService } from '../../services/billing/pricingService';
+import { authService } from '../../services/auth/authService';
 import './PricingWorkspace.scss';
 
 const Check = () => (
@@ -16,10 +25,11 @@ const Arrow = () => (
 function PlanCard({ plan, billingId, onSelect }) {
   const totals = calculatePlanTotal(plan, billingId, 0);
   const monthlyEquivalent = totals.total / totals.billing.months;
+  const annualSavings = plan.monthlyPrice * 12 - calculatePlanTotal(plan, 'annual', 0).total;
 
   return (
     <article className={`pricing-plan pricing-plan--${plan.accent} ${plan.popular ? 'is-popular' : ''}`}>
-      {plan.popular ? <div className="pricing-plan__popular"><span>●</span> Чаще выбирают</div> : null}
+      {plan.popular ? <div className="pricing-plan__popular"><span>●</span> Рекомендуем</div> : null}
       <div className="pricing-plan__top">
         <span className="pricing-plan__eyebrow">{plan.eyebrow}</span>
         <h2>{plan.name}</h2>
@@ -27,32 +37,39 @@ function PlanCard({ plan, billingId, onSelect }) {
       </div>
 
       <div className="pricing-plan__price">
+        {plan.pricePrefix ? <small className="pricing-plan__pricePrefix">{plan.pricePrefix}</small> : null}
         <strong>{formatPrice(monthlyEquivalent)}</strong>
         <span>/ месяц</span>
-        {billingId === 'annual' ? <small>Оплата за год: {formatPrice(totals.total)}</small> : <small>Можно отменить в любой момент</small>}
+        {billingId === 'annual'
+          ? <small>Оплата за год: {formatPrice(totals.total)} · экономия {formatPrice(annualSavings)}</small>
+          : <small>Годовая оплата экономит {formatPrice(annualSavings)}</small>}
       </div>
 
       <button type="button" className="pricing-plan__cta" onClick={() => onSelect(plan)}>
-        Выбрать тариф <Arrow />
+        {plan.cta} <Arrow />
       </button>
 
       <div className="pricing-plan__divider" />
-      <ul>
-        {plan.features.map((feature) => (
-          <li key={feature}><span className="pricing-plan__check"><Check /></span><span>{feature}</span></li>
+      <h3 className="pricing-plan__sectionTitle">Что даёт тариф</h3>
+      <ul className="pricing-plan__outcomes">
+        {plan.outcomes.map((outcome) => (
+          <li key={outcome}><span className="pricing-plan__check"><Check /></span><span>{outcome}</span></li>
         ))}
       </ul>
+
+      <div className="pricing-plan__limits">
+        <h3 className="pricing-plan__sectionTitle">Лимиты</h3>
+        {plan.limits.map(([label, key, value]) => (
+          <div key={key}><span>{label}</span><strong>{value}</strong></div>
+        ))}
+      </div>
     </article>
   );
 }
 
-function CheckoutPanel({ plan, billingId, promoState, onClose, onPromo, onProceed, busy, message }) {
-  const [promoInput, setPromoInput] = useState('');
-  const totals = calculatePlanTotal(plan, billingId, promoState.discount || 0);
-
-  useEffect(() => {
-    setPromoInput(promoState.code || '');
-  }, [promoState.code]);
+function CheckoutPanel({ plan, billingId, onClose, onProceed, busy, message }) {
+  const totals = calculatePlanTotal(plan, billingId, 0);
+  const monthlyEquivalent = totals.total / totals.billing.months;
 
   return (
     <div className="pricing-checkout" role="dialog" aria-modal="true" aria-labelledby="pricing-checkout-title">
@@ -60,7 +77,7 @@ function CheckoutPanel({ plan, billingId, promoState, onClose, onPromo, onProcee
       <section className="pricing-checkout__panel">
         <header>
           <div>
-            <span>Оформление подписки</span>
+            <span>Подписка Бизнес Щит</span>
             <h2 id="pricing-checkout-title">{plan.name}</h2>
           </div>
           <button type="button" className="pricing-checkout__close" onClick={onClose} aria-label="Закрыть">×</button>
@@ -68,70 +85,69 @@ function CheckoutPanel({ plan, billingId, promoState, onClose, onPromo, onProcee
 
         <div className="pricing-checkout__summary">
           <div><span>Период</span><strong>{BILLING_PERIODS[billingId].label}</strong></div>
-          <div><span>Базовая стоимость</span><strong>{formatPrice(totals.subtotal)}</strong></div>
-          {totals.billingDiscount > 0 ? <div className="is-discount"><span>Скидка за год</span><strong>−{formatPrice(totals.billingDiscount)}</strong></div> : null}
-          {totals.promoValue > 0 ? <div className="is-discount"><span>Промокод</span><strong>−{formatPrice(totals.promoValue)}</strong></div> : null}
-        </div>
-
-        <div className="pricing-checkout__promo">
-          <label htmlFor="pricing-promo">Промокод</label>
-          <div>
-            <input id="pricing-promo" value={promoInput} onChange={(event) => setPromoInput(event.target.value.toUpperCase())} placeholder="SHIELD10" />
-            <button type="button" onClick={() => onPromo(promoInput)} disabled={promoState.loading}>{promoState.loading ? '...' : 'Применить'}</button>
-          </div>
-          {promoState.message ? <small className={promoState.valid ? 'is-success' : 'is-error'}>{promoState.message}</small> : null}
+          <div><span>Эквивалент в месяц</span><strong>{formatPrice(monthlyEquivalent)}</strong></div>
+          {totals.billingDiscount > 0 ? <div className="is-discount"><span>Экономия за год</span><strong>−{formatPrice(totals.billingDiscount)}</strong></div> : null}
         </div>
 
         <div className="pricing-checkout__total">
-          <span>Итого</span>
+          <span>Итого к оформлению</span>
           <strong>{formatPrice(totals.total)}</strong>
           <small>{billingId === 'annual' ? 'за 12 месяцев' : 'за первый месяц'}</small>
         </div>
 
-        {message ? <div className="pricing-checkout__message">{message}</div> : null}
+        {message ? <div className="pricing-checkout__message" role="status">{message}</div> : null}
 
         <button type="button" className="pricing-checkout__pay" onClick={() => onProceed(totals)} disabled={busy}>
-          {busy ? 'Подготавливаем…' : (localStorage.getItem('token') ? 'Перейти к оплате' : 'Продолжить регистрацию')}
-          <Arrow />
+          {busy ? 'Проверяем сессию…' : 'Продолжить'} <Arrow />
         </button>
 
-        <p className="pricing-checkout__legal">Нажимая кнопку, вы соглашаетесь с условиями сервиса и политикой конфиденциальности. Реальное списание выполняется только подключённым платёжным провайдером.</p>
+        <p className="pricing-checkout__legal">
+          Платёж создаётся только реальным серверным провайдером. Если online checkout ещё не подключён, Бизнес Щит не создаёт фиктивную оплату и не списывает средства.
+        </p>
       </section>
     </div>
   );
 }
 
-function Builder({ open, values, onToggle, onClose, onSelect }) {
-  const total = useMemo(() => BUILDER_OPTIONS.reduce((sum, [id, , price]) => sum + (values[id] ? price : 0), 0), [values]);
-  const count = Object.values(values).filter(Boolean).length;
-
-  if (!open) return null;
+function ExtrasSection() {
   return (
-    <div className="pricing-builder" role="dialog" aria-modal="true" aria-labelledby="pricing-builder-title">
-      <button type="button" className="pricing-builder__backdrop" aria-label="Закрыть" onClick={onClose} />
-      <section className="pricing-builder__panel">
-        <header>
-          <div><span>Конструктор</span><h2 id="pricing-builder-title">Соберите свой набор</h2><p>Выберите только те инструменты, которые действительно нужны вашей команде.</p></div>
-          <button type="button" onClick={onClose} aria-label="Закрыть">×</button>
-        </header>
-        <div className="pricing-builder__body">
-          <div className="pricing-builder__options">
-            {BUILDER_OPTIONS.map(([id, label, price]) => (
-              <button key={id} type="button" className={values[id] ? 'is-selected' : ''} onClick={() => onToggle(id)} aria-pressed={values[id]}>
-                <span><strong>{label}</strong><small>+ {formatPrice(price)} / мес.</small></span>
-                <i>{values[id] ? <Check /> : null}</i>
-              </button>
-            ))}
-          </div>
-          <aside>
-            <span>Выбрано функций</span><strong>{count}</strong>
-            <div><span>Расчётная стоимость</span><b>{formatPrice(total)}</b></div>
-            <p>Индивидуальный набор перед оплатой подтверждает менеджер.</p>
-            <button type="button" disabled={!count} onClick={() => onSelect(total)}>Оставить заявку <Arrow /></button>
-          </aside>
+    <>
+      <section className="pricing-section pricing-section--extras" id="addons">
+        <div className="pricing-section__heading">
+          <span>Software add-ons</span>
+          <h2>Расширяйте usage без лишней смены тарифа</h2>
+          <p>Дополнительные объёмы относятся к продукту и считаются отдельно от человеческой работы.</p>
+        </div>
+        <div className="pricing-extrasGrid">
+          {SOFTWARE_ADDONS.map((item) => (
+            <article className="pricing-extraCard" key={item.id}>
+              <span>ADD-ON</span>
+              <h3>{item.title}</h3>
+              <strong>+{formatPrice(item.price)}<small>/мес</small></strong>
+              <p>{item.note}</p>
+            </article>
+          ))}
         </div>
       </section>
-    </div>
+
+      <section className="pricing-section pricing-section--managed" id="managed-services">
+        <div className="pricing-section__heading">
+          <span>Managed services</span>
+          <h2>Экспертиза людей — отдельный сервисный слой</h2>
+          <p>Ответы специалистов, legal, content и crisis response не маскируются под «безлимитные функции» SaaS.</p>
+        </div>
+        <div className="pricing-extrasGrid pricing-extrasGrid--managed">
+          {MANAGED_SERVICES.map((service) => (
+            <article className="pricing-extraCard pricing-extraCard--managed" key={service.id}>
+              <span>SERVICE</span>
+              <h3>{service.title}</h3>
+              <strong>{service.prefix ? `${service.prefix} ` : ''}{formatPrice(service.price)}<small>{service.suffix}</small></strong>
+              <p>{service.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -139,23 +155,50 @@ export default function PricingWorkspace() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [billingId, setBillingId] = useState('monthly');
+  const [serverPlans, setServerPlans] = useState([]);
+  const [catalogState, setCatalogState] = useState('loading');
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [promoState, setPromoState] = useState({ code: '', loading: false, valid: false, discount: 0, message: '' });
-  const [builderOpen, setBuilderOpen] = useState(false);
-  const [builderValues, setBuilderValues] = useState(() => Object.fromEntries(BUILDER_OPTIONS.map(([id]) => [id, false])));
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState('');
 
-  useEffect(() => {
-    const checkoutId = searchParams.get('checkout');
-    if (!checkoutId) return;
-    const plan = PRICING_PLANS.find((item) => item.id === checkoutId);
-    if (plan) setSelectedPlan(plan);
-  }, [searchParams]);
+  const plans = useMemo(() => mergeServerCatalog(PRICING_PLANS, serverPlans), [serverPlans]);
 
-  const openPlan = (plan) => {
-    setSelectedPlan(plan);
+  useEffect(() => {
+    const controller = new AbortController();
+    pricingService.getCatalog({ signal: controller.signal })
+      .then((items) => {
+        setServerPlans(items);
+        setCatalogState(items.length === 4 ? 'ready' : 'fallback');
+      })
+      .catch((error) => {
+        if (error?.name !== 'AbortError') setCatalogState('fallback');
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const checkoutId = String(searchParams.get('checkout') || '').toUpperCase();
+    if (!checkoutId) return;
+    const plan = plans.find((item) => item.id === checkoutId);
+    if (plan && !plan.contactSales) setSelectedPlan(plan);
+  }, [plans, searchParams]);
+
+  const openPlan = async (plan) => {
     setCheckoutMessage('');
+    if (plan.contactSales) {
+      try {
+        await authService.restoreSession();
+        navigate('/chat?topic=business');
+      } catch (error) {
+        if (error?.status === 401) {
+          navigate(`/auth?mode=register&next=${encodeURIComponent('/chat?topic=business')}`);
+          return;
+        }
+        setCheckoutMessage(error?.message || 'Не удалось проверить сессию');
+      }
+      return;
+    }
+    setSelectedPlan(plan);
     const next = new URLSearchParams(searchParams);
     next.set('checkout', plan.id);
     setSearchParams(next, { replace: true });
@@ -169,65 +212,45 @@ export default function PricingWorkspace() {
     setSearchParams(next, { replace: true });
   };
 
-  const applyPromo = async (code) => {
-    setPromoState((current) => ({ ...current, loading: true, message: '' }));
-    try {
-      const result = await pricingService.validatePromo(code);
-      setPromoState({ code: String(code || '').trim().toUpperCase(), loading: false, valid: Boolean(result.valid), discount: result.discount || 0, message: result.message || '' });
-    } catch {
-      setPromoState({ code, loading: false, valid: false, discount: 0, message: 'Не удалось проверить промокод' });
-    }
-  };
-
   const proceed = async (totals) => {
     if (!selectedPlan) return;
-    const payload = {
-      planId: selectedPlan.id,
-      billing: billingId,
-      promo: promoState.valid ? promoState.code : null,
-      amount: Math.round(totals.total),
-      currency: 'RUB',
-      returnUrl: `${window.location.origin}/pricing?checkout=${selectedPlan.id}`,
-    };
-
-    localStorage.setItem('selectedPlan', JSON.stringify({
-      id: selectedPlan.id,
-      title: selectedPlan.name,
-      price: selectedPlan.monthlyPrice,
-      billing: billingId,
-      promo: promoState.valid ? promoState.code : null,
-      total: Math.round(totals.total),
-    }));
-
-    if (!localStorage.getItem('token')) {
-      navigate(`/auth?mode=register&next=${encodeURIComponent(`/pricing?checkout=${selectedPlan.id}`)}`);
-      return;
-    }
-
     setCheckoutBusy(true);
     setCheckoutMessage('');
     try {
-      const result = await pricingService.createCheckout(payload);
-      if (result.checkout_url) {
+      await authService.restoreSession();
+    } catch (error) {
+      if (error?.status === 401) {
+        setCheckoutBusy(false);
+        navigate(`/auth?mode=register&next=${encodeURIComponent(`/pricing?checkout=${selectedPlan.id}`)}`);
+        return;
+      }
+      setCheckoutMessage(error?.message || 'Не удалось проверить сессию');
+      setCheckoutBusy(false);
+      return;
+    }
+
+    try {
+      const result = await pricingService.createCheckout({
+        planId: selectedPlan.id,
+        billing: billingId,
+        amount: Math.round(totals.total),
+        currency: 'RUB',
+        returnUrl: `${window.location.origin}/pricing?checkout=${selectedPlan.id}`,
+      });
+      if (result?.checkout_url) {
         window.location.assign(result.checkout_url);
         return;
       }
-      if (result.demo) {
-        setCheckoutMessage('Демо-режим: платёжная сессия подготовлена. Подключите платёжного провайдера к POST /billing/checkout, чтобы выполнять реальные списания.');
-      } else {
-        setCheckoutMessage('Платёжная сессия создана. Ожидаем ссылку платёжного провайдера.');
-      }
+      setCheckoutMessage('Платёжный провайдер не вернул ссылку оформления. Средства не списаны.');
     } catch (error) {
-      setCheckoutMessage(error?.message || 'Не удалось создать платёжную сессию');
+      if (error?.status === 503) {
+        setCheckoutMessage('Онлайн-оплата пока не подключена. Средства не списаны; тариф и цена сохранены в каталоге без фиктивной платёжной сессии.');
+      } else {
+        setCheckoutMessage(error?.message || 'Не удалось создать платёжную сессию');
+      }
     } finally {
       setCheckoutBusy(false);
     }
-  };
-
-  const builderTotal = (total) => {
-    localStorage.setItem('business-shield:custom-plan-draft', JSON.stringify({ options: builderValues, total, createdAt: new Date().toISOString() }));
-    setBuilderOpen(false);
-    navigate('/auth?mode=register&next=%2Fonboarding');
   };
 
   return (
@@ -235,16 +258,16 @@ export default function PricingWorkspace() {
       <header className="pricing-header">
         <Link className="pricing-header__brand" to="/" aria-label="Бизнес Щит — главная">
           <BrandMark size={42} />
-          <span><strong>БИЗНЕС ЩИТ</strong><small>reputation operating system</small></span>
+          <span><strong>БИЗНЕС ЩИТ</strong><small>Reputation Operations System</small></span>
         </Link>
-        <nav><Link to="/">Главная</Link><a href="#plans">Тарифы</a><button type="button" onClick={() => navigate('/auth?mode=login')}>Войти</button></nav>
+        <nav><Link to="/">Главная</Link><a href="#plans">Тарифы</a><a href="#addons">Add-ons</a><button type="button" onClick={() => navigate('/auth?mode=login')}>Войти</button></nav>
       </header>
 
       <section className="pricing-hero">
         <div className="pricing-hero__glow" aria-hidden="true" />
-        <span className="pricing-kicker"><i /> Прозрачные условия · без скрытых платежей</span>
-        <h1>Выберите уровень<br/><em>спокойствия</em></h1>
-        <p>Начните с готового тарифа или соберите свой. Все цены и условия видны до регистрации.</p>
+        <span className="pricing-kicker"><i /> 4 SaaS-тарифа · отдельные managed services · прозрачные лимиты</span>
+        <h1>Платите за масштаб<br/><em>репутационных операций</em></h1>
+        <p>Тариф определяет capability и governance. Рост цены объясняется локациями, review volume, AI и командой — не скрытым ручным трудом.</p>
         <div className="pricing-billing" role="group" aria-label="Период оплаты">
           {Object.values(BILLING_PERIODS).map((period) => (
             <button key={period.id} type="button" className={billingId === period.id ? 'is-active' : ''} onClick={() => setBillingId(period.id)}>
@@ -252,30 +275,44 @@ export default function PricingWorkspace() {
             </button>
           ))}
         </div>
-        <div className="pricing-hero__trust"><span>14 дней на запуск</span><span>Поддержка 24/7</span><span>Отмена без звонка менеджеру</span></div>
+        <div className="pricing-hero__trust">
+          <span>14-дневный Pro trial после регистрации</span>
+          <span>Usage предупреждения на 70% / 90% / 100%</span>
+          <span>Managed services подключаются отдельно</span>
+        </div>
+        {catalogState === 'fallback' ? (
+          <div className="pricing-catalogNotice" role="status">Показываем зафиксированную публичную матрицу. Серверный каталог временно недоступен.</div>
+        ) : null}
       </section>
 
       <section className="pricing-section" id="plans">
-        <div className="pricing-section__heading"><span>Тарифы</span><h2>Три щита. Один стандарт качества.</h2><p>Сравните не только цену, но и реальный объём работы команды.</p></div>
-        <div className="pricing-grid">
-          {PRICING_PLANS.map((plan) => <PlanCard key={plan.id} plan={plan} billingId={billingId} onSelect={openPlan} />)}
+        <div className="pricing-section__heading">
+          <span>Тарифы</span>
+          <h2>От одной точки до multi-location governance</h2>
+          <p>Каждый пакет показывает outcome и единицы потребления — locations, sources, reviews, users, AI и retention.</p>
+        </div>
+        <div className="pricing-grid pricing-grid--four">
+          {plans.map((plan) => <PlanCard key={plan.id} plan={plan} billingId={billingId} onSelect={openPlan} />)}
         </div>
       </section>
 
-      <section className="pricing-custom">
-        <div><span>Нужна другая конфигурация?</span><h2>Соберите подписку под свои процессы</h2><p>Подключите аналитику, дизайн, юристов, автоматизацию или персонального менеджера отдельно.</p></div>
-        <button type="button" onClick={() => setBuilderOpen(true)}>Открыть конструктор <Arrow /></button>
-      </section>
+      <ExtrasSection />
 
       <section className="pricing-security">
-        <div><span className="pricing-security__icon">✓</span><strong>Платёжные данные не хранятся в Бизнес Щит</strong><p>Оплата должна проходить на стороне подключённого платёжного провайдера. Мы сохраняем только статус подписки и идентификатор платежа.</p></div>
-        <div><span className="pricing-security__icon">↺</span><strong>Подпиской можно управлять из кабинета</strong><p>Продление, смена тарифа, история платежей и автопродление уже предусмотрены в личном кабинете.</p></div>
+        <div><span className="pricing-security__icon">✓</span><strong>Backend определяет entitlement и usage</strong><p>UI показывает лимиты, но не выдаёт себе права. Ограничения проверяются сервером в контексте организации.</p></div>
+        <div><span className="pricing-security__icon">↺</span><strong>Критический reply workflow не блокируется внезапно</strong><p>Review/AI volume сначала даёт предупреждение и grace/overage путь; hard limits применяются к расширению ресурсов вроде новых локаций.</p></div>
       </section>
 
-      <footer className="pricing-footer"><BrandMark size={34} /><span>© 2026 Бизнес Щит</span><Link to="/">На главную</Link></footer>
-
-      {selectedPlan ? <CheckoutPanel plan={selectedPlan} billingId={billingId} promoState={promoState} onClose={closeCheckout} onPromo={applyPromo} onProceed={proceed} busy={checkoutBusy} message={checkoutMessage} /> : null}
-      <Builder open={builderOpen} values={builderValues} onToggle={(id) => setBuilderValues((current) => ({ ...current, [id]: !current[id] }))} onClose={() => setBuilderOpen(false)} onSelect={builderTotal} />
+      {selectedPlan ? (
+        <CheckoutPanel
+          plan={selectedPlan}
+          billingId={billingId}
+          onClose={closeCheckout}
+          onProceed={proceed}
+          busy={checkoutBusy}
+          message={checkoutMessage}
+        />
+      ) : null}
     </main>
   );
 }
