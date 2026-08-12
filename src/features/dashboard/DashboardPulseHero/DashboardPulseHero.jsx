@@ -33,13 +33,20 @@ function ArrowIcon() {
 
 function DashboardPulseHero({ organizationName }) {
   const navigate = useNavigate();
-  const { data, status, refreshing } = useDashboardData();
+  const { data, status, source, apiEnabled, refreshing } = useDashboardData();
   const pulse = data?.pulse;
   const loading = status === 'loading' && !pulse;
   const sparkPath = useMemo(() => buildSparkPath(pulse?.spark), [pulse?.spark]);
   const score = Number(pulse?.score || 0);
   const measured = Boolean(pulse?.measured);
   const signals = Array.isArray(pulse?.signals) ? pulse.signals : [];
+  const sourceState = useMemo(() => {
+    if (status === 'offline') return { label: 'НЕТ СВЯЗИ', tone: 'offline' };
+    if (source === 'local-demo') return { label: 'ДЕМО', tone: 'demo' };
+    if (!apiEnabled || source === 'local') return { label: 'ЛОКАЛЬНО', tone: 'local' };
+    if (status === 'stale' || refreshing) return { label: 'СИНХРОНИЗАЦИЯ', tone: 'sync' };
+    return { label: 'ОНЛАЙН', tone: 'live' };
+  }, [apiEnabled, refreshing, source, status]);
 
   return (
     <section className={`dashboard-pulse-hero ${loading ? 'is-loading' : ''}`} aria-label="Состояние репутации" aria-busy={loading || refreshing}>
@@ -47,7 +54,7 @@ function DashboardPulseHero({ organizationName }) {
 
       <div className="dashboard-pulse-hero__copy">
         <div className="dashboard-pulse-hero__eyebrow">
-          <span className="dashboard-pulse-hero__live"><i /> {status === 'offline' ? 'НЕТ СВЯЗИ' : 'ОНЛАЙН'}</span>
+          <span className={`dashboard-pulse-hero__live is-${sourceState.tone}`}><i /> {sourceState.label}</span>
           <span>ЦЕНТР РЕПУТАЦИИ</span>
         </div>
         <h2>Репутация под контролем</h2>
