@@ -87,12 +87,20 @@ The readiness endpoint must confirm database availability.
 External HTTPS:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://bis-shield.ru/
-curl -s -o /dev/null -w '%{http_code}\n' https://bis-shield.ru/reviews
-curl -s -o /dev/null -w '%{http_code}\n' https://bis-shield.ru/api/v1/me
+./scripts/production-smoke.sh
 ```
 
-For an unauthenticated user `/api/v1/me` should normally return `401`, which confirms that the request reached the API authorization layer.
+The smoke script checks:
+
+- `https://bis-shield.ru/` → `200`;
+- `https://bis-shield.ru/reviews` → `200` to prove SPA fallback routing;
+- `https://bis-shield.ru/api/v1/me` → `401` for an unauthenticated request, proving that HTTPS/nginx reaches the API authorization boundary.
+
+To smoke-test another release hostname without editing the script:
+
+```bash
+BASE_URL=https://staging.example.com ./scripts/production-smoke.sh
+```
 
 ## Production preflight
 
@@ -110,6 +118,8 @@ The preflight must reject at least:
 - mock company lookup;
 - missing production build artifacts;
 - unavailable database/API/worker prerequisites.
+
+A production gate is complete only when **both** `production-preflight.sh` on the host and `production-smoke.sh` against the public HTTPS origin pass.
 
 ## Rollback
 
