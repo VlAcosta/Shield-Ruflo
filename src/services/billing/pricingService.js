@@ -14,6 +14,10 @@ export const pricingService = {
     return Array.isArray(payload?.plans) ? payload.plans : [];
   },
 
+  async getPurchaseOptions({ signal } = {}) {
+    return request('/billing/purchase-options', { signal, retries: 0 });
+  },
+
   async validatePromo(code) {
     const normalized = String(code || '').trim().toUpperCase();
     if (!normalized) return { valid: false, discount: 0, message: 'Введите промокод' };
@@ -33,10 +37,25 @@ export const pricingService = {
   async createCheckout(payload) {
     // Authentication is server-owned through the HttpOnly session cookie.
     // Never create a local/demo checkout on provider or network failure.
-    return request('/billing/subscription/checkout', {
+    const result = await request('/billing/subscription/checkout', {
       method: 'POST',
       body: payload,
       idempotencyKey: createIdempotencyKey('pricing-checkout'),
     }, 10_000);
+
+    // Compatibility with the existing pricing UI: a sales-assisted response may
+    // navigate to the recorded request's internal continuation page. This is
+    // explicitly not a payment-provider checkout URL and never means payment or
+    // subscription activation succeeded.
+    if (
+      result?.mode === 'SALES_ASSISTED'
+      && result?.paymentCreated === false
+      && result?.subscriptionActivated === false
+      && result?.nextAction?.url
+    ) {
+      return { ...result, checkout_url: result.nextAction.url, checkout_kind: 'sales_assisted_continuation' };
+    }
+
+    return result;
   },
 };
