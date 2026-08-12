@@ -18,6 +18,37 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Request rejected';
 }
 
+function serializedError(error: unknown): string {
+  if (!error || typeof error !== 'object') return String(error ?? '');
+  const candidate = error as {
+    message?: unknown;
+    meta?: { database_error?: unknown; message?: unknown };
+    cause?: { message?: unknown };
+  };
+  return [
+    candidate.message,
+    candidate.meta?.database_error,
+    candidate.meta?.message,
+    candidate.cause?.message,
+  ].filter((value): value is string => typeof value === 'string').join('\n');
+}
+
+function planLimitDetails(error: unknown): Record<string, unknown> | undefined {
+  const serialized = serializedError(error);
+  if (!serialized.includes('PLAN_LIMIT_REACHED')) return undefined;
+
+  const detailMatch = serialized.match(/DETAIL:\s*(\{[^\n]+\})/i);
+  if (!detailMatch?.[1]) return { upgradeRequired: true };
+  try {
+    const parsed = JSON.parse(detailMatch[1]);
+    return parsed && typeof parsed === 'object'
+      ? parsed as Record<string, unknown>
+      : { upgradeRequired: true };
+  } catch {
+    return { upgradeRequired: true };
+  }
+}
+
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
@@ -43,6 +74,19 @@ export function registerErrorHandler(app: FastifyInstance): void {
           message: 'Request validation failed',
           requestId: request.id,
           details: error.flatten(),
+        },
+      });
+    }
+
+    const limitDetails = planLimitDetails(error);
+    if (limitDetails) {
+      request.log.warn({ err: error, details: limitDetails }, 'Plan hard limit rejected by database backstop');
+      return reply.status(409).send({
+        error: {
+          code: 'PLAN_LIMIT_REACHED',
+          message: 'Достигнут лимит текущего тарифа',
+          requestId: request.id,
+          details: limitDetails,
         },
       });
     }
