@@ -56,7 +56,14 @@ export function LockIcon(props) {
   return <IconBase {...props}><rect x="5.5" y="10" width="13" height="9" rx="2.2" stroke="currentColor" strokeWidth="1.7"/><path d="M8.5 10V7.7a3.5 3.5 0 0 1 7 0V10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></IconBase>;
 }
 
-
 export function PaletteIcon(props) {
   return <IconBase {...props}><path d="M12 4.2a7.8 7.8 0 1 0 0 15.6h1.1c1.2 0 2-1.2 1.5-2.3-.5-1.1.3-2.3 1.5-2.3h1.1A2.8 2.8 0 0 0 20 12.4 8.2 8.2 0 0 0 12 4.2Z" stroke="currentColor" strokeWidth="1.7"/><circle cx="8.2" cy="10" r="1" fill="currentColor"/><circle cx="11.2" cy="7.8" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/></IconBase>;
+}
+
+export function IntegrationIcon(props) {
+  return <IconBase {...props}><path d="M8.2 7.4h-1A3.2 3.2 0 0 0 4 10.6v2.8a3.2 3.2 0 0 0 3.2 3.2h2.2M15.8 7.4h1a3.2 3.2 0 0 1 3.2 3.2v2.8a3.2 3.2 0 0 1-3.2 3.2h-2.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/><path d="M9.2 12h5.6M12 9.2v5.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></IconBase>;
+}
+
+export function AutomationIcon(props) {
+  return <IconBase {...props}><path d="M12 4.2v3.1M12 16.7v3.1M4.2 12h3.1M16.7 12h3.1M6.5 6.5l2.2 2.2M15.3 15.3l2.2 2.2M17.5 6.5l-2.2 2.2M8.7 15.3l-2.2 2.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="12" cy="12" r="3.1" stroke="currentColor" strokeWidth="1.7"/></IconBase>;
 }
