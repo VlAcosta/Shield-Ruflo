@@ -56,6 +56,7 @@ describeWithPostgres('P26 agency consent and delegated workspaces', () => {
       data: {
         name: 'P26 Agency',
         slug: `p26-agency-${randomUUID()}`,
+        plan: 'BUSINESS',
         members: { create: { userId: agencyUser.id, role: 'OWNER', status: 'ACTIVE', joinedAt: new Date() } },
       },
     });
