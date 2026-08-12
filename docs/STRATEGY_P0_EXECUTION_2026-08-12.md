@@ -139,7 +139,9 @@ PR: #29
 Base: `feat/product-v2-p26-enterprise-agency-v2`
 GA merge commit: `35d576e3566286aa5afa0290de5bd8226f740890`.
 
-The mandatory **post-GA combined PR #29 gate is pending on the latest integration head**. Production deployment remains forbidden until that combined gate is green and a separate production-safe lineage/deployment decision is made.
+The mandatory post-GA combined Business Shield Quality gate passed at `6262ba3e2ea89512f78e4b725e08c3f199f2b3a4` (workflow #423): frontend, backend with all 22 migrations/tests/build/artifacts, secret-scan, Chromium E2E and independent backup-restore-drill were green together.
+
+This ledger-only commit changes no runtime behavior, but its current PR checks must remain green before promotion. Production deployment remains forbidden until a separate production-safe lineage/deployment decision is made and host preflight/external smoke/exact-SHA gates are executed.
 
 ## Remaining P0 / GA boundaries
 
