@@ -36,7 +36,7 @@ export default function DashboardPage() {
             <DashboardPulseHero organizationName={organization.title || 'Организация'} />
           )}
           {!firstRun.active ? <DashboardDataStatusBar /> : null}
-          <HeaderAnalytick firstRun={firstRun.active} connectedCount={firstRun.integrations?.length || 0} />
+          {firstRun.active ? <HeaderAnalytick firstRun connectedCount={firstRun.integrations?.length || 0} /> : null}
           <DashboardWorkspace firstRun={firstRun.active} />
         </div>
       </DashboardDataProvider>
