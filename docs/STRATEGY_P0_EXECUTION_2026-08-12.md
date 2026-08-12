@@ -91,7 +91,7 @@ Not claimed: self-serve acquiring, provider checkout session, payment webhook va
 
 ### 6. Premium Entitlement Agent
 
-Status: independently green and integrated; combined integration gate green at `282dcd88c5e2f2d1832a9908c1ed5b59f1afdec7`.
+Status: independently green and integrated; combined integration gate green at `282dcd88c5e2f2d1832a9908c1ed5b59f1afdec7` before GA merge.
 
 Implemented:
 - backend capability gates are additional to RBAC rather than UI visibility checks;
@@ -104,28 +104,27 @@ Implemented:
 
 Invariant: effective access is role permission ∩ commercial entitlement; client safety operations cannot be held hostage by the agency's commercial state.
 
-## GA Readiness Agent
+### 7. GA Readiness Agent
 
-Branch: `feat/strategy-ga-readiness-v1`
 PR: #33
-Base: `integration/strategy-p0-2026-08-12`
+Merged integration commit: `35d576e3566286aa5afa0290de5bd8226f740890`
+Status: **full agent quality gate green and merged into integration**.
 
-Status: implementation complete enough for final quality gate; **not closed until every PR #33 job is green**.
-
-Implemented in the candidate:
+Implemented and proven:
 - migration #22 with PostgreSQL-backed per-user and per-tenant expensive-AI request buckets;
 - transactional limiter for Ask Shield query, AI Reply generation, Review Intelligence re-analysis and AI Visibility runs;
-- `429 AI_RATE_LIMITED` with `Retry-After`, while rejected limiter transactions roll back their tentative increments;
+- route-contract regression that locks the exact expensive POST paths and excludes ordinary/read-only traffic;
+- `429 AI_RATE_LIMITED` with `Retry-After`, while rejected limiter transactions roll back tentative increments;
 - private `/internal/metrics` exporter protected by a dedicated operations token;
 - aggregate process/HTTP metrics and persisted AI input/output token + estimated-cost totals without organization/user metric labels;
-- production rejects the development metrics token;
+- production rejects the development metrics token and preflight validates operational configuration;
 - validated custom-format PostgreSQL backups with restrictive permissions and SHA-256 manifest;
 - guarded restore drill that refuses non-test/restore/drill/e2e/ci targets;
 - CI restore evidence: migrations → data marker → dump → empty restore DB → restore → marker verification → Prisma migration status;
 - regression tests for limiter rollback/shared tenant budget, metrics privacy, Retry-After and security headers;
 - deployment runbook documenting the operational boundary truthfully.
 
-Already proven by the first GA run: migration #22, Prisma generate/status/typecheck, frontend, secret-scan, Chromium E2E and the complete backup/restore drill. The first backend test run exposed only an invalid test budget fixture; that fixture was corrected without weakening the limiter and the final GA rerun remains mandatory.
+Final PR #33 Business Shield Quality gate passed frontend, backend with 22 migrations/tests/build/artifacts, secret-scan, Chromium E2E and independent backup-restore-drill.
 
 Not claimed:
 - Prometheus/Grafana/Sentry/PagerDuty or another external collector is deployed;
@@ -138,13 +137,13 @@ Not claimed:
 Branch: `integration/strategy-p0-2026-08-12`
 PR: #29
 Base: `feat/product-v2-p26-enterprise-agency-v2`
-Last fully green combined SHA before GA merge: `282dcd88c5e2f2d1832a9908c1ed5b59f1afdec7`.
+GA merge commit: `35d576e3566286aa5afa0290de5bd8226f740890`.
 
-Production deployment: **forbidden until the GA agent is green, merged into integration, the combined PR quality gate is green again, and a separate production-safe lineage/deployment decision is made.**
+The mandatory **post-GA combined PR #29 gate is pending on the latest integration head**. Production deployment remains forbidden until that combined gate is green and a separate production-safe lineage/deployment decision is made.
 
 ## Remaining P0 / GA boundaries
 
-The following remain explicitly open even after the repository-side GA candidate:
+The following remain explicitly open even after repository-side GA readiness:
 
 - self-serve payment acquiring/provider checkout/webhook validation/reconciliation; current commercial path is deliberately sales-assisted;
 - transactional email/SMS delivery contracts and production retry/observability proof beyond the currently configured OTP/provider paths;
