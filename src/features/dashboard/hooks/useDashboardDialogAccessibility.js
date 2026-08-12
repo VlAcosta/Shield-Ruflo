@@ -42,7 +42,7 @@ export default function useDashboardDialogAccessibility() {
   useEffect(() => {
     let focusFrame = 0;
     let restoreFrame = 0;
-    let redirectingFocus = false;
+    let containFrame = 0;
 
     const focusDialog = (dialog) => {
       window.cancelAnimationFrame(focusFrame);
@@ -85,6 +85,7 @@ export default function useDashboardDialogAccessibility() {
       if (nextDialog === currentDialog) return;
 
       if (currentDialog) detachDialog(currentDialog);
+      window.cancelAnimationFrame(containFrame);
 
       if (!currentDialog && nextDialog) {
         const activeElement = document.activeElement;
@@ -116,7 +117,7 @@ export default function useDashboardDialogAccessibility() {
     const containFocus = (event) => {
       const dialog = dialogRef.current;
       const target = event.target;
-      if (!dialog || !target || redirectingFocus) return;
+      if (!dialog || !target) return;
 
       if (dialog.contains(target)) {
         lastFocusedInsideRef.current = target;
@@ -129,10 +130,12 @@ export default function useDashboardDialogAccessibility() {
       const previous = lastFocusedInsideRef.current;
       const destination = previous === first ? last : first;
 
-      redirectingFocus = true;
-      focusElement(destination);
-      redirectingFocus = false;
-      lastFocusedInsideRef.current = destination;
+      window.cancelAnimationFrame(containFrame);
+      containFrame = window.requestAnimationFrame(() => {
+        const activeDialog = dialogRef.current;
+        if (!activeDialog?.isConnected || !activeDialog.contains(destination)) return;
+        focusElement(destination);
+      });
     };
 
     const observer = new MutationObserver(syncDialog);
@@ -149,6 +152,7 @@ export default function useDashboardDialogAccessibility() {
       detachDialog(dialogRef.current);
       window.cancelAnimationFrame(focusFrame);
       window.cancelAnimationFrame(restoreFrame);
+      window.cancelAnimationFrame(containFrame);
       dialogRef.current = null;
       lastFocusedInsideRef.current = null;
     };
