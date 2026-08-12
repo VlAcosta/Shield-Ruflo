@@ -1,4 +1,5 @@
 import { providerRegistry } from './provider.registry.js';
+import type { ProviderCapability } from './provider.types.js';
 
 export type ProviderReleaseStage = 'PRODUCTION_ADAPTER' | 'ADAPTER_NOT_CONFIGURED' | 'PLANNED';
 
@@ -49,7 +50,7 @@ function runtimeTruth(providerId: string): ProviderTruthItem | null {
   const adapter = providerRegistry.get(providerId);
   if (!adapter) return null;
   const availability = adapter.availability();
-  const has = (capability: string) => adapter.capabilities.includes(capability as never);
+  const has = (capability: ProviderCapability) => adapter.capabilities.includes(capability);
   const reviewIngest = has('reviews.read') && typeof adapter.syncReviews === 'function';
   const reviewReply = has('reviews.reply') && typeof adapter.publishReply === 'function';
   const releaseStage: ProviderReleaseStage = availability.configured && availability.connectable
