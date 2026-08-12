@@ -92,6 +92,23 @@ export function isBlockedWebhookAddress(address: string): boolean {
   return true;
 }
 
+export function validateWebhookUrlShape(rawUrl: string): URL {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error('WEBHOOK_URL_INVALID');
+  }
+  if (url.protocol !== 'https:') throw new Error('WEBHOOK_HTTPS_REQUIRED');
+  if (url.username || url.password) throw new Error('WEBHOOK_URL_CREDENTIALS_FORBIDDEN');
+  if (url.hostname.toLowerCase() === 'localhost' || url.hostname.toLowerCase().endsWith('.localhost')) {
+    throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
+  }
+  const literalFamily = net.isIP(url.hostname);
+  if (literalFamily && isBlockedWebhookAddress(url.hostname)) throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
+  return url;
+}
+
 export type ResolvedWebhookTarget = {
   url: URL;
   address: string;
@@ -103,23 +120,9 @@ export type WebhookResolver = (hostname: string) => Promise<Array<{ address: str
 const defaultResolver: WebhookResolver = async (hostname) => dns.lookup(hostname, { all: true, verbatim: true });
 
 export async function resolveSafeWebhookTarget(rawUrl: string, resolver: WebhookResolver = defaultResolver): Promise<ResolvedWebhookTarget> {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    throw new Error('WEBHOOK_URL_INVALID');
-  }
-  if (url.protocol !== 'https:') throw new Error('WEBHOOK_HTTPS_REQUIRED');
-  if (url.username || url.password) throw new Error('WEBHOOK_URL_CREDENTIALS_FORBIDDEN');
-  if (url.hostname.toLowerCase() === 'localhost' || url.hostname.endsWith('.localhost')) {
-    throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
-  }
-
+  const url = validateWebhookUrlShape(rawUrl);
   const literalFamily = net.isIP(url.hostname);
-  if (literalFamily) {
-    if (isBlockedWebhookAddress(url.hostname)) throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
-    return { url, address: url.hostname, family: literalFamily as 4 | 6 };
-  }
+  if (literalFamily) return { url, address: url.hostname, family: literalFamily as 4 | 6 };
 
   const addresses = await resolver(url.hostname);
   if (!addresses.length) throw new Error('WEBHOOK_DNS_EMPTY');
