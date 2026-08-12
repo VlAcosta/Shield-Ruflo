@@ -205,6 +205,34 @@ describeWithPostgres('Phase 2 billing checkout and provider reconciliation', () 
     expect(await app.prisma.billingWebhookEvent.count({ where: { providerObjectId: payment.providerPaymentId! } })).toBe(1);
   });
 
+  it('extends the current PRO period instead of replacing it', async () => {
+    immediateSuccess = true;
+    const before = await app.prisma.subscription.findFirstOrThrow({
+      where: { organizationId, status: 'ACTIVE' },
+      include: { plan: true },
+    });
+    expect(before.plan.code).toBe('PRO');
+    expect(before.currentPeriodEnd).toBeTruthy();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/subscription/checkout',
+      headers: { cookie, 'idempotency-key': `billing-renew-${randomUUID()}` },
+      payload: { kind: 'plan', planCode: 'PRO' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().status).toBe('succeeded');
+
+    const after = await app.prisma.subscription.findMany({
+      where: { organizationId, status: 'ACTIVE' },
+      include: { plan: true },
+    });
+    expect(after).toHaveLength(1);
+    expect(after[0]?.id).toBe(before.id);
+    expect(after[0]?.plan.code).toBe('PRO');
+    expect(after[0]?.currentPeriodEnd?.getTime()).toBe((before.currentPeriodEnd?.getTime() ?? 0) + 30 * 24 * 60 * 60 * 1000);
+  });
+
   it('creates a tenant-owned hidden plan for a paid constructor configuration', async () => {
     immediateSuccess = true;
     const key = `billing-custom-${randomUUID()}`;

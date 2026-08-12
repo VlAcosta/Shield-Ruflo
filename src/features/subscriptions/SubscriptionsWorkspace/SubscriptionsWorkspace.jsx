@@ -190,7 +190,7 @@ function SubscriptionsWorkspace() {
             {availablePlans.map((item) => {
               const current = item.code === plan.code;
               const features = planFeatureSummary(item);
-              const canPay = item.code === 'PRO' && !current && paymentProviderConfigured;
+              const canPay = item.code === 'PRO' && paymentProviderConfigured;
               return (
                 <article className={`subscriptions-ready__card ${current ? 'is-current' : ''}`} key={item.code}>
                   <div className="subscriptions-ready__card-head">
@@ -205,7 +205,7 @@ function SubscriptionsWorkspace() {
                   ) : null}
                   {canPay ? (
                     <Button onClick={() => subscription.checkoutPlan('PRO')} disabled={subscription.busy.checkout || subscription.busy.trial}>
-                      {subscription.busy.checkout ? 'Создаём платёж…' : `Оплатить PRO · ${formatCurrency(item.price)}`}
+                      {subscription.busy.checkout ? 'Создаём платёж…' : (current ? `Продлить PRO на 1 месяц · ${formatCurrency(item.price)}` : `Оплатить PRO · ${formatCurrency(item.price)}`)}
                     </Button>
                   ) : current ? <span className="subscriptions-ready__current">Активен</span> : null}
                 </article>

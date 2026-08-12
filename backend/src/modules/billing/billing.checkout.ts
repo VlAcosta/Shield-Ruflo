@@ -164,23 +164,51 @@ export async function activateSucceededPayment(app: FastifyInstance, localPaymen
     }
     if (!plan) throw new AppError({ code: 'PAYMENT_PLAN_NOT_FOUND', message: 'Тариф платежа не найден', statusCode: 409 });
 
-    await tx.subscription.updateMany({
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing:subscription:${payment.organizationId}`}, 0))`;
+    const now = new Date();
+    const current = await tx.subscription.findFirst({
       where: { organizationId: payment.organizationId, status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] } },
-      data: { status: 'CANCELED', autoRenew: false },
+      orderBy: { createdAt: 'desc' },
     });
 
-    const now = new Date();
-    const subscription = await tx.subscription.create({
-      data: {
-        organizationId: payment.organizationId,
-        planId: plan.id,
-        status: 'ACTIVE',
-        provider: payment.provider,
-        currentPeriodStart: now,
-        currentPeriodEnd: new Date(now.getTime() + BILLING_PERIOD_MS),
-        autoRenew: false,
-      },
-    });
+    let subscription;
+    if (current?.planId === plan.id) {
+      const baseEnd = current.currentPeriodEnd && current.currentPeriodEnd > now ? current.currentPeriodEnd : now;
+      await tx.subscription.updateMany({
+        where: {
+          organizationId: payment.organizationId,
+          status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
+          id: { not: current.id },
+        },
+        data: { status: 'CANCELED', autoRenew: false },
+      });
+      subscription = await tx.subscription.update({
+        where: { id: current.id },
+        data: {
+          status: 'ACTIVE',
+          provider: payment.provider,
+          currentPeriodStart: current.currentPeriodStart ?? now,
+          currentPeriodEnd: new Date(baseEnd.getTime() + BILLING_PERIOD_MS),
+          autoRenew: false,
+        },
+      });
+    } else {
+      await tx.subscription.updateMany({
+        where: { organizationId: payment.organizationId, status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] } },
+        data: { status: 'CANCELED', autoRenew: false },
+      });
+      subscription = await tx.subscription.create({
+        data: {
+          organizationId: payment.organizationId,
+          planId: plan.id,
+          status: 'ACTIVE',
+          provider: payment.provider,
+          currentPeriodStart: now,
+          currentPeriodEnd: new Date(now.getTime() + BILLING_PERIOD_MS),
+          autoRenew: false,
+        },
+      });
+    }
 
     return tx.payment.update({
       where: { id: payment.id },
