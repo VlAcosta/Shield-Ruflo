@@ -12,6 +12,10 @@ import { replyGenerationModeSchema } from './modules/ai/reply-copilot.schemas.js
 import { processVisibilityRunJob } from './modules/ai-visibility/ai-visibility.service.js';
 import { processListingSyncJob } from './modules/listings/listing-health.service.js';
 import { processAskShieldJob } from './modules/ask-shield/ask-shield.service.js';
+import {
+  processWebhookDeliveryJob,
+  syncWebhookDeliveryJobFailure,
+} from './modules/webhooks/webhook-delivery.service.js';
 
 registerGoogleBusinessProfileProvider();
 registerAiProviders();
@@ -24,6 +28,12 @@ const JOB_CANDIDATE_BATCH = 25;
 let stopping = false;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function webhookDeliveryId(job: any): string | null {
+  if (job?.type !== 'webhook.deliver') return null;
+  const value = String(job?.payload?.deliveryId || '');
+  return value || null;
+}
 
 async function processIntegrationSync(payload: any) {
   const syncRunId = String(payload?.syncRunId || '');
@@ -116,6 +126,11 @@ async function processJob(job: any) {
       ? processReplyPublishJob(prisma, { organizationId, reviewId, replyId })
       : processReplyReconciliationJob(prisma, { organizationId, reviewId, replyId });
   }
+  if (job.type === 'webhook.deliver') {
+    const deliveryId = webhookDeliveryId(job);
+    if (!deliveryId) throw new Error('INVALID_WEBHOOK_DELIVERY_JOB');
+    return processWebhookDeliveryJob(prisma, { deliveryId });
+  }
   if (job.type === 'report.generate') return processReport(job.payload);
   throw new Error(`UNSUPPORTED_JOB_TYPE:${job.type}`);
 }
@@ -154,16 +169,27 @@ async function claimNextJob() {
 
   for (const candidate of candidates) {
     if (candidate.attempts >= candidate.maxAttempts) {
+      const message = candidate.lastError || 'MAX_ATTEMPTS_EXHAUSTED';
       await prisma.job.updateMany({
         where: { id: candidate.id, status: 'QUEUED', attempts: candidate.attempts },
         data: {
           status: 'DEAD',
           completedAt: new Date(),
-          lastError: candidate.lastError || 'MAX_ATTEMPTS_EXHAUSTED',
+          lastError: message,
           lockedAt: null,
           lockToken: null,
         },
       });
+      const deliveryId = webhookDeliveryId(candidate);
+      if (deliveryId) {
+        await syncWebhookDeliveryJobFailure(prisma, {
+          deliveryId,
+          retryable: true,
+          exhausted: true,
+          nextRunAt: null,
+          error: message,
+        });
+      }
       continue;
     }
 
@@ -189,6 +215,7 @@ async function finishFailure(job: any, error: unknown) {
   const explicitlyNonRetryable = Boolean(error && typeof error === 'object' && 'retryable' in error && (error as { retryable?: boolean }).retryable === false);
   const exhausted = explicitlyNonRetryable || job.attempts >= job.maxAttempts;
   const delaySeconds = Math.min(3600, 5 * 2 ** Math.max(0, job.attempts - 1));
+  const nextRunAt = exhausted ? null : new Date(Date.now() + delaySeconds * 1000);
   await prisma.job.update({
     where: { id: job.id },
     data: exhausted
@@ -205,9 +232,20 @@ async function finishFailure(job: any, error: unknown) {
           lastError: message.slice(0, 4000),
           lockedAt: null,
           lockToken: null,
-          runAt: new Date(Date.now() + delaySeconds * 1000),
+          runAt: nextRunAt!,
         },
   });
+
+  const deliveryId = webhookDeliveryId(job);
+  if (deliveryId) {
+    await syncWebhookDeliveryJobFailure(prisma, {
+      deliveryId,
+      retryable: !explicitlyNonRetryable,
+      exhausted,
+      nextRunAt,
+      error: message,
+    });
+  }
 }
 
 async function main() {
