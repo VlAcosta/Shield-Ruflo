@@ -52,3 +52,28 @@ jobs:
 
       - name: Backend production moderate+ gate
         run: npm audit --omit=dev --audit-level=moderate
+
+  lockfile-refresh:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+
+      - name: Refresh frontend lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Refresh backend lockfile
+        working-directory: backend
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Upload refreshed lockfiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-hardening-lockfiles
+          path: |
+            package-lock.json
+            backend/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
