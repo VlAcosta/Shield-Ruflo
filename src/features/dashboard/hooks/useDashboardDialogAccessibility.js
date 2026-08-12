@@ -37,10 +37,12 @@ export default function useDashboardDialogAccessibility() {
   const dialogRef = useRef(null);
   const openerRef = useRef(null);
   const lastActivationRef = useRef(null);
+  const lastFocusedInsideRef = useRef(null);
 
   useEffect(() => {
     let focusFrame = 0;
     let restoreFrame = 0;
+    let redirectingFocus = false;
 
     const focusDialog = (dialog) => {
       window.cancelAnimationFrame(focusFrame);
@@ -60,36 +62,13 @@ export default function useDashboardDialogAccessibility() {
 
     const handleDialogKeyDown = (event) => {
       const dialog = dialogRef.current || event.currentTarget;
-      if (!dialog?.querySelectorAll) return;
+      if (!dialog?.querySelector) return;
+      if (event.key !== 'Escape') return;
 
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        const closeButton = dialog.querySelector(CLOSE_SELECTOR);
-        closeButton?.click();
-        return;
-      }
-
-      if (event.key !== 'Tab') return;
-      const focusable = getFocusable(dialog);
-      if (!focusable.length) {
-        event.preventDefault();
-        focusElement(dialog);
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const target = event.target;
-      const eventTarget = target && dialog.contains?.(target) ? target : document.activeElement;
-
-      if (event.shiftKey && eventTarget === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && eventTarget === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      const closeButton = dialog.querySelector(CLOSE_SELECTOR);
+      closeButton?.click();
     };
 
     const attachDialog = (dialog) => {
@@ -118,6 +97,7 @@ export default function useDashboardDialogAccessibility() {
       }
 
       dialogRef.current = nextDialog;
+      lastFocusedInsideRef.current = null;
 
       if (nextDialog) {
         attachDialog(nextDialog);
@@ -133,19 +113,44 @@ export default function useDashboardDialogAccessibility() {
       if (trigger) lastActivationRef.current = trigger;
     };
 
+    const containFocus = (event) => {
+      const dialog = dialogRef.current;
+      const target = event.target;
+      if (!dialog || !target || redirectingFocus) return;
+
+      if (dialog.contains(target)) {
+        lastFocusedInsideRef.current = target;
+        return;
+      }
+
+      const focusable = getFocusable(dialog);
+      const first = focusable[0] || getInitialFocus(dialog) || dialog;
+      const last = focusable[focusable.length - 1] || first;
+      const previous = lastFocusedInsideRef.current;
+      const destination = previous === first ? last : first;
+
+      redirectingFocus = true;
+      focusElement(destination);
+      redirectingFocus = false;
+      lastFocusedInsideRef.current = destination;
+    };
+
     const observer = new MutationObserver(syncDialog);
     observer.observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener('click', rememberActivation, true);
+    document.addEventListener('focusin', containFocus, true);
     syncDialog();
 
     return () => {
       observer.disconnect();
       document.removeEventListener('click', rememberActivation, true);
+      document.removeEventListener('focusin', containFocus, true);
       detachDialog(dialogRef.current);
       window.cancelAnimationFrame(focusFrame);
       window.cancelAnimationFrame(restoreFrame);
       dialogRef.current = null;
+      lastFocusedInsideRef.current = null;
     };
   }, []);
 }
