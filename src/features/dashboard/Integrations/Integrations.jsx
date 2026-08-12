@@ -30,18 +30,18 @@ function Integrations() {
   const healthyCount = useMemo(() => integrations.filter((item) => ['connected', 'configured', 'syncing'].includes(item.status)).length, [integrations]);
   const issueCount = useMemo(() => integrations.filter((item) => ['error', 'expired', 'degraded', 'needs_setup'].includes(item.status)).length, [integrations]);
   const health = integrations.length ? Math.round((healthyCount / integrations.length) * 100) : 0;
-  const openHub = () => navigate('/integrations');
+  const openSettings = () => navigate('/profile?tab=integrations');
 
-  return <DashboardCard title="Интеграции" eyebrow="Provider hub" className="dashboard-integrations" motion="scale" action={<button type="button" className="dashboard-integrations__settings" onClick={openHub}><SettingsIcon /><span>Открыть Hub</span></button>}>
+  return <DashboardCard title="Интеграции" eyebrow="Provider hub" className="dashboard-integrations" motion="scale" action={<button type="button" className="dashboard-integrations__settings" onClick={openSettings}><SettingsIcon /><span>Настройки</span></button>}>
     {integrations.length ? <>
       <div className="dashboard-integrations__health">
         <div><span>Состояние подключений</span><strong>{health}%</strong><small>{healthyCount} из {integrations.length} источников готовы</small></div>
         <div className="dashboard-integrations__health-bar"><i style={{ width: `${health}%` }} /></div>
         <span className={`dashboard-integrations__live ${issueCount ? 'is-warning' : ''}`}><i />{issueCount ? `${issueCount} требуют внимания` : 'каналы в норме'}</span>
       </div>
-      <div className="dashboard-integrations__list">{integrations.slice(0, 5).map((integration) => <IntegrationRow integration={integration} key={integration.id} onOpen={openHub} />)}</div>
-      <button type="button" className="dashboard-integrations__more" onClick={openHub}>{integrations.length > 5 ? `Ещё ${integrations.length - 5} подключения` : 'Диагностика и синхронизация'} →</button>
-    </> : <button type="button" className="dashboard-integrations__empty-action" onClick={openHub}><EmptyState title="Интеграции не подключены" text="Откройте Integration Hub, выберите источники и настройте безопасный provider-канал." /><span>Открыть Integration Hub →</span></button>}
+      <div className="dashboard-integrations__list">{integrations.slice(0, 5).map((integration) => <IntegrationRow integration={integration} key={integration.id} onOpen={openSettings} />)}</div>
+      <button type="button" className="dashboard-integrations__more" onClick={openSettings}>{integrations.length > 5 ? `Ещё ${integrations.length - 5} подключения` : 'Диагностика и синхронизация'} →</button>
+    </> : <button type="button" className="dashboard-integrations__empty-action" onClick={openSettings}><EmptyState title="Интеграции не подключены" text="Откройте настройки профиля, выберите источники и настройте безопасный provider-канал." /><span>Открыть настройки интеграций →</span></button>}
   </DashboardCard>;
 }
 export default memo(Integrations);
