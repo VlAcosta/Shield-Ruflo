@@ -6,8 +6,6 @@ import { assertEntitlement } from '../billing/billing.service.js';
 import { aiProviderRegistry } from '../ai/ai-provider.registry.js';
 import { AiProviderError } from '../ai/ai-provider.types.js';
 
-// Keep the service-level defense-in-depth gate aligned with the commercial
-// entitlement catalog. Route gates are not the only callers of this service.
 const AI_VISIBILITY_ENTITLEMENT = 'aiVisibility';
 
 type ActorContext = { organizationId: string; userId: string };
@@ -222,116 +220,127 @@ export async function processVisibilityRunJob(prisma: PrismaClient, input: { org
       where: { organizationId: input.organizationId, status: 'ACTIVE' },
       select: { id: true, name: true },
     });
-    const competitorByName = new Map(knownCompetitors.map((item) => [item.name.trim().toLowerCase(), item]));
-    const sourceDomains = [...new Set(response.citations.map((item) => item.domain ?? domainFromUrl(item.url)).filter((item): item is string => Boolean(item)))];
-    const ranking = response.rankingPosition ?? (response.mentioned ? 1 : null);
-    const visibilityScore = Math.max(0, Math.min(100, Math.round(response.confidence * (response.mentioned ? 82 : 26) + (ranking ? Math.max(0, 18 - (ranking - 1) * 4) : 0))));
+    const competitorByName = new Map(knownCompetitors.map((item) => [item.name.trim().toLocaleLowerCase(), item.id]));
 
-    await prisma.$transaction(async (tx) => {
-      const result = await tx.aiVisibilityResult.upsert({
-        where: { runId: run.id },
-        create: {
+    return await prisma.$transaction(async (tx) => {
+      await tx.aiVisibilityResult.deleteMany({ where: { runId: run.id } });
+      const result = await tx.aiVisibilityResult.create({
+        data: {
           organizationId: input.organizationId,
           runId: run.id,
-          provider: response.provider,
-          model: response.model,
-          mentioned: response.mentioned,
-          sentiment: response.sentiment,
-          confidence: response.confidence,
-          visibilityScore,
-          rankingPosition: ranking,
-          answerSnippet: response.answerSnippet,
-          sourceDomains,
-        },
-        update: {
-          provider: response.provider,
-          model: response.model,
-          mentioned: response.mentioned,
-          sentiment: response.sentiment,
-          confidence: response.confidence,
-          visibilityScore,
-          rankingPosition: ranking,
-          answerSnippet: response.answerSnippet,
-          sourceDomains,
-          observedAt: new Date(),
+          brandMentioned: response.output.brandMentioned,
+          brandPosition: response.output.brandPosition,
+          sentiment: response.output.sentiment,
+          answerText: response.output.answerSummary,
+          recommendations: response.output.recommendations,
+          citationMeasurement: response.citationMeasurement,
         },
       });
-      await tx.aiVisibilityCitation.deleteMany({ where: { resultId: result.id } });
-      await tx.aiVisibilityCompetitor.deleteMany({ where: { resultId: result.id } });
-      if (response.citations.length) {
-        await tx.aiVisibilityCitation.createMany({ data: response.citations.map((item, index) => ({
-          organizationId: input.organizationId,
-          resultId: result.id,
-          url: item.url,
-          title: item.title ?? null,
-          domain: item.domain ?? domainFromUrl(item.url),
-          snippet: item.snippet ?? null,
-          position: item.position ?? index + 1,
-        })) });
+      if (response.citations.length > 0) {
+        await tx.aiVisibilityCitation.createMany({
+          data: response.citations.map((citation, index) => ({
+            organizationId: input.organizationId,
+            resultId: result.id,
+            url: citation.url,
+            title: citation.title,
+            domain: domainFromUrl(citation.url),
+            position: index + 1,
+          })),
+        });
       }
-      if (response.competitors.length) {
-        await tx.aiVisibilityCompetitor.createMany({ data: response.competitors.map((item) => ({
-          organizationId: input.organizationId,
-          resultId: result.id,
-          competitorId: item.competitorId ?? competitorByName.get(item.name.trim().toLowerCase())?.id ?? null,
-          name: item.name,
-          mentioned: item.mentioned,
-          rankingPosition: item.rankingPosition ?? null,
-          sentiment: item.sentiment ?? null,
-        })) });
+      if (response.output.competitors.length > 0) {
+        await tx.aiVisibilityCompetitor.createMany({
+          data: response.output.competitors.map((competitor) => ({
+            organizationId: input.organizationId,
+            resultId: result.id,
+            name: competitor.name,
+            position: competitor.position,
+            matchedCompetitorId: competitorByName.get(competitor.name.trim().toLocaleLowerCase()) ?? null,
+          })),
+        });
       }
       await tx.aiVisibilityRun.update({
         where: { id: run.id },
-        data: { status: 'SUCCEEDED', startedAt: run.startedAt ?? new Date(), completedAt: new Date(), errorCode: null, errorMessage: null },
-      });
-      await tx.auditLog.create({
         data: {
-          organizationId: input.organizationId,
-          actorUserId: run.createdByUserId,
-          action: 'ai_visibility.run.completed',
-          entityType: 'AiVisibilityRun',
-          entityId: run.id,
-          metadata: { provider: response.provider, model: response.model, visibilityScore, rankingPosition: ranking, citationCount: response.citations.length, competitorCount: response.competitors.length },
+          status: 'SUCCEEDED',
+          provider: response.provider,
+          model: response.model,
+          modelVersion: response.modelVersion,
+          promptVersion: response.promptVersion,
+          inputTokens: response.inputTokens,
+          outputTokens: response.outputTokens,
+          estimatedCostMicros: response.estimatedCostMicros === null ? null : BigInt(response.estimatedCostMicros),
+          completedAt: new Date(),
+          errorCode: null,
+          errorMessage: null,
         },
       });
+      return result;
     });
-    return { runId: run.id, status: 'SUCCEEDED' as const };
   } catch (error) {
-    const providerError = error instanceof AiProviderError ? error : new AiProviderError({ code: 'AI_VISIBILITY_PROVIDER_FAILED', message: error instanceof Error ? error.message : 'AI visibility provider failed', retryable: true });
-    await prisma.aiVisibilityRun.update({ where: { id: run.id }, data: { status: 'FAILED', errorCode: providerError.code, errorMessage: providerError.message, completedAt: new Date() } });
-    throw providerError;
+    const code = error instanceof AiProviderError ? error.code : 'AI_VISIBILITY_RUN_FAILED';
+    const message = error instanceof Error ? error.message : String(error);
+    await prisma.aiVisibilityRun.update({
+      where: { id: run.id },
+      data: { status: 'FAILED', errorCode: code, errorMessage: message.slice(0, 4000), completedAt: new Date() },
+    });
+    throw error;
   }
 }
 
 export async function getVisibilityRun(app: FastifyInstance, organizationId: string, runId: string) {
   const run = await app.prisma.aiVisibilityRun.findFirst({
     where: { id: runId, organizationId },
-    include: { probe: { select: { id: true, name: true, query: true } }, result: { include: { citations: true, competitors: true } } },
+    include: { probe: true, result: { include: { citations: true, competitors: true } } },
   });
   if (!run) throw new AppError({ code: 'AI_VISIBILITY_RUN_NOT_FOUND', message: 'AI Visibility run не найден', statusCode: 404 });
   return run;
 }
 
 export async function visibilityMetrics(app: FastifyInstance, organizationId: string, input: { from?: Date; to?: Date; locationId?: string }) {
-  const from = input.from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const to = input.to ?? new Date();
-  const probes = await app.prisma.aiVisibilityProbe.findMany({
-    where: { organizationId, ...(input.locationId !== undefined ? { locationId: input.locationId } : {}) },
-    select: { id: true },
+  const runs = await app.prisma.aiVisibilityRun.findMany({
+    where: {
+      organizationId,
+      status: 'SUCCEEDED',
+      ...(input.from || input.to ? { completedAt: { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lte: input.to } : {}) } } : {}),
+      ...(input.locationId ? { probe: { locationId: input.locationId } } : {}),
+    },
+    include: { probe: { select: { locationId: true } }, result: { include: { citations: true, competitors: true } } },
+    orderBy: { completedAt: 'asc' },
   });
-  const probeIds = probes.map((item) => item.id);
-  const results = await app.prisma.aiVisibilityResult.findMany({
-    where: { organizationId, run: { probeId: { in: probeIds }, createdAt: { gte: from, lte: to }, status: 'SUCCEEDED' } },
-    orderBy: { observedAt: 'asc' },
-  });
-  const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  const measured = runs.filter((run) => run.result !== null);
+  const sampleSize = measured.length;
+  const brandMentions = measured.filter((run) => run.result?.brandMentioned).length;
+  const positionValues = measured.flatMap((run) => run.result?.brandPosition ? [run.result.brandPosition] : []);
+  const competitorMentions = measured.reduce((sum, run) => sum + (run.result?.competitors.length ?? 0), 0);
+  const runsWithCompetitor = measured.filter((run) => (run.result?.competitors.length ?? 0) > 0).length;
+  const citationMeasuredRuns = measured.filter((run) => run.result?.citationMeasurement === 'SUPPORTED');
+  const citationCoveredRuns = citationMeasuredRuns.filter((run) => (run.result?.citations.length ?? 0) > 0).length;
+  const sentiment = Object.fromEntries(['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'MIXED', 'UNKNOWN'].map((key) => [key, measured.filter((run) => run.result?.sentiment === key).length]));
+  const locationMap = new Map<string, { runs: number; mentions: number }>();
+  for (const run of measured) {
+    if (!run.probe.locationId) continue;
+    const current = locationMap.get(run.probe.locationId) ?? { runs: 0, mentions: 0 };
+    current.runs += 1;
+    if (run.result?.brandMentioned) current.mentions += 1;
+    locationMap.set(run.probe.locationId, current);
+  }
+  const voiceDenominator = brandMentions + competitorMentions;
   return {
-    from: from.toISOString(),
-    to: to.toISOString(),
-    probes: probeIds.length,
-    completedRuns: results.length,
-    mentionRate: results.length ? average(results.map((item) => item.mentioned ? 1 : 0)) : 0,
-    averageVisibilityScore: Math.round(average(results.map((item) => item.visibilityScore))),
-    averageRankingPosition: results.some((item) => item.rankingPosition) ? Number(average(results.flatMap((item) => item.rankingPosition ? [item.rankingPosition] : [])).toFixed(2)) : null,
+    sampleSize,
+    brandMentionRate: sampleSize ? Number(((brandMentions / sampleSize) * 100).toFixed(1)) : null,
+    shareOfAiVoice: voiceDenominator ? Number(((brandMentions / voiceDenominator) * 100).toFixed(1)) : null,
+    averageAiPosition: positionValues.length ? Number((positionValues.reduce((sum, value) => sum + value, 0) / positionValues.length).toFixed(2)) : null,
+    competitorMentionRate: sampleSize ? Number(((runsWithCompetitor / sampleSize) * 100).toFixed(1)) : null,
+    citationCoverage: citationMeasuredRuns.length ? Number(((citationCoveredRuns / citationMeasuredRuns.length) * 100).toFixed(1)) : null,
+    citationQuality: { measured: false, reason: 'P23 does not infer source quality from domain heuristics; provider/source-quality signals are required.' },
+    aiSentiment: sentiment,
+    locationVisibility: [...locationMap.entries()].map(([locationId, value]) => ({ locationId, sampleSize: value.runs, mentionRate: Number(((value.mentions / value.runs) * 100).toFixed(1)) })),
+    methodology: {
+      brandMentionRate: 'runs mentioning the target brand / succeeded runs',
+      shareOfAiVoice: 'target brand mentions / (target brand mentions + detected competitor mentions)',
+      averageAiPosition: 'mean ordinal brand position for runs where an ordinal position was measurable',
+      citationCoverage: 'web-grounded runs with one or more provider citations / web-grounded runs',
+    },
   };
 }
