@@ -5,6 +5,30 @@ export const STRATEGY_STATS = Object.freeze([
   { value: 'Audit', label: 'история действий и согласований', tone: 'pink' },
 ]);
 
+export const REPUTATION_PROBLEMS = Object.freeze([
+  {
+    number: '01',
+    title: 'Негатив теряется между площадками',
+    text: 'Без единой очереди команда замечает важный отзыв поздно и не понимает, кто отвечает за реакцию.',
+    accent: 'pink',
+    icon: 'message',
+  },
+  {
+    number: '02',
+    title: 'Нет управляемого SLA',
+    text: 'Если у события нет приоритета, владельца и срока, скорость ответа зависит от ручного контроля.',
+    accent: 'violet',
+    icon: 'bolt',
+  },
+  {
+    number: '03',
+    title: 'Причина негатива не исправляется',
+    text: 'Ответ клиенту закрывает коммуникацию, но без задачи и root-cause анализа одна и та же проблема повторяется.',
+    accent: 'orange',
+    icon: 'chart',
+  },
+]);
+
 export const REPUTATION_LOOP = Object.freeze([
   { number: '01', title: 'Detect', text: 'Получаем review events из фактически подключённых источников и собираем их в единой очереди.', tone: 'violet' },
   { number: '02', title: 'Prioritize', text: 'Выделяем негатив, SLA, risk и overdue — команда видит, что требует реакции первым.', tone: 'purple' },
