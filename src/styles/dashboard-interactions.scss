@@ -1,0 +1,93 @@
+// Dashboard UX Phase 3 — touch and coarse-pointer interaction hardening.
+// Desktop hover behaviour remains unchanged; touch devices get explicit controls.
+
+@media (hover: none), (pointer: coarse) {
+  .dashboard-page {
+    .dashboard-grid__widget-menu {
+      top: -5px;
+      right: -5px;
+    }
+
+    .dashboard-grid__menu-trigger {
+      width: 38px;
+      height: 38px;
+      opacity: 1;
+      transform: none;
+      background: rgba(255, 255, 255, .98);
+
+      svg {
+        width: 19px;
+        height: 19px;
+      }
+    }
+
+    .dashboard-grid__item:hover .dashboard-grid__menu-trigger {
+      transform: none;
+    }
+
+    .dashboard-grid__menu-popover {
+      top: 43px;
+      width: min(248px, calc(100vw - 36px));
+    }
+
+    .dashboard-grid__menu-popover > button {
+      min-height: 44px;
+      font-size: 12px;
+    }
+
+    .dashboard-grid__menu-head {
+      min-height: 46px;
+    }
+
+    .dashboard-grid__menu-head strong {
+      font-size: 12.5px;
+    }
+
+    .dashboard-card:hover,
+    .dashboard-quick-actions__item:hover,
+    .dashboard-integrations__item:hover,
+    .dashboard-team__person:hover,
+    .dashboard-checklist__row:hover {
+      transform: none;
+    }
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-page {
+    .dashboard-grid__widget-menu {
+      top: -3px;
+      right: -3px;
+    }
+
+    .dashboard-grid__menu-trigger {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+    }
+
+    .dashboard-grid__menu-popover {
+      top: 45px;
+      right: 0;
+      width: min(260px, calc(100vw - 28px));
+      padding: 7px;
+    }
+
+    .dashboard-grid__menu-popover > button {
+      min-height: 46px;
+      padding-inline: 11px;
+      font-size: 12px;
+    }
+  }
+}
+
+.dashboard-page.is-dark {
+  @media (hover: none), (pointer: coarse) {
+    .dashboard-grid__menu-trigger {
+      border-color: var(--dashboard-dark-border, rgba(133, 146, 185, .16));
+      color: #9aa6c1;
+      background: #182137;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .2);
+    }
+  }
+}
