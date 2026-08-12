@@ -318,6 +318,132 @@
   .dashboard-rating__tooltip strong { font-size: 10.5px; }
   .dashboard-rating__tooltip span { font-size: 9px; }
   .dashboard-rating__labels span { font-size: 9.5px; }
+
+  // Reputation Pulse: readable status and signals without browser zoom.
+  .dashboard-pulse-hero__eyebrow {
+    font-size: 10.5px;
+    letter-spacing: .1em;
+  }
+
+  .dashboard-pulse-hero__live {
+    min-height: 26px;
+    padding-inline: 10px;
+  }
+
+  .dashboard-pulse-hero p {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .dashboard-pulse-hero__primary,
+  .dashboard-pulse-hero__secondary {
+    min-height: 44px;
+    padding-inline: 17px;
+    font-size: 11.5px;
+  }
+
+  .dashboard-pulse-hero__signal-head > div span { font-size: 10px; }
+  .dashboard-pulse-hero__signal-head > div strong { font-size: 15px; }
+
+  .dashboard-pulse-hero__shield {
+    width: 38px;
+    height: 38px;
+    svg { width: 21px; height: 21px; }
+  }
+
+  .dashboard-pulse-hero__score {
+    min-width: 98px;
+    padding: 9px 11px;
+
+    strong { font-size: 22px; }
+    > span { font-size: 10px; }
+    small { font-size: 9.5px; }
+  }
+
+  .dashboard-pulse-hero__signal-card {
+    min-height: 62px;
+    padding: 10px 11px;
+
+    > span { font-size: 9.5px; }
+    strong { font-size: 17px; }
+    small { font-size: 9px; line-height: 1.35; }
+  }
+
+  .dashboard-pulse-hero__signal-empty,
+  .dashboard-pulse-hero__spark-empty {
+    font-size: 9.5px;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 1240px) {
+  .dashboard-page .dashboard-pulse-hero {
+    padding: 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(330px, .95fr);
+    gap: 22px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero h2 {
+    font-size: clamp(28px, 3.1vw, 38px);
+  }
+}
+
+@media (max-width: 980px) {
+  .dashboard-page .dashboard-pulse-hero {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__signal {
+    min-height: 0;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__signals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-page .dashboard-pulse-hero {
+    padding: 20px 16px;
+    gap: 18px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero h2 {
+    font-size: 30px;
+    line-height: 1.05;
+  }
+
+  .dashboard-page .dashboard-pulse-hero p {
+    font-size: 13px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__actions {
+    margin-top: 18px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__signals {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__signal-card {
+    min-height: 58px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-page .dashboard-pulse-hero__eyebrow {
+    flex-wrap: wrap;
+    row-gap: 7px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero h2 {
+    font-size: 28px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__score {
+    min-width: 92px;
+  }
 }
 
 @media (min-width: 1600px) {
@@ -350,6 +476,20 @@
   .dashboard-page .reviews-chart__months span,
   .dashboard-page .dashboard-rating__labels span,
   .dashboard-page .tasks-chart__label {
+    font-size: 10px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero p {
+    font-size: 15px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__primary,
+  .dashboard-page .dashboard-pulse-hero__secondary {
+    font-size: 12px;
+  }
+
+  .dashboard-page .dashboard-pulse-hero__signal-card > span,
+  .dashboard-page .dashboard-pulse-hero__score small {
     font-size: 10px;
   }
 }
