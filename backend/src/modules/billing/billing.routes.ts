@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
-import { getBillingSnapshot, startProTrial } from './billing.service.js';
+import { getBillingSnapshot, getPublicBillingCatalog, startProTrial } from './billing.service.js';
 
 function orgId(request: FastifyRequest): string {
   if (!request.auth?.organizationId) {
@@ -11,17 +11,30 @@ function orgId(request: FastifyRequest): string {
 }
 
 export const billingRoutes: FastifyPluginAsync = async (app) => {
+  // Safe public catalog: prices and product limits only, never subscription or tenant data.
+  app.get('/billing/catalog', async () => ({ plans: await getPublicBillingCatalog(app) }));
+
   app.get('/billing/plans', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async () => ({
-    plans: await app.prisma.plan.findMany({ where: { active: true }, include: { entitlements: true }, orderBy: { priceCents: 'asc' } }),
+    plans: await getPublicBillingCatalog(app),
   }));
 
   app.get('/billing/subscription', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async (request) => {
     return getBillingSnapshot(app, orgId(request));
   });
 
+  app.get('/billing/usage', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async (request) => {
+    const snapshot = await getBillingSnapshot(app, orgId(request));
+    return { plan: snapshot.plan, usage: snapshot.usage };
+  });
+
   app.get('/billing/entitlements', { preHandler: [app.authenticate] }, async (request) => {
     const snapshot = await getBillingSnapshot(app, orgId(request));
-    return { entitlements: snapshot.entitlements, plan: snapshot.plan, subscription: snapshot.subscription };
+    return {
+      entitlements: snapshot.entitlements,
+      plan: snapshot.plan,
+      subscription: snapshot.subscription,
+      usage: snapshot.usage,
+    };
   });
 
   app.patch('/billing/subscription/auto-renew', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async (request) => {
