@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
 import { hashSessionToken } from '../src/shared/security/tokens.js';
+import { provisionTestPlan } from './support/plan-fixtures.js';
 
 const integrationDatabaseUrl = process.env.TEST_DATABASE_URL ?? '';
 const databaseName = integrationDatabaseUrl ? new URL(integrationDatabaseUrl).pathname.toLowerCase() : '';
@@ -39,6 +40,7 @@ describeWithPostgres('Operations P10 tenant isolation and permissions', () => {
         { id: organizationBId, name: 'P10 Organization B', slug: `p10-b-${randomUUID()}` },
       ],
     });
+    await provisionTestPlan(app, [organizationAId, organizationBId], 'PRO');
     await app.prisma.user.createMany({
       data: [
         { id: ownerAId, phone: `+7${Date.now()}31`, displayName: 'P10 Owner A', profileCompletedAt: new Date() },
@@ -193,6 +195,24 @@ describeWithPostgres('Operations P10 tenant isolation and permissions', () => {
     });
     expect(foreign.statusCode).toBe(404);
     expect(foreign.json()).toMatchObject({ error: { code: 'REPORT_NOT_FOUND' } });
+  });
+
+  it('rejects fake external notification delivery settings', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/settings',
+      headers: { cookie: ownerCookie },
+      payload: { channels: { email: true, telegram: true }, quietHours: { enabled: true, from: '22:00', to: '09:00' } },
+    });
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'NOTIFICATION_DELIVERY_NOT_CONFIGURED',
+        details: { inApp: true, externalDeliveryConfigured: false, quietHoursConfigured: false },
+      },
+    });
+    const user = await app.prisma.user.findUniqueOrThrow({ where: { id: ownerAId }, select: { notificationPreferences: true } });
+    expect(JSON.stringify(user.notificationPreferences ?? {})).not.toContain('telegram');
   });
 
   it('keeps notifications tenant and recipient scoped', async () => {

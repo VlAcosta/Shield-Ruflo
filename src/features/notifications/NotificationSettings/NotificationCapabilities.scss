@@ -1,0 +1,94 @@
+.notification-capability {
+  min-height: 25px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 760;
+
+  i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  &.is-active {
+    color: #148a64;
+    background: rgba(22, 191, 131, .09);
+
+    i { background: #16bf83; }
+  }
+
+  &.is-planned {
+    color: #8b738c;
+    background: rgba(126, 135, 160, .09);
+
+    i { background: #9ba4b9; }
+  }
+}
+
+.notification-capability-note {
+  margin-top: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(102, 97, 245, .09);
+  border-radius: 12px;
+  color: #7d87a2;
+  background: rgba(102, 97, 245, .035);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.notification-quiet-hours--planned {
+  .notification-quiet-hours__title {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+}
+
+.notification-setting-row__icon--in-app {
+  color: #6554ff;
+  background: rgba(101, 84, 255, .08);
+}
+
+[data-theme='dark'] {
+  .notification-capability.is-active {
+    color: #6edcb3;
+    background: rgba(22, 191, 131, .12);
+  }
+
+  .notification-capability.is-planned {
+    color: #aeb7ca;
+    background: rgba(142, 151, 176, .1);
+  }
+
+  .notification-capability-note {
+    border-color: rgba(141, 127, 255, .13);
+    color: #aab3c9;
+    background: rgba(125, 104, 255, .07);
+  }
+}
+
+@media (max-width: 520px) {
+  .notification-capability {
+    justify-self: start;
+  }
+
+  .notification-setting-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .notification-setting-row > .notification-capability {
+    grid-column: 2;
+  }
+
+  .notification-quiet-hours--planned .notification-quiet-hours__title {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .notification-quiet-hours--planned .notification-capability {
+    grid-column: 2;
+  }
+}

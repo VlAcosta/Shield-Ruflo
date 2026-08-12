@@ -16,6 +16,8 @@ const SAFE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
   REPORTS_ENDPOINT: '/api/v1/reports',
   NOTIFICATIONS_ENDPOINT: '/api/v1/notifications',
   SUBSCRIPTIONS_ENDPOINT: '/api/v1/billing/subscription',
+  PROFILE_ENDPOINT: '/api/v1/profile',
+  TEAM_SECURITY_ENDPOINT: '/api/v1/team',
 });
 
 function normalizeName(name: string): string {

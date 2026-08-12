@@ -59,6 +59,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.INTEGRATION_CREDENTIALS_KEY',
           '*.GOOGLE_BUSINESS_CLIENT_SECRET',
           '*.AI_OPENAI_API_KEY',
+          '*.YOOKASSA_SECRET_KEY',
           '*.refreshToken',
           '*.accessToken',
         ],

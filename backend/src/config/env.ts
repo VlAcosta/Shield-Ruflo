@@ -100,6 +100,14 @@ const envSchema = z
 
     INTEGRATION_CREDENTIALS_KEY: z.string().min(32).default('development-integration-credential-key-change-me'),
 
+    BILLING_PROVIDER: z.enum(['disabled', 'yookassa']).default('disabled'),
+    YOOKASSA_SHOP_ID: z.string().trim().default(''),
+    YOOKASSA_SECRET_KEY: z.string().trim().default(''),
+    YOOKASSA_RETURN_URL: optionalUrl,
+    YOOKASSA_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(10_000),
+    YOOKASSA_RECEIPT_ENABLED: booleanFromString.default(false),
+    YOOKASSA_VAT_CODE: z.coerce.number().int().min(1).max(12).default(1),
+
     GOOGLE_BUSINESS_ENABLED: booleanFromString.default(false),
     GOOGLE_BUSINESS_CLIENT_ID: z.string().default(''),
     GOOGLE_BUSINESS_CLIENT_SECRET: z.string().default(''),
@@ -128,6 +136,18 @@ const envSchema = z
     }
     if (value.COMPANY_LOOKUP_PROVIDER === 'dadata' && !value.DADATA_API_KEY) {
       ctx.addIssue({ code: 'custom', path: ['DADATA_API_KEY'], message: 'DaData company lookup requires an API key' });
+    }
+
+    if (value.BILLING_PROVIDER === 'yookassa') {
+      if (!/^\d+$/.test(value.YOOKASSA_SHOP_ID)) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_SHOP_ID'], message: 'YooKassa requires a numeric shopId' });
+      }
+      if (!value.YOOKASSA_SECRET_KEY) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_SECRET_KEY'], message: 'YooKassa requires a secret key' });
+      }
+      if (!value.YOOKASSA_RETURN_URL) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_RETURN_URL'], message: 'YooKassa requires a return URL' });
+      }
     }
 
     if (value.AUTH_OTP_PROVIDER === 'webhook' && !value.AUTH_OTP_WEBHOOK_URL) {
@@ -198,6 +218,9 @@ const envSchema = z
       }
       if (value.INTEGRATION_CREDENTIALS_KEY === 'development-integration-credential-key-change-me') {
         ctx.addIssue({ code: 'custom', path: ['INTEGRATION_CREDENTIALS_KEY'], message: 'Production requires a unique integration credential encryption key' });
+      }
+      if (value.BILLING_PROVIDER === 'yookassa' && !value.YOOKASSA_RETURN_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_RETURN_URL'], message: 'Production YooKassa return URL must use HTTPS' });
       }
       if (value.GOOGLE_BUSINESS_ENABLED && !value.GOOGLE_BUSINESS_REDIRECT_URI.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_REDIRECT_URI'], message: 'Production Google OAuth redirect URI must use HTTPS' });

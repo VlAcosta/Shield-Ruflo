@@ -4,6 +4,7 @@ export const PROFILE_TABS = Object.freeze([
   { id: 'security', label: 'Безопасность' },
   { id: 'appearance', label: 'Оформление' },
   { id: 'users', label: 'Команда' },
+  { id: 'system', label: 'Система' },
 ]);
 
 export const USER_ROLES = Object.freeze([

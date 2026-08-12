@@ -7,8 +7,17 @@ import './PaymentHistory.scss';
 const FILTERS = Object.freeze([
   { value: 'all', label: 'Все операции' },
   { value: 'paid', label: 'Оплачено' },
+  { value: 'pending', label: 'Ожидают оплаты' },
+  { value: 'canceled', label: 'Отменено' },
+  { value: 'failed', label: 'Ошибки' },
   { value: 'refund', label: 'Возвраты' },
 ]);
+
+function formatPaymentDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || '—';
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+}
 
 function PaymentHistory({ payments, onDownload }) {
   const [filter, setFilter] = useState('all');
@@ -55,20 +64,22 @@ function PaymentHistory({ payments, onDownload }) {
               key={item.id}
               style={{ '--payment-index': index }}
             >
-              <span className="payment-history__date">{item.date}</span>
+              <span className="payment-history__date">{formatPaymentDate(item.date)}</span>
               <strong className="payment-history__description">{item.title}</strong>
               <strong className="payment-history__amount">{formatCurrency(item.amount)}</strong>
               <span className={`payment-history__status payment-history__status--${item.status}`}>
                 <i /> {formatPaymentStatus(item.status)}
               </span>
-              <button
-                type="button"
-                className="payment-history__download"
-                aria-label={`Скачать квитанцию: ${item.title}`}
-                onClick={() => onDownload(item)}
-              >
-                <DownloadIcon />
-              </button>
+              {item.receiptAvailable ? (
+                <button
+                  type="button"
+                  className="payment-history__download"
+                  aria-label={`Скачать квитанцию: ${item.title}`}
+                  onClick={() => onDownload(item)}
+                >
+                  <DownloadIcon />
+                </button>
+              ) : <span className="payment-history__download-spacer" aria-hidden="true" />}
             </div>
           ))}
 

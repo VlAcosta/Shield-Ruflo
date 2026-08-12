@@ -11,6 +11,29 @@
     font-weight: 650;
   }
 
+  .portal__navItem--primary.is-plan-locked {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    color: var(--portal-nav-text, #697695);
+  }
+
+  .portal__navItem--primary.is-plan-locked:hover {
+    color: var(--portal-accent, #6554ff);
+    background: rgba(101, 84, 255, .055);
+  }
+
+  .portal__planBadge {
+    justify-self: end;
+    padding: 3px 6px;
+    border: 1px solid rgba(101, 84, 255, .18);
+    border-radius: 999px;
+    color: #6554ff;
+    background: rgba(101, 84, 255, .07);
+    font-size: 9px;
+    font-weight: 850;
+    line-height: 1;
+    letter-spacing: .04em;
+  }
+
   .portal__navItem--accent {
     margin-bottom: 8px;
     border: 1px solid rgba(107, 82, 255, .16);
@@ -149,8 +172,15 @@
 
 [data-theme='dark'] .portal__sidebar--simple {
   .portal__navGroupButton,
-  .portal__utilityLink { color: #aeb7ce; }
+  .portal__utilityLink,
+  .portal__navItem--primary.is-plan-locked { color: #aeb7ce; }
   .portal__navGroupButton:hover,
   .portal__navGroup.is-active > .portal__navGroupButton,
-  .portal__navItem--accent { background: rgba(125, 104, 255, .12); }
+  .portal__navItem--accent,
+  .portal__navItem--primary.is-plan-locked:hover { background: rgba(125, 104, 255, .12); }
+  .portal__planBadge {
+    color: #b9adff;
+    border-color: rgba(158, 143, 255, .22);
+    background: rgba(125, 104, 255, .13);
+  }
 }

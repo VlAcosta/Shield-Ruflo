@@ -4,7 +4,7 @@ import { ProfileWorkspace } from '../../features/profile';
 
 export default function ProfilePage() {
   return (
-    <PortalLayout title="Аккаунт" subtitle="Профиль и настройки">
+    <PortalLayout title="Настройки" subtitle="Аккаунт, организация и система">
       <ProfileWorkspace />
     </PortalLayout>
   );

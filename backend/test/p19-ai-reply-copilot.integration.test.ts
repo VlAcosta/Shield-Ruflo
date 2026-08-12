@@ -136,6 +136,7 @@ describeWithPostgres('P19 AI Reply Copilot', () => {
     });
     await app.prisma.entitlement.createMany({
       data: [
+        { planId: plan.id, key: 'aiFeatures', value: true },
         { planId: plan.id, key: 'ai.review_intelligence', value: true },
         { planId: plan.id, key: 'ai.reply_copilot', value: true },
         { planId: plan.id, key: 'ai.autopilot', value: true },

@@ -7,6 +7,7 @@ import { aiProviderRegistry } from '../src/modules/ai/ai-provider.registry.js';
 import type { AiReviewIntelligenceProvider } from '../src/modules/ai/ai-provider.types.js';
 import { processAskShieldJob } from '../src/modules/ask-shield/ask-shield.service.js';
 import { hashSessionToken } from '../src/shared/security/tokens.js';
+import { provisionTestPlan } from './support/plan-fixtures.js';
 
 const integrationDatabaseUrl = process.env.TEST_DATABASE_URL ?? '';
 const databaseName = integrationDatabaseUrl ? new URL(integrationDatabaseUrl).pathname.toLowerCase() : '';
@@ -38,6 +39,7 @@ describeWithPostgres('P25 Ask Shield', () => {
       { id: organizationId, name: 'P25 Org', slug: `p25-${randomUUID()}` },
       { id: otherOrganizationId, name: 'P25 Other Org', slug: `p25-other-${randomUUID()}` },
     ] });
+    await provisionTestPlan(app, [organizationId, otherOrganizationId], 'PRO');
     await app.prisma.user.createMany({ data: [
       { id: userId, phone: `+7${Date.now()}81`, displayName: 'P25 Owner', profileCompletedAt: new Date() },
       { id: otherUserId, phone: `+7${Date.now()}82`, displayName: 'P25 Other', profileCompletedAt: new Date() },

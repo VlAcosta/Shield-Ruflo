@@ -1,19 +1,16 @@
 import React, { useCallback } from 'react';
 import PortalLayout from '../layouts/PortalLayout';
-import { DashboardPulseHero, HeaderAnalytick } from '../features/dashboard';
 import DashboardWorkspace from '../features/dashboard/DashboardWorkspace';
 import FirstRunExperience from '../features/dashboard/FirstRunExperience';
 import DashboardDataProvider from '../features/dashboard/data/DashboardDataProvider';
 import DashboardDataStatusBar from '../features/dashboard/data/DashboardDataStatusBar';
 import useDashboardFirstRun from '../features/dashboard/hooks/useDashboardFirstRun';
-import useDashboardTheme from '../features/dashboard/hooks/useDashboardTheme';
 import useOrganization from '../hooks/useOrganization';
 import '../styles/dashboard.scss';
 
 export default function DashboardPage() {
   const organization = useOrganization();
   const firstRun = useDashboardFirstRun();
-  const dashboardTheme = useDashboardTheme();
 
   const scrollToWorkspace = useCallback(() => {
     document.getElementById('dashboard-workspace')?.scrollIntoView({
@@ -24,19 +21,14 @@ export default function DashboardPage() {
 
   return (
     <PortalLayout
-      title="Главная страница"
+      title="Главная"
       subtitle={organization.title || 'Организация'}
       requirePin
     >
       <DashboardDataProvider>
-        <div className={`dashboard-page ${firstRun.active ? 'dashboard-page--first-run' : ''} ${dashboardTheme.isDark ? 'is-dark' : 'is-light'}`.trim()}>
-          {firstRun.active ? (
-            <FirstRunExperience onWorkspaceOpen={scrollToWorkspace} />
-          ) : (
-            <DashboardPulseHero organizationName={organization.title || 'Организация'} />
-          )}
+        <div className={`dashboard-page dashboard-page--phase2 ${firstRun.active ? 'dashboard-page--first-run' : ''}`.trim()}>
+          {firstRun.active ? <FirstRunExperience onWorkspaceOpen={scrollToWorkspace} /> : null}
           {!firstRun.active ? <DashboardDataStatusBar /> : null}
-          <HeaderAnalytick firstRun={firstRun.active} connectedCount={firstRun.integrations?.length || 0} />
           <DashboardWorkspace firstRun={firstRun.active} />
         </div>
       </DashboardDataProvider>

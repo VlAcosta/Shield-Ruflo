@@ -121,11 +121,11 @@ export const DEFAULT_NOTIFICATIONS_SNAPSHOT = Object.freeze({
       id: 'notification-subscription',
       type: 'system',
       title: 'Подписка скоро истекает',
-      text: 'Тариф «Профессионал» истекает через 3 дня. Продлите его, чтобы сервисы продолжили работать без паузы.',
+      text: 'Тариф «Профессионал» истекает через 3 дня. Следующий период можно оформить в разделе «Тариф и оплата».',
       createdAt: now - day,
       unread: false,
       tone: 'red',
-      actionLabel: 'Продлить подписку',
+      actionLabel: 'Открыть тариф',
       actionRoute: '/subscriptions',
     },
     {
@@ -151,7 +151,9 @@ export const TYPE_META = Object.freeze({
 });
 
 export function formatNotificationTime(timestamp) {
-  const diff = Math.max(0, Date.now() - timestamp);
+  const normalized = typeof timestamp === 'number' ? timestamp : Date.parse(timestamp);
+  const safeTimestamp = Number.isFinite(normalized) ? normalized : Date.now();
+  const diff = Math.max(0, Date.now() - safeTimestamp);
   if (diff < minute) return 'только что';
   if (diff < hour) return `${Math.max(1, Math.floor(diff / minute))} мин назад`;
   if (diff < day) {

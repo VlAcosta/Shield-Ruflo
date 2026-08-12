@@ -81,7 +81,12 @@ describeWithPostgres('P18 Shield AI Review Intelligence', () => {
       create: { code: `P18_TEST_${organizationId.slice(0, 8)}`, name: 'P18 Test Plan', priceCents: 0 },
       update: {},
     });
-    await app.prisma.entitlement.create({ data: { planId: plan.id, key: 'ai.review_intelligence', value: true } });
+    await app.prisma.entitlement.createMany({
+      data: [
+        { planId: plan.id, key: 'ai.review_intelligence', value: true },
+        { planId: plan.id, key: 'aiFeatures', value: true },
+      ],
+    });
     await app.prisma.organization.createMany({
       data: [
         { id: organizationId, name: 'P18 Org', slug: `p18-${randomUUID()}` },

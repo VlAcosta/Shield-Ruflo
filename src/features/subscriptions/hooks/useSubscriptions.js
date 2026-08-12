@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createSubscriptionCheckout,
   downloadPaymentReceipt,
+  getSubscriptionPayment,
   getSubscriptionSnapshot,
   persistSubscriptionCart,
-  setSubscriptionAutoRenew,
+  quoteSubscriptionConstructor,
   validatePromoCode,
 } from '../../../services/subscriptions/subscriptionService';
+import { createIdempotencyKey } from '../../../services/core/apiClient';
 import { formatCurrency } from '../model/formatters';
 import { recordCompanyActivity } from '../../../services/activity/companyActivityService';
 import { startProTrial as requestProTrial } from '../../../services/subscriptions/subscriptionTrialService';
@@ -17,6 +19,7 @@ const EMPTY_PROMO = Object.freeze({
   percent: 0,
   discount: 0,
 });
+const PENDING_PAYMENT_KEY = 'business-shield:billing:pending-payment';
 
 export default function useSubscriptions() {
   const [snapshot, setSnapshot] = useState(null);
@@ -25,10 +28,11 @@ export default function useSubscriptions() {
   const [promo, setPromo] = useState(EMPTY_PROMO);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState({ renewal: false, promo: false, checkout: false, trial: false });
+  const [busy, setBusy] = useState({ promo: false, checkout: false, trial: false });
   const [notice, setNotice] = useState(null);
   const mountedRef = useRef(true);
   const noticeTimerRef = useRef(null);
+  const checkoutKeyRef = useRef(null);
 
   const showNotice = useCallback((message, tone = 'success') => {
     window.clearTimeout(noticeTimerRef.current);
@@ -62,6 +66,37 @@ export default function useSubscriptions() {
       window.clearTimeout(noticeTimerRef.current);
     };
   }, [load]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const paymentId = window.sessionStorage.getItem(PENDING_PAYMENT_KEY);
+    if (!paymentId) return undefined;
+
+    const controller = new AbortController();
+    getSubscriptionPayment(paymentId, { refresh: true, signal: controller.signal })
+      .then(async (payment) => {
+        if (!mountedRef.current || !payment) return;
+        if (payment.status === 'succeeded') {
+          window.sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+          await load();
+          showNotice('Оплата подтверждена. Тариф активирован.');
+          return;
+        }
+        if (payment.status === 'canceled' || payment.status === 'failed') {
+          window.sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+          await load();
+          showNotice('Платёж не завершён. Тариф не изменён.', 'warning');
+          return;
+        }
+        await load();
+        showNotice('Платёж обрабатывается. Статус обновится после подтверждения банка.', 'neutral');
+      })
+      .catch((refreshError) => {
+        if (refreshError?.name !== 'AbortError') showNotice('Не удалось обновить статус последнего платежа', 'warning');
+      });
+
+    return () => controller.abort();
+  }, [load, showNotice]);
 
   const cartItems = useMemo(() => {
     if (!snapshot?.packages) return [];
@@ -124,39 +159,6 @@ export default function useSubscriptions() {
     });
   }, [persistCart]);
 
-  const toggleAutoRenew = useCallback(async () => {
-    if (!snapshot || busy.renewal) return;
-
-    const previousValue = Boolean(snapshot.plan.autoRenew);
-    const nextValue = !previousValue;
-
-    setSnapshot((current) => ({
-      ...current,
-      plan: { ...current.plan, autoRenew: nextValue },
-    }));
-    setBusy((current) => ({ ...current, renewal: true }));
-
-    try {
-      await setSubscriptionAutoRenew(nextValue, {
-        snapshot: {
-          ...snapshot,
-          plan: { ...snapshot.plan, autoRenew: nextValue },
-        },
-        cart,
-      });
-      showNotice(nextValue ? 'Автопродление включено' : 'Автопродление отключено');
-      recordCompanyActivity({ type: 'billing_auto_renew', title: nextValue ? 'Включил автопродление' : 'Отключил автопродление', route: '/subscriptions', tone: 'indigo' });
-    } catch {
-      setSnapshot((current) => ({
-        ...current,
-        plan: { ...current.plan, autoRenew: previousValue },
-      }));
-      showNotice('Не удалось изменить автопродление', 'error');
-    } finally {
-      if (mountedRef.current) setBusy((current) => ({ ...current, renewal: false }));
-    }
-  }, [busy.renewal, cart, showNotice, snapshot]);
-
   const applyPromo = useCallback(async () => {
     const normalized = promoInput.trim();
 
@@ -193,38 +195,67 @@ export default function useSubscriptions() {
     showNotice('Промокод удалён', 'neutral');
   }, [showNotice]);
 
-  const checkout = useCallback(async () => {
-    if (!cartItems.length || busy.checkout) return;
-
+  const runCheckout = useCallback(async (payload, activityTitle) => {
+    if (busy.checkout) return null;
     setBusy((current) => ({ ...current, checkout: true }));
 
-    try {
-      const result = await createSubscriptionCheckout({
-        items: cartItems.map(({ id, count, price }) => ({ id, count, price })),
-        promoCode: promo.valid ? promo.code : null,
-        subtotal,
-        discount,
-        total,
-      });
+    if (!checkoutKeyRef.current) checkoutKeyRef.current = createIdempotencyKey('subscription-checkout');
 
-      if (result?.redirectUrl) {
-        window.location.assign(result.redirectUrl);
-        return;
+    try {
+      const result = await createSubscriptionCheckout(payload, { idempotencyKey: checkoutKeyRef.current });
+      if (!result?.ok) {
+        showNotice(result?.message || 'Онлайн-оплата сейчас недоступна', 'error');
+        return result;
       }
 
-      showNotice(`Заказ на ${formatCurrency(total)} сформирован`);
-      recordCompanyActivity({ type: 'billing_checkout', title: `Сформировал заказ на ${formatCurrency(total)}`, detail: `${totalItems} поз.`, route: '/subscriptions', tone: 'violet' });
-      const cleared = Object.fromEntries(Object.keys(cart).map((id) => [id, 0]));
-      setCart(cleared);
-      setPromoInput('');
-      setPromo(EMPTY_PROMO);
-      persistCart(cleared);
-    } catch {
-      showNotice('Не удалось перейти к оплате. Попробуйте ещё раз.', 'error');
+      if (result.paymentId && typeof window !== 'undefined') {
+        window.sessionStorage.setItem(PENDING_PAYMENT_KEY, result.paymentId);
+      }
+
+      recordCompanyActivity({
+        type: 'billing_checkout',
+        title: activityTitle,
+        detail: result.amount ? formatCurrency(result.amount) : undefined,
+        route: '/subscriptions',
+        tone: 'violet',
+      });
+
+      checkoutKeyRef.current = null;
+
+      if (result.redirectUrl) {
+        window.location.assign(result.redirectUrl);
+        return result;
+      }
+
+      if (result.status === 'succeeded') {
+        if (typeof window !== 'undefined') window.sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+        await load();
+        showNotice('Оплата подтверждена. Тариф активирован.');
+        return result;
+      }
+
+      await load();
+      showNotice('Платёж создан и ожидает подтверждения.', 'neutral');
+      return result;
+    } catch (checkoutError) {
+      showNotice(checkoutError?.message || 'Не удалось перейти к оплате. Попробуйте ещё раз.', 'error');
+      return null;
     } finally {
       if (mountedRef.current) setBusy((current) => ({ ...current, checkout: false }));
     }
-  }, [busy.checkout, cart, cartItems, discount, persistCart, promo, showNotice, subtotal, total, totalItems]);
+  }, [busy.checkout, load, showNotice]);
+
+  const checkoutPlan = useCallback((planCode = 'PRO') => (
+    runCheckout({ kind: 'plan', planCode }, `Начал оплату тарифа ${planCode}`)
+  ), [runCheckout]);
+
+  const checkoutConstructor = useCallback((selection) => (
+    runCheckout({ kind: 'constructor', selection }, 'Начал оплату индивидуального тарифа')
+  ), [runCheckout]);
+
+  const quoteConstructor = useCallback((selection, options) => (
+    quoteSubscriptionConstructor(selection, options)
+  ), []);
 
   const startTrial = useCallback(async () => {
     if (busy.trial || !snapshot?.trial?.available) return;
@@ -243,6 +274,10 @@ export default function useSubscriptions() {
   }, [busy.trial, showNotice, snapshot?.trial?.available]);
 
   const downloadReceipt = useCallback(async (payment) => {
+    if (!payment?.receiptAvailable) {
+      showNotice('Квитанция для этой операции пока недоступна', 'neutral');
+      return;
+    }
     try {
       await downloadPaymentReceipt(payment);
       showNotice('Квитанция загружена', 'neutral');
@@ -268,10 +303,11 @@ export default function useSubscriptions() {
     setPromoInput,
     changePackageCount,
     setPackageCount,
-    toggleAutoRenew,
     applyPromo,
     removePromo,
-    checkout,
+    checkoutPlan,
+    checkoutConstructor,
+    quoteConstructor,
     startTrial,
     downloadReceipt,
     reload: load,

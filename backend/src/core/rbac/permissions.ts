@@ -134,6 +134,8 @@ export type PermissionOverrides = {
   deny?: string[];
 };
 
+export type PlanEntitlements = Readonly<Record<string, unknown>>;
+
 export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
   'billing.manage',
 ]);
@@ -143,6 +145,27 @@ export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
   'team.manage',
   'billing.manage',
 ]);
+
+export const entitlementPermissionGates: Readonly<Record<string, readonly Permission[]>> = Object.freeze({
+  analytics: ['analytics.view'] as readonly Permission[],
+  automations: ['automations.view', 'automations.manage'] as readonly Permission[],
+  reports: ['reports.view', 'reports.create', 'reports.export'] as readonly Permission[],
+  competitive: ['competitive.view', 'competitive.manage'] as readonly Permission[],
+  aiVisibility: ['ai_visibility.view', 'ai_visibility.manage', 'ai_visibility.run'] as readonly Permission[],
+  aiFeatures: [
+    'reviews.intelligence.read',
+    'reviews.intelligence.reanalyze',
+    'ai.brand_voice.manage',
+    'ai.autopilot.manage',
+  ] as readonly Permission[],
+});
+
+export function entitlementForPermission(permission: Permission): string | null {
+  for (const [entitlement, gatedPermissions] of Object.entries(entitlementPermissionGates)) {
+    if (gatedPermissions.includes(permission)) return entitlement;
+  }
+  return null;
+}
 
 export function isPermission(value: string): value is Permission {
   return (permissions as readonly string[]).includes(value);
@@ -166,5 +189,23 @@ export function effectivePermissions(role: string, overrides: PermissionOverride
       && !(normalizedRole === 'OWNER' && essentialOwnerPermissions.includes(permission))
     ) allowed.delete(permission);
   }
+  return [...allowed];
+}
+
+/**
+ * Intersects role permissions with the organization's active plan.
+ * Missing premium entitlements fail closed while core workspace permissions remain available.
+ */
+export function permissionsForEntitlements(
+  basePermissions: readonly Permission[],
+  entitlements: PlanEntitlements | null | undefined,
+): Permission[] {
+  const allowed = new Set(basePermissions);
+
+  for (const [entitlement, gatedPermissions] of Object.entries(entitlementPermissionGates)) {
+    if (entitlements?.[entitlement] === true) continue;
+    for (const permission of gatedPermissions) allowed.delete(permission);
+  }
+
   return [...allowed];
 }

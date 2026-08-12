@@ -176,4 +176,25 @@ describeWithPostgres('Integration and billing provider truth', () => {
       reason: 'PROMO_SYSTEM_NOT_CONFIGURED',
     });
   });
+
+  it('does not claim auto-renew is enabled before recurring charges exist', async () => {
+    const enable = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/billing/subscription/auto-renew',
+      headers: { cookie },
+      payload: { enabled: true },
+    });
+    expect(enable.statusCode).toBe(409);
+    expect(enable.json()).toMatchObject({
+      error: {
+        code: 'RECURRING_BILLING_NOT_AVAILABLE',
+        details: { autoRenew: false, recurringPaymentsConfigured: false },
+      },
+    });
+
+    const subscription = await app.prisma.subscription.findFirstOrThrow({
+      where: { organizationId: organizationAId, status: 'ACTIVE' },
+    });
+    expect(subscription.autoRenew).toBe(false);
+  });
 });

@@ -3,9 +3,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../errors/app-error.js';
 import { env } from '../../config/env.js';
 import { hashSessionToken } from '../../shared/security/tokens.js';
-import { presentUser, publicUserInclude } from '../../modules/auth/auth.presenter.js';
+import { presentMembershipPermissions, presentUser, publicUserInclude } from '../../modules/auth/auth.presenter.js';
 import { readCookie, serializeClearedSessionCookie } from '../../shared/http/cookies.js';
-import { effectivePermissions } from '../rbac/permissions.js';
 
 function readBearerToken(request: FastifyRequest): string {
   const authorization = request.headers.authorization;
@@ -74,7 +73,7 @@ export const authenticationPlugin = fp(async (app) => {
       organizationId: activeOrganizationId,
       membershipId: activeMembership?.id ?? null,
       role: activeMembership?.role ?? null,
-      permissions: activeMembership ? effectivePermissions(activeMembership.role, activeMembership.permissionOverrides as { allow?: string[]; deny?: string[] } | null) : [],
+      permissions: activeMembership ? presentMembershipPermissions(activeMembership, now) : [],
       user: presentUser(session.user, activeOrganizationId),
     };
 

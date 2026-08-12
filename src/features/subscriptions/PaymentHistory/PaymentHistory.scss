@@ -46,15 +46,13 @@
     font-weight: 560;
   }
 
-  &__table {
-    overflow-x: auto;
-  }
+  &__table { overflow-x: auto; }
 
   &__table-head,
   &__row {
     min-width: 720px;
     display: grid;
-    grid-template-columns: 125px minmax(230px, 1fr) 120px 130px 36px;
+    grid-template-columns: 125px minmax(230px, 1fr) 120px 150px 36px;
     align-items: center;
     gap: 12px;
   }
@@ -124,6 +122,19 @@
       i { background: $color-success; }
     }
 
+    &--pending {
+      color: #9a6a12;
+      background: rgba(224, 169, 54, .11);
+      i { background: #d69b27; }
+    }
+
+    &--canceled {
+      color: $color-text-muted;
+      background: rgba(127, 137, 159, .1);
+      i { background: $color-text-muted; }
+    }
+
+    &--failed,
     &--refund {
       color: $color-danger;
       background: rgba(243, 79, 112, .08);
@@ -131,9 +142,13 @@
     }
   }
 
-  &__download {
+  &__download,
+  &__download-spacer {
     width: 30px;
     height: 30px;
+  }
+
+  &__download {
     display: grid;
     place-items: center;
     border: 0;

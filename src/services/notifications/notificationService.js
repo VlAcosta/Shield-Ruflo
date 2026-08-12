@@ -21,12 +21,18 @@ function readCache() {
   return readScopedJson(CACHE_KEY, { scope: getAccountScope(), legacy: true, fallback: null });
 }
 
+function normalizeTimestamp(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
 function normalizeNotification(item = {}) {
   return {
     ...item,
     text: item.text ?? item.body ?? '',
     unread: item.unread ?? String(item.status || '').toUpperCase() === 'UNREAD',
-    createdAt: item.createdAt || Date.now(),
+    createdAt: normalizeTimestamp(item.createdAt),
     actionLabel: item.actionLabel || item.payload?.actionLabel || '',
     actionRoute: item.actionRoute || item.payload?.actionRoute || '',
     tone: item.tone || item.payload?.tone || 'violet',
@@ -80,8 +86,8 @@ export async function getNotificationsSnapshot() {
     return remote;
   } catch (error) {
     const cached = readCache();
-    if (cached) return { ...cached, stale: true, error };
-    if (isDemoDataEnabled()) return createEmptySnapshot();
+    if (cached) return { ...normalizeSnapshot(cached), stale: true, error };
+    if (isDemoDataEnabled()) return normalizeSnapshot(createEmptySnapshot());
     throw error;
   }
 }
@@ -89,7 +95,7 @@ export async function getNotificationsSnapshot() {
 // Kept only for explicit local/demo UX signals. Persisted production
 // notifications are created by backend automation/business events.
 export function pushLocalNotification(payload = {}) {
-  const snapshot = readCache() || createEmptySnapshot();
+  const snapshot = normalizeSnapshot(readCache() || createEmptySnapshot());
   const notification = normalizeNotification({
     id: payload.id || `local-notification-${Date.now().toString(36)}`,
     type: payload.type || 'system',
