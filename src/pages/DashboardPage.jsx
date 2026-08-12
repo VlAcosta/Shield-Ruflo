@@ -9,6 +9,7 @@ import useDashboardFirstRun from '../features/dashboard/hooks/useDashboardFirstR
 import useDashboardTheme from '../features/dashboard/hooks/useDashboardTheme';
 import useDashboardGridMenuAccessibility from '../features/dashboard/hooks/useDashboardGridMenuAccessibility';
 import useDashboardWorkspaceAccessibility from '../features/dashboard/hooks/useDashboardWorkspaceAccessibility';
+import useDashboardDialogAccessibility from '../features/dashboard/hooks/useDashboardDialogAccessibility';
 import useOrganization from '../hooks/useOrganization';
 import '../styles/dashboard.scss';
 import '../styles/dashboard-responsive.scss';
@@ -23,6 +24,7 @@ export default function DashboardPage() {
   const dashboardTheme = useDashboardTheme();
   useDashboardGridMenuAccessibility();
   useDashboardWorkspaceAccessibility();
+  useDashboardDialogAccessibility();
 
   const scrollToWorkspace = useCallback(() => {
     document.getElementById('dashboard-workspace')?.scrollIntoView({
