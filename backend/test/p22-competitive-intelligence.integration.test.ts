@@ -32,10 +32,17 @@ describeWithPostgres('P22 Competitive Intelligence', () => {
 
   beforeAll(async () => {
     app = await buildApp();
+    const growthPlan = await app.prisma.plan.findUniqueOrThrow({ where: { code: 'GROWTH' } });
     await app.prisma.organization.createMany({
       data: [
-        { id: organizationId, name: 'P22 Org', slug: `p22-${randomUUID()}`, plan: 'GROWTH' },
-        { id: otherOrganizationId, name: 'P22 Other Org', slug: `p22-other-${randomUUID()}`, plan: 'GROWTH' },
+        { id: organizationId, name: 'P22 Org', slug: `p22-${randomUUID()}` },
+        { id: otherOrganizationId, name: 'P22 Other Org', slug: `p22-other-${randomUUID()}` },
+      ],
+    });
+    await app.prisma.subscription.createMany({
+      data: [
+        { organizationId, planId: growthPlan.id, status: 'ACTIVE', autoRenew: false },
+        { organizationId: otherOrganizationId, planId: growthPlan.id, status: 'ACTIVE', autoRenew: false },
       ],
     });
     await app.prisma.user.createMany({
