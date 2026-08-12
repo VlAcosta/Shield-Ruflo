@@ -13,6 +13,7 @@ import '../styles/dashboard-responsive.scss';
 import '../styles/dashboard-phase2.scss';
 import '../styles/dashboard-source-state.scss';
 import '../styles/dashboard-phase3.scss';
+import '../styles/dashboard-interactions.scss';
 
 export default function DashboardPage() {
   const organization = useOrganization();
