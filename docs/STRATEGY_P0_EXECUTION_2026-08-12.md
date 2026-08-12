@@ -132,16 +132,42 @@ Not claimed:
 - encrypted off-host backup retention is configured;
 - an infrastructure-level RPO/RTO SLO is measured.
 
+### 8. P26-B API Identity & Scoped Access Agent
+
+PR: #36
+Merged integration commit: `c85f8943b6cf38d15cbb2cd76678019962cbc0dc`
+Status: **full agent quality gate green and merged into integration**.
+
+Implemented and proven:
+- migration #23 with organization-bound service accounts and API keys;
+- service-account API keys are stored only as one-way SHA-256 hashes with a non-secret public prefix;
+- the full token is returned only on create/rotation responses and is never returned by list/read responses;
+- account/key expiry, last-used tracking, key revoke and account-wide revoke;
+- DB trigger prevents an API key from being rebound to a different organization even through direct database writes;
+- human management requires a DIRECT organization workspace, `api_keys.view/manage` RBAC and `apiAccess` entitlement;
+- existing credentials re-check `apiAccess` on every authentication, so downgrade from PRO/BUSINESS disables them immediately;
+- service accounts use a separate Fastify principal pipeline and are not treated as human users/browser sessions;
+- v1 service-account permissions are deliberately read-only;
+- effective scopes are `service-account scopes ∩ key scopes ∩ hardcoded API-key allowlist`, so database JSON manipulation cannot grant billing/team/key-management/write permissions;
+- dedicated `/api/v1/external/*` surface starts with tenant-scoped review list/detail and dashboard overview;
+- lifecycle actions are written to the existing audit log with the real human creator/revoker;
+- tests prove START denial, invalid-scope rejection, hash-only storage, one-time secret disclosure, tenant isolation, old browser-route rejection, database scope escalation resistance, immediate revoke and downgrade shutdown.
+
+Final PR #36 Business Shield Quality gate passed frontend, backend with 23 migrations/tests/build/artifacts, secret-scan, Chromium E2E and independent backup-restore-drill.
+
+Invariant: service accounts never impersonate a user. Write scopes remain forbidden until mutation domains accept an explicit non-human actor principal instead of a human `userId` foreign key.
+
 ## Integration candidate
 
 Branch: `integration/strategy-p0-2026-08-12`
 PR: #29
 Base: `feat/product-v2-p26-enterprise-agency-v2`
 GA merge commit: `35d576e3566286aa5afa0290de5bd8226f740890`.
+P26-B merge commit: `c85f8943b6cf38d15cbb2cd76678019962cbc0dc`.
 
-The mandatory post-GA combined Business Shield Quality gate passed at `6262ba3e2ea89512f78e4b725e08c3f199f2b3a4` (workflow #423): frontend, backend with all 22 migrations/tests/build/artifacts, secret-scan, Chromium E2E and independent backup-restore-drill were green together.
+The mandatory post-GA combined Business Shield Quality gate passed at `6262ba3e2ea89512f78e4b725e08c3f199f2b3a4` (workflow #423), and the subsequent ledger-only head was also fully green in workflow #424.
 
-This ledger-only commit changes no runtime behavior, but its current PR checks must remain green before promotion. Production deployment remains forbidden until a separate production-safe lineage/deployment decision is made and host preflight/external smoke/exact-SHA gates are executed.
+A new mandatory combined gate with P26-B and all 23 migrations is required on the current integration head before P26-C begins or any promotion is considered. Production deployment remains forbidden until a separate production-safe lineage/deployment decision is made and host preflight/external smoke/exact-SHA gates are executed.
 
 ## Remaining P0 / GA boundaries
 
@@ -155,17 +181,17 @@ The following remain explicitly open even after repository-side GA readiness:
 - production data-retention/purge behavior matching plan policy;
 - proof methodology for any future public numerical claims/case studies.
 
-## P1 / P26 continuation after GA gate
+## P1 / P26 continuation after the next combined gate
 
 - usage UI + upgrade/downgrade flows and proration policy;
 - notifications at 70/90/100 usage thresholds;
 - external observability dashboards for API, worker, sync providers, AI and billing;
 - expanded E2E: onboarding → source → review → AI draft → approval → reply → task → report;
-- P26 scoped roles/API keys/service accounts;
 - P26 signed outbound webhooks with retries/history/dead-letter/manual retry;
 - P26 white-label/custom domains verification;
 - P26 SAML/OIDC boundary, retention/purge, session/IP/step-up policies and audit export;
 - P26 frontend workspace switcher + consolidated agency portfolio;
+- explicit non-human actor support for selected write APIs before any service-account write scope is introduced;
 - design-system token consolidation and state-system audit;
 - accessibility/keyboard/focus/reduced-motion pass;
 - performance budgets for dashboard, reviews and analytics routes.
@@ -196,4 +222,5 @@ A candidate can be promoted only when all applicable gates are green:
 - Expensive AI mutation budgets are shared through PostgreSQL rather than per-process memory.
 - Operational metrics must not introduce tenant/user cardinality or leak identifiers.
 - A backup capability is not considered proven until restore is exercised against an isolated database.
+- Service-account keys are separate principals and never silently become browser/user sessions.
 - Enterprise/P26 work must not weaken P0 security, billing truth, quota enforcement or tenant boundaries.
