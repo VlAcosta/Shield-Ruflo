@@ -49,6 +49,14 @@ function planLimitDetails(error: unknown): Record<string, unknown> | undefined {
   }
 }
 
+function retryAfterSeconds(error: AppError): number | null {
+  if (error.statusCode !== 429 || !error.details || typeof error.details !== 'object') return null;
+  const retryAfter = (error.details as { retryAfter?: unknown }).retryAfter;
+  return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0
+    ? Math.max(1, Math.ceil(retryAfter))
+    : null;
+}
+
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
@@ -56,6 +64,9 @@ export function registerErrorHandler(app: FastifyInstance): void {
         { err: error, code: error.code, details: error.details },
         'Application error',
       );
+
+      const retryAfter = retryAfterSeconds(error);
+      if (retryAfter !== null) reply.header('retry-after', String(retryAfter));
 
       return reply.status(error.statusCode).send({
         error: {
