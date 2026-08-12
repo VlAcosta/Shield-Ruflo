@@ -8,7 +8,8 @@ import { getAccountScope, readScopedJson, writeScopedJson } from '../core/dataSc
 import { apiRequest, joinEndpoint } from '../core/apiClient';
 import { isDemoDataEnabled } from '../core/runtimeConfig';
 
-const PROFILE_ENDPOINT = String(getRuntimeEnv('PROFILE_ENDPOINT', getRuntimeEnv('API_BASE', '/api/v1'))).replace(/\/$/, '');
+const PROFILE_ENDPOINT = String(getRuntimeEnv('PROFILE_ENDPOINT', '/api/v1/profile')).replace(/\/$/, '');
+const COMPANY_PROFILE_ENDPOINT = String(getRuntimeEnv('COMPANY_PROFILE_ENDPOINT', '/api/v1/company/profile')).replace(/\/$/, '');
 export const PROFILE_CACHE_KEY = 'business-shield:profile:snapshot:v1';
 export const PROFILE_CHANGED_EVENT = 'business-shield:profile-changed';
 
@@ -138,6 +139,11 @@ async function request(path = '', options = {}) {
   return apiRequest(joinEndpoint(PROFILE_ENDPOINT, path), { ...options, timeout: 9000 });
 }
 
+async function companyRequest(options = {}) {
+  if (!COMPANY_PROFILE_ENDPOINT) return null;
+  return apiRequest(COMPANY_PROFILE_ENDPOINT, { ...options, timeout: 9000 });
+}
+
 function normalizeSnapshot(value) {
   const base = createBaseProfileSnapshot();
   return {
@@ -161,36 +167,20 @@ function normalizeSnapshot(value) {
 }
 
 export async function getProfileSnapshot({ signal } = {}) {
-  let remote = null;
   try {
-    remote = await request('/company/profile', { signal });
+    const remote = await request('', { signal });
+    if (!remote) throw new Error('PROFILE_API_UNAVAILABLE');
+    const snapshot = normalizeSnapshot(remote.snapshot || remote);
+    writeCache(snapshot, { emit: false });
+    mirrorPersonalToCurrentUser(snapshot.personal);
+    if (snapshot.company?.title) writeOrganizationMirror(snapshot.company);
+    return snapshot;
   } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    const cached = readCache();
+    if (cached) return { ...normalizeSnapshot(cached), stale: true };
     throw error;
   }
-  if (remote) {
-    const snapshot = overlayCurrentUserPersonal(normalizeSnapshot({ ...(readCache() || {}), company: remote.company }));
-    writeCache(snapshot, { emit: false });
-    return snapshot;
-  }
-
-  const cached = readCache();
-  if (cached) return overlayCurrentUserPersonal(normalizeSnapshot(cached));
-
-  const legacyOrganization = readLegacyOrganization();
-  if (legacyOrganization?.title) {
-    const hydrated = normalizeSnapshot({
-      ...createBaseProfileSnapshot(),
-      company: {
-        ...createBaseProfileSnapshot().company,
-        ...mapOrganizationToProfileCompany(legacyOrganization),
-      },
-    });
-    const personalized = overlayCurrentUserPersonal(hydrated);
-    writeCache(personalized, { emit: false });
-    return personalized;
-  }
-
-  return overlayCurrentUserPersonal(normalizeSnapshot(createBaseProfileSnapshot()));
 }
 
 export async function savePersonalProfile(personal, snapshot) {
@@ -220,7 +210,7 @@ export async function savePersonalProfile(personal, snapshot) {
 }
 
 export async function saveCompanyProfile(company, snapshot) {
-  const remote = await request('/company/profile', {
+  const remote = await companyRequest({
     method: 'PATCH',
     body: JSON.stringify(company),
   });
@@ -263,7 +253,7 @@ export async function syncProfileCompanyFromOnboarding(organization) {
   if (!PROFILE_ENDPOINT) return localSnapshot;
 
   try {
-    const remote = await request('/company/profile', {
+    const remote = await companyRequest({
       method: 'PATCH',
       body: JSON.stringify(company),
     });
@@ -279,24 +269,17 @@ export async function syncProfileCompanyFromOnboarding(organization) {
 }
 
 export async function changeProfilePin({ currentPin, newPin }) {
-  const remote = await request('/security/pin', {
-    method: 'PATCH',
-    body: JSON.stringify({ currentPin, newPin }),
-  });
-
-  if (!remote) {
-    const savedPin = localStorage.getItem(PIN_CODE_KEY) || '';
-    if (!savedPin || savedPin !== currentPin) {
-      const error = new Error('Текущий PIN указан неверно');
-      error.code = 'INVALID_PIN';
-      throw error;
-    }
+  const savedPin = localStorage.getItem(PIN_CODE_KEY) || '';
+  if (!savedPin || savedPin !== currentPin) {
+    const error = new Error('Текущий PIN указан неверно');
+    error.code = 'INVALID_PIN';
+    throw error;
   }
 
   localStorage.setItem(PIN_CODE_KEY, newPin);
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PROFILE_CHANGED_EVENT));
   recordCompanyActivity({ type: 'security_pin_changed', title: 'Изменён PIN-код', detail: 'Локальная защита кабинета обновлена', tone: 'success' });
-  return { success: true };
+  return { success: true, storage: 'local' };
 }
 
 export async function revokeProfileSession(sessionId, snapshot) {
