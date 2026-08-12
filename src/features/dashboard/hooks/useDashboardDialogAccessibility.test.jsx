@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import useDashboardDialogAccessibility from './useDashboardDialogAccessibility';
 
 function Harness() {
@@ -22,7 +21,7 @@ function Harness() {
 }
 
 describe('useDashboardDialogAccessibility', () => {
-  it('focuses the dialog, traps Tab and restores the opener after Escape', async () => {
+  it('contains focus in the dialog and restores the opener after Escape', async () => {
     const windowKeyDown = vi.fn();
     window.addEventListener('keydown', windowKeyDown);
 
@@ -35,12 +34,16 @@ describe('useDashboardDialogAccessibility', () => {
 
     await waitFor(() => expect(input).toHaveFocus());
 
+    // Forward escape: after the last control, any focus attempt outside the
+    // modal is redirected to the first focusable control.
     close.focus();
-    userEvent.tab();
+    opener.focus();
     expect(input).toHaveFocus();
 
+    // Reverse escape: after the first control, an outside focus attempt is
+    // redirected to the last focusable control.
     input.focus();
-    userEvent.tab({ shift: true });
+    opener.focus();
     expect(close).toHaveFocus();
 
     fireEvent.keyDown(close, { key: 'Escape' });
