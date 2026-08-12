@@ -11,6 +11,35 @@
   &__content {
     animation: profile-content-enter 520ms cubic-bezier(.16, 1, .3, 1) both;
   }
+
+  &__embedded-settings {
+    display: grid;
+    gap: 16px;
+  }
+
+  &__embedded-loader {
+    min-height: 240px;
+    padding: 22px;
+    display: grid;
+    align-content: center;
+    gap: 12px;
+    border: 1px solid $color-border;
+    border-radius: 18px;
+    background: $color-surface;
+
+    span {
+      display: block;
+      height: 14px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #eef0f6 25%, #f8f9fc 45%, #eef0f6 70%);
+      background-size: 240% 100%;
+      animation: profile-shimmer-line 1.3s linear infinite;
+
+      &:nth-child(1) { width: 34%; height: 20px; }
+      &:nth-child(2) { width: 74%; }
+      &:nth-child(3) { width: 56%; }
+    }
+  }
 }
 
 .profile-toast {
@@ -132,6 +161,7 @@
 }
 
 @keyframes profile-shimmer { to { transform: translateX(100%); } }
+@keyframes profile-shimmer-line { to { background-position: -180% 0; } }
 
 @media (max-width: 780px) {
   .profile-skeleton__body { grid-template-columns: 1fr; }
@@ -141,10 +171,12 @@
 @media (max-width: 620px) {
   .profile-error { align-items: flex-start; flex-wrap: wrap; }
   .profile-error button { width: 100%; }
+  .profile-workspace__embedded-settings { gap: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .profile-workspace__content,
   .profile-toast,
-  .profile-skeleton span::after { animation: none; }
+  .profile-skeleton span::after,
+  .profile-workspace__embedded-loader span { animation: none; }
 }
