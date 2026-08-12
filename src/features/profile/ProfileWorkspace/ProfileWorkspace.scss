@@ -150,6 +150,16 @@
   }
 }
 
+body.portal-dark-active .profile-workspace__embedded-loader {
+  border-color: var(--portal-dark-line, rgba(136, 149, 188, .16));
+  background: var(--portal-dark-card, #12192b);
+
+  span {
+    background: linear-gradient(90deg, #151d31 25%, #242e47 45%, #151d31 70%);
+    background-size: 240% 100%;
+  }
+}
+
 @keyframes profile-content-enter {
   from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.995); }
   to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
