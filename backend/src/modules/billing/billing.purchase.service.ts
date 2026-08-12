@@ -36,6 +36,15 @@ function publicRequest(request: {
   };
 }
 
+function salesNextAction(requestId: string) {
+  return {
+    type: 'SALES_CONTACT' as const,
+    status: 'REQUEST_RECORDED' as const,
+    url: `/chat?topic=business&billingRequest=${encodeURIComponent(requestId)}`,
+    message: 'Заявка зафиксирована. Подписка не активирована и платёж не создан.',
+  };
+}
+
 export function billingPurchaseOptions() {
   return {
     onlineCheckout: {
@@ -86,7 +95,7 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
       subscriptionActivated: false,
       deduplicated: true,
       request: publicRequest(existing),
-      nextAction: { type: 'SALES_CONTACT' as const, status: 'REQUEST_RECORDED' as const },
+      nextAction: salesNextAction(existing.id),
     };
   }
 
@@ -163,11 +172,7 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
     subscriptionActivated: false,
     deduplicated: false,
     request: publicRequest(request),
-    nextAction: {
-      type: 'SALES_CONTACT' as const,
-      status: 'REQUEST_RECORDED' as const,
-      message: 'Заявка зафиксирована. Подписка не активирована и платёж не создан.',
-    },
+    nextAction: salesNextAction(request.id),
   };
 }
 
