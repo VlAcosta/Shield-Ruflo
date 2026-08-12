@@ -35,6 +35,8 @@ const CompetitiveIntelligencePage = lazy(() => import('./pages/portal/Competitiv
 const AiVisibilityPage = lazy(() => import('./pages/portal/AiVisibilityPage'));
 const ListingHealthPage = lazy(() => import('./pages/portal/ListingHealthPage'));
 const AskShieldPage = lazy(() => import('./pages/portal/AskShieldPage'));
+const AgencyPortfolioPage = lazy(() => import('./pages/portal/AgencyPortfolioPage'));
+const AgencyInvitationAcceptPage = lazy(() => import('./pages/portal/AgencyInvitationAcceptPage'));
 const ReviewAcquisitionLandingPage = lazy(() => import('./pages/ReviewAcquisitionLandingPage'));
 const AutomationsPage = lazy(() => import('./pages/portal/AutomationsPage'));
 const IntegrationsPage = lazy(() => import('./pages/portal/IntegrationsPage'));
@@ -47,7 +49,7 @@ const AdminSubscriptionsPage = lazy(() => import('./pages/admin/AdminSubscriptio
 const AdminAnalyticsPage = lazy(() => import('./pages/admin/AdminAnalyticsPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 
-const protectedPortalPaths = ['/onboarding','/dashboard','/reviews','/reputation','/cases','/acquisition','/competitive','/ai-visibility','/location-health','/ask-shield','/automations','/integrations','/subscriptions','/reports','/tasks','/profile','/knowledge-base','/notifications','/chat','/video-consultations','/faq','/blocked','/access-denied'];
+const protectedPortalPaths = ['/onboarding','/dashboard','/reviews','/reputation','/cases','/acquisition','/competitive','/ai-visibility','/location-health','/ask-shield','/agency','/automations','/integrations','/subscriptions','/reports','/tasks','/profile','/knowledge-base','/notifications','/chat','/video-consultations','/faq','/blocked','/access-denied'];
 
 function RouteFallback({ tone = 'portal' }) {
   return <div className={`route-fallback route-fallback--${tone}`} role="status" aria-live="polite" aria-label="Загрузка раздела"><span /><span /><span /></div>;
@@ -91,7 +93,9 @@ function App() {
   ));
   const isPortal = protectedPortalRoute;
   const requiresSession = protectedPortalRoute || isAdmin;
-  const onboardingCompleted = access.membership?.organization?.onboardingStatus === 'COMPLETED';
+  // A delegated client workspace intentionally has no direct membership.
+  // Its onboarding belongs to the client, not to the agency user.
+  const onboardingCompleted = access.isDelegated || access.membership?.organization?.onboardingStatus === 'COMPLETED';
 
   useEffect(() => {
     const invalidateSession = () => {
@@ -209,6 +213,8 @@ function App() {
         <Route path="/ai-visibility" element={<LazyRoute><AiVisibilityPage /></LazyRoute>} />
         <Route path="/location-health" element={<LazyRoute><ListingHealthPage /></LazyRoute>} />
         <Route path="/ask-shield" element={<LazyRoute><AskShieldPage /></LazyRoute>} />
+        <Route path="/agency" element={<LazyRoute><AgencyPortfolioPage /></LazyRoute>} />
+        <Route path="/agency/invite/:token" element={<LazyRoute><AgencyInvitationAcceptPage /></LazyRoute>} />
         <Route path="/automations" element={<LazyRoute><AutomationsPage /></LazyRoute>} />
         <Route path="/integrations" element={<LazyRoute><IntegrationsPage /></LazyRoute>} />
         <Route path="/subscriptions" element={<LazyRoute><SubscriptionsPage /></LazyRoute>} />
