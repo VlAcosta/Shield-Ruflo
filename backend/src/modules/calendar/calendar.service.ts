@@ -18,7 +18,14 @@ export type CalendarEventInput = {
   note?: string | undefined;
 };
 
-export type CalendarEventUpdateInput = Partial<CalendarEventInput>;
+export type CalendarEventUpdateInput = {
+  title?: string | undefined;
+  date?: string | undefined;
+  time?: string | undefined;
+  type?: CalendarEventInput['type'] | undefined;
+  tone?: CalendarEventInput['tone'] | undefined;
+  note?: string | undefined;
+};
 
 function dateOnly(value: string): Date {
   const parsed = new Date(`${value}T00:00:00.000Z`);
