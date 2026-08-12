@@ -109,8 +109,11 @@ export default function useDashboardDialogAccessibility() {
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      const outside = !dialog.contains(active);
+      const eventTarget = event.target instanceof HTMLElement && dialog.contains(event.target)
+        ? event.target
+        : null;
+      const active = eventTarget || document.activeElement;
+      const outside = !active || !dialog.contains(active);
 
       if (event.shiftKey && (active === first || outside)) {
         event.preventDefault();
