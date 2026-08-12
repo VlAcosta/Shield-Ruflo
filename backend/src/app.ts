@@ -7,6 +7,8 @@ import { authenticationPlugin } from './core/plugins/authentication.js';
 import { authorizationPlugin } from './core/plugins/authorization.js';
 import { premiumEntitlementsPlugin } from './core/plugins/premium-entitlements.js';
 import { entitlementEnforcementPlugin } from './core/plugins/entitlement-enforcement.js';
+import { aiRequestBudgetPlugin } from './core/plugins/ai-request-budget.js';
+import { operationalMetricsPlugin } from './core/plugins/operational-metrics.js';
 import { registerErrorHandler } from './core/plugins/error-handler.js';
 import { registerOpenApi } from './core/plugins/openapi.js';
 import { registerSecurity } from './core/plugins/security.js';
@@ -50,6 +52,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         paths: [
           'req.headers.authorization',
           'req.headers.cookie',
+          'req.headers.x-operations-token',
           'res.headers["set-cookie"]',
           '*.password',
           '*.token',
@@ -60,6 +63,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.AUTH_OTP_WEBHOOK_TOKEN',
           '*.COMPANY_LOOKUP_WEBHOOK_TOKEN',
           '*.INTEGRATION_CREDENTIALS_KEY',
+          '*.OPERATIONS_METRICS_TOKEN',
           '*.GOOGLE_BUSINESS_CLIENT_SECRET',
           '*.AI_OPENAI_API_KEY',
           '*.refreshToken',
@@ -78,12 +82,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerSecurity(app);
   await registerOpenApi(app);
   await app.register(databasePlugin);
+  await app.register(operationalMetricsPlugin);
   await app.register(authenticationPlugin);
   await app.register(authorizationPlugin);
-  // Commercial capability gates and quota gates must be registered before
-  // product routes so they can append checks after authenticate/authorize.
+  // Commercial capability, quota and expensive-AI budget gates must be
+  // registered before product routes so they append after authenticate/authorize.
   await app.register(premiumEntitlementsPlugin);
   await app.register(entitlementEnforcementPlugin);
+  await app.register(aiRequestBudgetPlugin);
 
   await app.register(healthRoutes);
   await app.register(systemRoutes, { prefix: '/api/v1' });
