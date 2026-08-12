@@ -21,7 +21,15 @@ export const apiIdentityRoutes: FastifyPluginAsync = async (app) => {
   app.post('/service-accounts', {
     preHandler: [app.authenticate, app.authorize('api_keys.manage')],
   }, async (request, reply) => {
-    const result = await createServiceAccount(app, request, createServiceAccountSchema.parse(request.body));
+    const input = createServiceAccountSchema.parse(request.body);
+    const result = await createServiceAccount(app, request, {
+      name: input.name,
+      permissions: input.permissions,
+      initialKeyName: input.initialKeyName,
+      ...(input.description === undefined ? {} : { description: input.description }),
+      ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
+      ...(input.initialKeyExpiresAt === undefined ? {} : { initialKeyExpiresAt: input.initialKeyExpiresAt }),
+    });
     return reply.code(201).send(result);
   });
 
@@ -29,7 +37,12 @@ export const apiIdentityRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [app.authenticate, app.authorize('api_keys.manage')],
   }, async (request, reply) => {
     const { serviceAccountId } = serviceAccountIdParamsSchema.parse(request.params);
-    const result = await createServiceAccountKey(app, request, serviceAccountId, createServiceAccountKeySchema.parse(request.body));
+    const input = createServiceAccountKeySchema.parse(request.body);
+    const result = await createServiceAccountKey(app, request, serviceAccountId, {
+      name: input.name,
+      ...(input.permissions === undefined ? {} : { permissions: input.permissions }),
+      ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
+    });
     return reply.code(201).send(result);
   });
 
