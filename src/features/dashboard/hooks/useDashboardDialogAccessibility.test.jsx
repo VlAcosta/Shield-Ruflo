@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import useDashboardDialogAccessibility from './useDashboardDialogAccessibility';
 
 function Harness() {
@@ -35,11 +36,11 @@ describe('useDashboardDialogAccessibility', () => {
     await waitFor(() => expect(input).toHaveFocus());
 
     close.focus();
-    fireEvent.keyDown(close, { key: 'Tab' });
+    userEvent.tab();
     expect(input).toHaveFocus();
 
     input.focus();
-    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true });
+    userEvent.tab({ shift: true });
     expect(close).toHaveFocus();
 
     fireEvent.keyDown(close, { key: 'Escape' });
