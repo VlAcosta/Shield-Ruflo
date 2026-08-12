@@ -5,7 +5,6 @@ import { assertUsageLimit } from '../../modules/billing/billing.service.js';
 import { hashSessionToken } from '../../shared/security/tokens.js';
 
 type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-
 type GenericParams = Record<string, string | undefined>;
 type GenericBody = Record<string, unknown>;
 
@@ -80,12 +79,13 @@ export const entitlementEnforcementPlugin = fp(async (app) => {
         if (status !== 'ACTIVE') return;
         const competitorId = paramsObject(request).competitorId;
         if (!competitorId) return;
+        const orgId = organizationId(request);
         const current = await app.prisma.competitiveCompetitor.findFirst({
-          where: { id: competitorId, organizationId: organizationId(request) },
+          where: { id: competitorId, organizationId: orgId },
           select: { status: true },
         });
         if (current && current.status !== 'ACTIVE') {
-          await assertUsageLimit(app, organizationId(request), 'competitors.max', 1);
+          await assertUsageLimit(app, orgId, 'competitors.max', 1);
         }
       });
       return;
@@ -93,12 +93,11 @@ export const entitlementEnforcementPlugin = fp(async (app) => {
 
     if (routeMethodIncludes(route, 'POST') && path === '/automations') {
       appendPreHandler(route, async (request) => {
-        const orgId = organizationId(request);
-        // The commercial meter currently counts enabled automations. Disabled
-        // rules still consume the plan rule quota, so include them as reserved
-        // capacity when creating a new rule.
-        const disabled = await app.prisma.automation.count({ where: { organizationId: orgId, enabled: false } });
-        await assertUsageLimit(app, orgId, 'automation_rules.max', disabled + 1);
+        // automation_rules.max is an active-rule limit. Disabled drafts remain
+        // editable without consuming active capacity; the DB trigger enforces
+        // the same policy on direct Prisma writes and later activation.
+        if (bodyObject(request).enabled === false) return;
+        await assertUsageLimit(app, organizationId(request), 'automation_rules.max', 1);
       });
       return;
     }
@@ -120,26 +119,9 @@ export const entitlementEnforcementPlugin = fp(async (app) => {
       return;
     }
 
-    if (routeMethodIncludes(route, 'POST') && path === '/team/invitations') {
-      appendPreHandler(route, async (request) => {
-        const orgId = organizationId(request);
-        const now = new Date();
-        const email = String(bodyObject(request).email || '').trim().toLowerCase();
-        const pending = await app.prisma.teamInvitation.count({
-          where: {
-            organizationId: orgId,
-            status: 'PENDING',
-            expiresAt: { gt: now },
-            ...(email ? { email: { not: email } } : {}),
-          },
-        });
-        // Pending invitations reserve seats so several simultaneous invitations
-        // cannot oversubscribe users.max before acceptance.
-        await assertUsageLimit(app, orgId, 'users.max', pending + 1);
-      });
-      return;
-    }
-
+    // Invitations themselves are not billable users. The database trigger is
+    // the authoritative, race-safe users.max boundary when membership becomes
+    // ACTIVE. This precheck only improves the acceptance error before mutation.
     if (routeMethodIncludes(route, 'POST') && path === '/team/invitations/:token/accept') {
       appendPreHandler(route, async (request) => {
         if (!request.auth) return;
@@ -147,12 +129,12 @@ export const entitlementEnforcementPlugin = fp(async (app) => {
         if (!token) return;
         const invitation = await app.prisma.teamInvitation.findUnique({
           where: { tokenHash: hashSessionToken(token) },
-          select: { organizationId: true, status: true, acceptedByUserId: true },
+          select: { organizationId: true, status: true },
         });
         if (!invitation || invitation.status !== 'PENDING') return;
         const existing = await app.prisma.organizationMember.findUnique({
           where: { organizationId_userId: { organizationId: invitation.organizationId, userId: request.auth.userId } },
-          select: { id: true, status: true },
+          select: { status: true },
         });
         if (existing?.status === 'ACTIVE') return;
         await assertUsageLimit(app, invitation.organizationId, 'users.max', 1);
