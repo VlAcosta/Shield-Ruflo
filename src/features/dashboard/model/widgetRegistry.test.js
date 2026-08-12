@@ -1,4 +1,5 @@
 import {
+  DEFAULT_VISIBLE_WIDGET_IDS,
   DEFAULT_WIDGET_ORDER,
   WIDGET_REGISTRY,
   createDefaultDashboardLayout,
@@ -6,7 +7,7 @@ import {
 } from './widgetRegistry';
 
 describe('dashboard widget registry', () => {
-  test('default layout contains the current registered Business Shield widgets', () => {
+  test('default layout contains every registered widget but starts with a focused visible set', () => {
     const layout = createDefaultDashboardLayout();
 
     expect(layout.order).toEqual(DEFAULT_WIDGET_ORDER);
@@ -32,10 +33,12 @@ describe('dashboard widget registry', () => {
       expect(WIDGET_REGISTRY[id]).toBeDefined();
       expect(layout.widgets[id]).toEqual(
         expect.objectContaining({
-          visible: true,
+          visible: DEFAULT_VISIBLE_WIDGET_IDS.includes(id),
         }),
       );
     });
+
+    expect(DEFAULT_VISIBLE_WIDGET_IDS).toEqual(['reviews', 'tasks', 'rating', 'quick']);
   });
 
   test('normalization removes unknown widgets and restores missing registered widgets', () => {
@@ -58,5 +61,19 @@ describe('dashboard widget registry', () => {
     expect(normalized.widgets.reviews.span).toBeLessThanOrEqual(
       WIDGET_REGISTRY.reviews.maxSpan,
     );
+  });
+
+  test('normalization preserves an existing user visibility choice', () => {
+    const normalized = normalizeDashboardLayout({
+      order: DEFAULT_WIDGET_ORDER,
+      widgets: {
+        reviews: { visible: false, span: WIDGET_REGISTRY.reviews.defaultSpan },
+        calendar: { visible: true, span: WIDGET_REGISTRY.calendar.defaultSpan },
+      },
+    });
+
+    expect(normalized.widgets.reviews.visible).toBe(false);
+    expect(normalized.widgets.calendar.visible).toBe(true);
+    expect(normalized.widgets.checklist.visible).toBe(false);
   });
 });

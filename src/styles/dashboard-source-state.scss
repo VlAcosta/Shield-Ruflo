@@ -1,0 +1,54 @@
+// Reputation Pulse source badge must reflect the actual dashboard data source.
+.dashboard-page .dashboard-pulse-hero__live {
+  &.is-live {
+    color: #8ce8bf;
+    border-color: rgba(94, 232, 181, .18);
+    background: rgba(26, 190, 129, .08);
+
+    i { background: #4bdd9d; }
+  }
+
+  &.is-sync {
+    color: #9bdcf3;
+    border-color: rgba(81, 190, 225, .2);
+    background: rgba(44, 158, 195, .1);
+
+    i { background: #55c8e8; }
+  }
+
+  &.is-local {
+    color: #f1c777;
+    border-color: rgba(241, 190, 83, .2);
+    background: rgba(211, 151, 39, .1);
+
+    i {
+      background: #e4ad45;
+      animation: none;
+      box-shadow: none;
+    }
+  }
+
+  &.is-demo {
+    color: #c5b9ff;
+    border-color: rgba(165, 139, 255, .24);
+    background: rgba(139, 111, 232, .12);
+
+    i {
+      background: #a98dff;
+      animation: none;
+      box-shadow: none;
+    }
+  }
+
+  &.is-offline {
+    color: #ffb0bd;
+    border-color: rgba(255, 116, 142, .22);
+    background: rgba(211, 64, 91, .11);
+
+    i {
+      background: #f06780;
+      animation: none;
+      box-shadow: none;
+    }
+  }
+}
