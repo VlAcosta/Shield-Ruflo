@@ -6,11 +6,9 @@ const CATALOG_TRIGGER_SELECTOR = [
   '.dashboard-workspace__empty button',
   '.dashboard-workspace__actions button[aria-expanded]',
 ].join(', ');
-const CATALOG_FOCUS_SELECTOR = [
-  '.dashboard-workspace__catalog-grid input[type="checkbox"]:not(:disabled)',
-  '.dashboard-workspace__density button:not(:disabled)',
-  '.dashboard-workspace__catalog-head button:not(:disabled)',
-].join(', ');
+const CATALOG_WIDGET_SELECTOR = '.dashboard-workspace__catalog-grid input[type="checkbox"]:not(:disabled)';
+const CATALOG_DENSITY_SELECTOR = '.dashboard-workspace__density button:not(:disabled)';
+const CATALOG_CLOSE_SELECTOR = '.dashboard-workspace__catalog-head button:not(:disabled)';
 
 function focusElement(node) {
   if (!node?.isConnected || typeof node.focus !== 'function') return false;
@@ -30,7 +28,9 @@ export default function useDashboardWorkspaceAccessibility() {
       window.cancelAnimationFrame(focusFrame);
       focusFrame = window.requestAnimationFrame(() => {
         const catalog = document.querySelector(CATALOG_SELECTOR);
-        const target = catalog?.querySelector(CATALOG_FOCUS_SELECTOR);
+        const target = catalog?.querySelector(CATALOG_WIDGET_SELECTOR)
+          || catalog?.querySelector(CATALOG_DENSITY_SELECTOR)
+          || catalog?.querySelector(CATALOG_CLOSE_SELECTOR);
         focusElement(target);
       });
     };
@@ -64,7 +64,7 @@ export default function useDashboardWorkspaceAccessibility() {
 
       event.preventDefault();
       event.stopPropagation();
-      const closeButton = catalog.querySelector('.dashboard-workspace__catalog-head button');
+      const closeButton = catalog.querySelector(CATALOG_CLOSE_SELECTOR);
       closeButton?.click();
     };
 
