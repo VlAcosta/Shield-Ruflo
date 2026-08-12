@@ -111,7 +111,12 @@ function DashboardWorkspace({ firstRun = false }) {
     toastTimer.current = window.setTimeout(() => setToast(''), TOAST_LIFETIME);
   }, []);
 
-  const visibleItems = useMemo(() => widgets
+  const accessibleWidgets = useMemo(
+    () => widgets.filter(({ meta }) => !meta?.permission || access.can(meta.permission)),
+    [access, widgets]
+  );
+
+  const visibleItems = useMemo(() => accessibleWidgets
     .filter(({ id, config }) => (firstRun ? FIRST_RUN_WIDGET_IDS.has(id) : config.visible))
     .map(({ id, meta, config }) => {
       const Widget = meta.component;
@@ -127,11 +132,11 @@ function DashboardWorkspace({ firstRun = false }) {
         config: { ...config, span: firstRunSpan },
         content: <Widget key={`${id}-${revision}`} />,
       };
-    }), [firstRun, widgetRevision, widgets]);
+    }), [accessibleWidgets, firstRun, widgetRevision]);
 
   const hiddenCount = useMemo(
-    () => widgets.filter(({ config }) => !config.visible).length,
-    [widgets]
+    () => accessibleWidgets.filter(({ config }) => !config.visible).length,
+    [accessibleWidgets]
   );
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
@@ -338,8 +343,7 @@ function DashboardWorkspace({ firstRun = false }) {
           </div>
 
           <div className="dashboard-workspace__catalog-grid">
-            {widgets.map(({ id, config }) => {
-              const meta = WIDGET_REGISTRY[id];
+            {accessibleWidgets.map(({ id, meta, config }) => {
               if (!meta) return null;
 
               return (
@@ -375,8 +379,8 @@ function DashboardWorkspace({ firstRun = false }) {
       {!visibleItems.length ? (
         <div className="dashboard-workspace__empty">
           <strong>Доска пустая</strong>
-          <span>Добавьте нужные блоки и соберите рабочее пространство под себя.</span>
-          <button type="button" onClick={handleOpenCatalog}>Добавить блоки</button>
+          <span>{accessibleWidgets.length ? 'Добавьте нужные блоки и соберите рабочее пространство под себя.' : 'Для вашей роли нет доступных дополнительных блоков.'}</span>
+          {accessibleWidgets.length && canEditDashboard ? <button type="button" onClick={handleOpenCatalog}>Добавить блоки</button> : null}
         </div>
       ) : null}
 
