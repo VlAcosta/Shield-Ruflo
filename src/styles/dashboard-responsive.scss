@@ -1,0 +1,156 @@
+// Responsive workspace controls are isolated from widget internals so mobile tuning
+// does not change desktop data presentation.
+
+@media (max-width: 980px) {
+  .dashboard-page {
+    .dashboard-workspace__toolbar {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .dashboard-workspace__toolbar-copy {
+      width: 100%;
+    }
+
+    .dashboard-workspace__actions {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .dashboard-workspace__edit-button,
+    .dashboard-workspace__ghost-button {
+      width: 100%;
+      min-height: 42px;
+      padding-inline: 12px;
+    }
+
+    .dashboard-workspace__catalog {
+      padding: 14px;
+    }
+
+    .dashboard-workspace__catalog-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .dashboard-workspace__catalog-item {
+      min-height: 74px;
+      padding: 12px 48px 12px 12px;
+    }
+
+    .dashboard-workspace__preference-row {
+      padding: 12px;
+    }
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-page {
+    .dashboard-workspace__toolbar {
+      padding: 15px 14px;
+      border-radius: 17px;
+    }
+
+    .dashboard-workspace__title-row {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .dashboard-workspace__save-state {
+      align-self: flex-start;
+    }
+
+    .dashboard-workspace__actions {
+      grid-template-columns: 1fr;
+    }
+
+    .dashboard-workspace__edit-button,
+    .dashboard-workspace__ghost-button {
+      min-height: 44px;
+      justify-content: center;
+      font-size: 11.5px;
+    }
+
+    .dashboard-workspace__catalog {
+      padding: 12px;
+      border-radius: 16px;
+    }
+
+    .dashboard-workspace__catalog-head {
+      gap: 10px;
+
+      > button {
+        width: 36px;
+        height: 36px;
+        flex: 0 0 auto;
+      }
+    }
+
+    .dashboard-workspace__catalog-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .dashboard-workspace__catalog-item {
+      min-height: 70px;
+    }
+
+    .dashboard-workspace__preference-row {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .dashboard-workspace__density {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px;
+      padding: 4px;
+    }
+
+    .dashboard-workspace__density button {
+      width: 100%;
+      min-height: 38px;
+      font-size: 11px;
+    }
+
+    .dashboard-grid__menu-popover {
+      width: min(248px, calc(100vw - 40px));
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-page {
+    gap: 12px;
+
+    .dashboard-workspace {
+      gap: 12px;
+    }
+
+    .dashboard-workspace__toolbar-copy p {
+      font-size: 11.5px;
+    }
+
+    .dashboard-workspace__catalog-item strong {
+      font-size: 12px;
+    }
+
+    .dashboard-workspace__catalog-item span {
+      white-space: normal;
+      line-height: 1.35;
+    }
+
+    .dashboard-workspace__toast {
+      right: 12px;
+      bottom: 12px;
+      left: 12px;
+      max-width: none;
+    }
+  }
+}
