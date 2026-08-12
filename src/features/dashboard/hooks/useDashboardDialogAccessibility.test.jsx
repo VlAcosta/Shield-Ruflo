@@ -20,6 +20,27 @@ function Harness() {
   );
 }
 
+function CompetitorHarness() {
+  const [open, setOpen] = useState(false);
+  useDashboardDialogAccessibility();
+
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen(true)}>Настроить конкурентов</button>
+      {open ? (
+        <section className="competitor-modal__dialog" role="dialog" aria-modal="true">
+          <header>
+            <h2>Конкуренты</h2>
+            <button type="button" onClick={() => setOpen(false)}>×</button>
+          </header>
+          <input aria-label="Название конкурента" />
+          <button type="button">Готово</button>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 describe('useDashboardDialogAccessibility', () => {
   it('contains focus in the dialog and restores the opener after Escape', async () => {
     const windowKeyDown = vi.fn();
@@ -34,14 +55,10 @@ describe('useDashboardDialogAccessibility', () => {
 
     await waitFor(() => expect(input).toHaveFocus());
 
-    // Forward escape: after the last control, any focus attempt outside the
-    // modal is redirected to the first focusable control on the next frame.
     close.focus();
     opener.focus();
     await waitFor(() => expect(input).toHaveFocus());
 
-    // Reverse escape: after the first control, an outside focus attempt is
-    // redirected to the last focusable control.
     input.focus();
     opener.focus();
     await waitFor(() => expect(close).toHaveFocus());
@@ -54,5 +71,20 @@ describe('useDashboardDialogAccessibility', () => {
     expect(windowKeyDown).not.toHaveBeenCalled();
 
     window.removeEventListener('keydown', windowKeyDown);
+  });
+
+  it('supports the competitor dialog close button and restores its opener', async () => {
+    render(<CompetitorHarness />);
+    const opener = screen.getByRole('button', { name: 'Настроить конкурентов' });
+    fireEvent.click(opener);
+
+    const input = await screen.findByRole('textbox', { name: 'Название конкурента' });
+    await waitFor(() => expect(input).toHaveFocus());
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+    });
   });
 });
