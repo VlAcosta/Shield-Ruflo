@@ -46,6 +46,7 @@ describe('authService hardened browser contract', () => {
       user: {
         id: 'user-1',
         membership: {
+          id: 'membership-1',
           organizationId: 'org-b',
           role: 'ANALYST',
           permissions: ['dashboard.view'],
@@ -56,5 +57,58 @@ describe('authService hardened browser contract', () => {
 
     expect(localStorage.getItem('onboarding_completed')).toBeNull();
     expect(JSON.parse(localStorage.getItem('organization'))).toMatchObject({ id: 'org-b', name: 'Бета', onboardingStatus: 'IN_PROGRESS' });
+  });
+
+  test('does not synthesize direct membership from delegated organization context', async () => {
+    apiRequest.mockResolvedValue({
+      user: {
+        id: 'agency-user',
+        membership: null,
+      },
+      organizationContext: {
+        organizationId: 'client-org',
+        membershipId: null,
+        role: null,
+        permissions: ['reviews.view', 'reviews.reply'],
+        accessMode: 'DELEGATED',
+        agencyOrganizationId: 'agency-org',
+        delegatedGrantId: 'grant-1',
+        agencyClientLinkId: 'link-1',
+      },
+    });
+
+    const user = await authService.restoreSession();
+    const cached = JSON.parse(localStorage.getItem('currentUser'));
+
+    expect(user.membership).toBeNull();
+    expect(cached.membership).toBeNull();
+    expect(cached.organizationContext).toMatchObject({
+      organizationId: 'client-org',
+      accessMode: 'DELEGATED',
+      delegatedGrantId: 'grant-1',
+    });
+  });
+
+  test('preserves exact server permissions for a directly selected membership', () => {
+    authService.persistSession({
+      user: {
+        id: 'agency-owner',
+        membership: {
+          id: 'membership-agency',
+          organizationId: 'agency-org',
+          role: 'OWNER',
+          permissions: ['dashboard.view', 'agency.view', 'agency.manage'],
+          organization: { id: 'agency-org', name: 'Agency', onboardingStatus: 'COMPLETED' },
+        },
+      },
+    });
+
+    const cached = JSON.parse(localStorage.getItem('currentUser'));
+    expect(cached.organizationContext).toEqual(expect.objectContaining({
+      organizationId: 'agency-org',
+      membershipId: 'membership-agency',
+      accessMode: 'DIRECT',
+      permissions: ['dashboard.view', 'agency.view', 'agency.manage'],
+    }));
   });
 });
