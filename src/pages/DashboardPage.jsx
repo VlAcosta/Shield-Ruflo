@@ -11,6 +11,7 @@ import useOrganization from '../hooks/useOrganization';
 import '../styles/dashboard.scss';
 import '../styles/dashboard-responsive.scss';
 import '../styles/dashboard-phase2.scss';
+import '../styles/dashboard-source-state.scss';
 
 export default function DashboardPage() {
   const organization = useOrganization();
