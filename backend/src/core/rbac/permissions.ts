@@ -25,6 +25,8 @@ export const permissions = [
   'ai_visibility.run',
   'agency.view',
   'agency.manage',
+  'api_keys.view',
+  'api_keys.manage',
   'ai.brand_voice.manage',
   'ai.autopilot.manage',
   'tasks.view',
@@ -140,6 +142,7 @@ export type PermissionOverrides = {
 
 export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
   'billing.manage',
+  'api_keys.manage',
 ]);
 
 /**
@@ -174,10 +177,35 @@ export const delegatedPermissionAllowlist: readonly Permission[] = Object.freeze
   'support.write',
 ]);
 
+/**
+ * Service-account keys intentionally start read-only. Existing mutation routes
+ * assume a human actor FK in several domains; write scopes must only be added
+ * after those domains accept an explicit actor principal rather than a user ID.
+ */
+export const apiKeyPermissionAllowlist: readonly Permission[] = Object.freeze([
+  'dashboard.view',
+  'business.view',
+  'locations.view',
+  'reviews.view',
+  'reviews.intelligence.read',
+  'cases.view',
+  'acquisition.view',
+  'competitive.view',
+  'ai_visibility.view',
+  'tasks.view',
+  'reports.view',
+  'reports.export',
+  'integrations.view',
+  'automations.view',
+  'analytics.view',
+  'company.view',
+]);
+
 /** Permissions an OWNER must retain so an organization cannot be administratively locked. */
 export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
   'team.manage',
   'billing.manage',
+  'api_keys.manage',
 ]);
 
 export function isPermission(value: string): value is Permission {
@@ -191,6 +219,18 @@ export function isNonDelegablePermission(value: string): value is Permission {
 export function sanitizeDelegatedPermissions(value: unknown): Permission[] {
   if (!Array.isArray(value)) return [];
   const allowed = new Set<Permission>(delegatedPermissionAllowlist);
+  const result = new Set<Permission>();
+  for (const candidate of value) {
+    if (typeof candidate === 'string' && isPermission(candidate) && allowed.has(candidate)) {
+      result.add(candidate);
+    }
+  }
+  return [...result];
+}
+
+export function sanitizeApiKeyPermissions(value: unknown): Permission[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<Permission>(apiKeyPermissionAllowlist);
   const result = new Set<Permission>();
   for (const candidate of value) {
     if (typeof candidate === 'string' && isPermission(candidate) && allowed.has(candidate)) {
