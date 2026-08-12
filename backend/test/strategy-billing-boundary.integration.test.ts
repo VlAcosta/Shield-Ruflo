@@ -141,7 +141,10 @@ describeWithPostgres('Strategic billing purchase boundary', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().requests).toHaveLength(1);
-    expect(response.json().requests[0]).toMatchObject({ organizationId: undefined, planCode: 'GROWTH' });
+    const item = response.json().requests[0];
+    expect(item).toMatchObject({ planCode: 'GROWTH' });
+    expect(item).not.toHaveProperty('organizationId');
+    expect(item).not.toHaveProperty('requestedByUserId');
   });
 
   it('requires a valid idempotency key for commercial mutations', async () => {
