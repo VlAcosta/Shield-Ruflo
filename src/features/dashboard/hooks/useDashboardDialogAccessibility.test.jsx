@@ -35,16 +35,16 @@ describe('useDashboardDialogAccessibility', () => {
     await waitFor(() => expect(input).toHaveFocus());
 
     // Forward escape: after the last control, any focus attempt outside the
-    // modal is redirected to the first focusable control.
+    // modal is redirected to the first focusable control on the next frame.
     close.focus();
     opener.focus();
-    expect(input).toHaveFocus();
+    await waitFor(() => expect(input).toHaveFocus());
 
     // Reverse escape: after the first control, an outside focus attempt is
     // redirected to the last focusable control.
     input.focus();
     opener.focus();
-    expect(close).toHaveFocus();
+    await waitFor(() => expect(close).toHaveFocus());
 
     fireEvent.keyDown(close, { key: 'Escape' });
     await waitFor(() => {
