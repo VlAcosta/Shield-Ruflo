@@ -1,6 +1,12 @@
 // Responsive workspace controls are isolated from widget internals so mobile tuning
 // does not change desktop data presentation.
 
+body.portal-dark-active .dashboard-page.is-dark .dashboard-widget-state button.is-primary {
+  color: #fff;
+  background: linear-gradient(115deg, #756cff 0%, #8f55f4 58%, #b34ff0 100%);
+  box-shadow: 0 10px 24px rgba(108, 88, 255, .22);
+}
+
 @media (max-width: 980px) {
   .dashboard-page {
     .dashboard-workspace__toolbar {
