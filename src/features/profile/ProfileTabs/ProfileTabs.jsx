@@ -1,5 +1,13 @@
 import React from 'react';
-import { BuildingIcon, PaletteIcon, ShieldIcon, UserIcon, UsersIcon } from '../model/icons';
+import {
+  AutomationIcon,
+  BuildingIcon,
+  IntegrationIcon,
+  PaletteIcon,
+  ShieldIcon,
+  UserIcon,
+  UsersIcon,
+} from '../model/icons';
 import { PROFILE_TABS } from '../model/profileData';
 import './ProfileTabs.scss';
 
@@ -9,13 +17,15 @@ const ICONS = {
   security: ShieldIcon,
   appearance: PaletteIcon,
   users: UsersIcon,
+  integrations: IntegrationIcon,
+  automations: AutomationIcon,
 };
 
 export default function ProfileTabs({ value, onChange, tabs = PROFILE_TABS }) {
   return (
     <nav className="profile-tabs" aria-label="Разделы профиля">
       {tabs.map((tab) => {
-        const Icon = ICONS[tab.id];
+        const Icon = ICONS[tab.id] || UserIcon;
         return (
           <button
             key={tab.id}
