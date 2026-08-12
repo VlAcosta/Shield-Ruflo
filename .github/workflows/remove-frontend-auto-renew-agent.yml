@@ -1,0 +1,36 @@
+name: Remove Frontend Auto Renew Agent
+
+on:
+  push:
+    branches:
+      - feat/production-ux-phase2-simplification
+    paths:
+      - scripts/ruflo/remove-frontend-auto-renew.mjs
+      - .github/workflows/remove-frontend-auto-renew-agent.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/production-ux-phase2-simplification
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - run: node scripts/ruflo/remove-frontend-auto-renew.mjs
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'Business Shield Ruflo Agent'
+          git config user.email '65966048+VlAcosta@users.noreply.github.com'
+          git add src/services/subscriptions/subscriptionService.js src/features/subscriptions/hooks/useSubscriptions.js
+          git commit -m 'billing: remove dead frontend auto-renew path'
+          git push origin HEAD:feat/production-ux-phase2-simplification
