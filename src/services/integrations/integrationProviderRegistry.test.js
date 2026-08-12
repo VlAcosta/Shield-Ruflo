@@ -1,17 +1,24 @@
 import {
+  clearProviderTruthCache,
   getBackendProviderId,
   getProviderCapabilities,
+  getProviderRuntime,
   googleBusinessAccounts,
   googleBusinessLocations,
   googleBusinessOAuthStart,
   googleBusinessSelect,
   providerSync,
   providerSyncStatus,
+  refreshProviderTruth,
 } from './integrationProviderRegistry';
 import { apiRequest } from '../core/apiClient';
 
 vi.mock('../core/runtimeEnv', () => ({
-  getRuntimeEnv: () => '/api/v1/integrations',
+  getRuntimeEnv: (key, fallback) => {
+    if (key === 'INTEGRATIONS_ENDPOINT') return '/api/v1/integrations';
+    if (key === 'API_BASE') return '/api/v1';
+    return fallback;
+  },
 }));
 
 vi.mock('../core/apiClient', () => ({
@@ -20,13 +27,66 @@ vi.mock('../core/apiClient', () => ({
   joinEndpoint: (base, path) => `${String(base).replace(/\/$/, '')}/${String(path).replace(/^\//, '')}`,
 }));
 
-describe('P17 Google Business Profile frontend provider contract', () => {
-  beforeEach(() => apiRequest.mockReset());
+describe('provider truth frontend contract', () => {
+  beforeEach(() => {
+    apiRequest.mockReset();
+    clearProviderTruthCache();
+  });
 
-  test('maps the legacy UI id to the production backend provider and claims only implemented review capability', () => {
+  test('fails closed until server capability truth is loaded', () => {
     expect(getBackendProviderId('google')).toBe('google-business-profile');
-    expect(getProviderCapabilities('google')).toEqual(['oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read']);
-    expect(getProviderCapabilities('google')).not.toContain('replies.write');
+    expect(getProviderCapabilities('google')).toEqual([]);
+    expect(getProviderCapabilities('yandex')).toEqual([]);
+    expect(getProviderRuntime('google')).toMatchObject({
+      transport: 'unavailable',
+      releaseStage: 'UNKNOWN',
+      reasonCode: 'PROVIDER_TRUTH_NOT_LOADED',
+    });
+  });
+
+  test('claims Google read/reply only from the registered adapter and keeps planned providers disabled', async () => {
+    apiRequest.mockResolvedValue({
+      providers: [
+        {
+          id: 'google-business-profile',
+          displayName: 'Google Business Profile',
+          releaseStage: 'PRODUCTION_ADAPTER',
+          configured: true,
+          connectable: true,
+          capabilities: {
+            oauth: true,
+            accountsRead: true,
+            locationsRead: true,
+            profileRead: true,
+            reviewIngest: true,
+            reviewRead: true,
+            reviewReply: true,
+            reviewDelete: false,
+          },
+          sync: { supported: true, frequency: 'on_demand_job', retryAttempts: 5, dedupe: true },
+          availability: { reasonCode: null, reasonMessage: null },
+        },
+        {
+          id: 'yandex',
+          displayName: 'Яндекс Бизнес',
+          releaseStage: 'PLANNED',
+          configured: false,
+          connectable: false,
+          capabilities: {},
+          sync: { supported: false, frequency: 'unavailable', retryAttempts: null, dedupe: false },
+          availability: { reasonCode: 'PROVIDER_ADAPTER_NOT_IMPLEMENTED', reasonMessage: 'not implemented' },
+        },
+      ],
+    });
+
+    await refreshProviderTruth();
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/meta/providers', expect.objectContaining({ retries: 0, timeout: 6000 }));
+    expect(getProviderCapabilities('google')).toEqual([
+      'oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read', 'rating.read', 'replies.write',
+    ]);
+    expect(getProviderRuntime('google')).toMatchObject({ transport: 'backend', connectable: true, releaseStage: 'PRODUCTION_ADAPTER' });
+    expect(getProviderCapabilities('yandex')).toEqual([]);
+    expect(getProviderRuntime('yandex')).toMatchObject({ transport: 'planned', connectable: false, releaseStage: 'PLANNED' });
   });
 
   test('starts OAuth on the dedicated GBP route', async () => {

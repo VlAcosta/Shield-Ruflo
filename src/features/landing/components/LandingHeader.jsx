@@ -4,10 +4,10 @@ import shieldLogo from '../../../assets/main-site/shield.svg';
 import LandingIcon from './LandingIcon';
 
 const NAV_ITEMS = [
+  ['Workflow', 'process'],
   ['Возможности', 'capabilities'],
-  ['Как работаем', 'process'],
+  ['Кому подходит', 'segments'],
   ['Тарифы', 'pricing'],
-  ['Кейсы', 'cases'],
   ['FAQ', 'faq'],
 ];
 
@@ -35,7 +35,7 @@ export default function LandingHeader() {
           </span>
           <span className="landing-brand__copy">
             <strong>БИЗНЕС ЩИТ</strong>
-            <small>reputation operating system</small>
+            <small>Reputation Operations System</small>
           </span>
         </a>
 
@@ -72,7 +72,7 @@ export default function LandingHeader() {
           ))}
           <div className="landing-mobileMenu__actions">
             <button className="landing-btn landing-btn--soft" type="button" onClick={() => { closeMenu(); navigate('/auth?mode=login'); }}>Войти в кабинет</button>
-            <button className="landing-btn landing-btn--gradient" type="button" onClick={() => { closeMenu(); navigate('/pricing'); }}>Выбрать тариф</button>
+            <button className="landing-btn landing-btn--gradient" type="button" onClick={() => { closeMenu(); navigate('/pricing'); }}>Посмотреть тарифы</button>
           </div>
         </div>
       </div>

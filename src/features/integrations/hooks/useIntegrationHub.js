@@ -17,6 +17,8 @@ import {
   googleBusinessLocations,
   googleBusinessOAuthStart,
   googleBusinessSelect,
+  PROVIDER_TRUTH_CHANGED_EVENT,
+  refreshProviderTruth,
 } from '../../../services/integrations/integrationProviderRegistry';
 
 function frontendStatus(value) {
@@ -55,13 +57,23 @@ export default function useIntegrationHub() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    refreshProviderTruth({ signal: controller.signal }).then(refresh).catch((requestError) => {
+      if (requestError?.name !== 'AbortError') refresh();
+    });
+    return () => controller.abort();
+  }, [refresh]);
+
+  useEffect(() => {
     const onStorage = () => refresh();
     window.addEventListener(INTEGRATIONS_CHANGED_EVENT, refresh);
     window.addEventListener(INTEGRATION_ACTIVITY_EVENT, refresh);
+    window.addEventListener(PROVIDER_TRUTH_CHANGED_EVENT, refresh);
     window.addEventListener('storage', onStorage);
     return () => {
       window.removeEventListener(INTEGRATIONS_CHANGED_EVENT, refresh);
       window.removeEventListener(INTEGRATION_ACTIVITY_EVENT, refresh);
+      window.removeEventListener(PROVIDER_TRUTH_CHANGED_EVENT, refresh);
       window.removeEventListener('storage', onStorage);
     };
   }, [refresh]);
