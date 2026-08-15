@@ -1,6 +1,8 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../../../components/ui/DashboardCard';
+import DashboardWidgetState from '../components/DashboardWidgetState';
+import useAccessControl from '../../access/hooks/useAccessControl';
 import './QuickActions.scss';
 
 function TaskIcon() {
@@ -20,39 +22,84 @@ function ArrowIcon() {
 }
 
 const ACTIONS = Object.freeze([
-  { id: 'task', label: 'Создать задачу', hint: 'Добавить в работу', Icon: TaskIcon, tone: 'violet', route: '/tasks' },
-  { id: 'reviews', label: 'Отзывы', hint: 'Открыть входящие', Icon: ReviewsIcon, tone: 'purple', route: '/reviews' },
-  { id: 'report', label: 'Отчёты', hint: 'Открыть аналитику', Icon: ReportIcon, tone: 'green', route: '/reports' },
-  { id: 'support', label: 'Техподдержка', hint: 'Ошибки и интеграции', Icon: SupportIcon, tone: 'cyan', route: '/chat?channel=technical' },
+  {
+    id: 'task',
+    label: 'Создать задачу',
+    hint: 'Добавить в работу',
+    Icon: TaskIcon,
+    tone: 'violet',
+    route: '/tasks',
+    allowed: (access) => access.can('tasks.create') || access.can('tasks.manage'),
+  },
+  {
+    id: 'reviews',
+    label: 'Отзывы',
+    hint: 'Открыть входящие',
+    Icon: ReviewsIcon,
+    tone: 'purple',
+    route: '/reviews',
+    allowed: (access) => access.can('reviews.view'),
+  },
+  {
+    id: 'report',
+    label: 'Отчёты',
+    hint: 'Открыть аналитику',
+    Icon: ReportIcon,
+    tone: 'green',
+    route: '/reports',
+    allowed: (access) => access.can('reports.view'),
+  },
+  {
+    id: 'support',
+    label: 'Техподдержка',
+    hint: 'Ошибки и интеграции',
+    Icon: SupportIcon,
+    tone: 'cyan',
+    route: '/chat?channel=technical',
+    allowed: (access) => access.can('support.write'),
+  },
 ]);
 
 function QuickActions() {
   const navigate = useNavigate();
+  const access = useAccessControl();
+  const availableActions = useMemo(
+    () => ACTIONS.filter((action) => action.allowed(access)),
+    [access]
+  );
   const handleNavigate = useCallback((route) => navigate(route), [navigate]);
 
   return (
     <DashboardCard title="Быстрые действия" className="dashboard-quick-actions" motion="rise">
-      <div className="dashboard-quick-actions__grid">
-        {ACTIONS.map((action, index) => {
-          const Icon = action.Icon;
-          return (
-            <button
-              className={`dashboard-quick-actions__item is-${action.tone}`}
-              type="button"
-              key={action.id}
-              onClick={() => handleNavigate(action.route)}
-              style={{ '--quick-index': index }}
-            >
-              <span className="dashboard-quick-actions__icon"><Icon /></span>
-              <span className="dashboard-quick-actions__copy">
-                <strong>{action.label}</strong>
-                <small>{action.hint}</small>
-              </span>
-              <span className="dashboard-quick-actions__arrow"><ArrowIcon /></span>
-            </button>
-          );
-        })}
-      </div>
+      {availableActions.length ? (
+        <div className="dashboard-quick-actions__grid">
+          {availableActions.map((action, index) => {
+            const Icon = action.Icon;
+            return (
+              <button
+                className={`dashboard-quick-actions__item is-${action.tone}`}
+                type="button"
+                key={action.id}
+                onClick={() => handleNavigate(action.route)}
+                style={{ '--quick-index': index }}
+              >
+                <span className="dashboard-quick-actions__icon"><Icon /></span>
+                <span className="dashboard-quick-actions__copy">
+                  <strong>{action.label}</strong>
+                  <small>{action.hint}</small>
+                </span>
+                <span className="dashboard-quick-actions__arrow"><ArrowIcon /></span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <DashboardWidgetState
+          compact
+          title="Нет доступных быстрых действий"
+          text="Набор действий зависит от прав вашей роли. Основные данные остаются доступны в разрешённых разделах кабинета."
+        />
+      )}
     </DashboardCard>
   );
 }

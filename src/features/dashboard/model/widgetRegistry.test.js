@@ -76,4 +76,23 @@ describe('dashboard widget registry', () => {
     expect(normalized.widgets.calendar.visible).toBe(true);
     expect(normalized.widgets.checklist.visible).toBe(false);
   });
+
+  test('permission-scoped organization data widgets declare their view boundary', () => {
+    expect(WIDGET_REGISTRY.reviews.permission).toBe('reviews.view');
+    expect(WIDGET_REGISTRY.tasks.permission).toBe('tasks.view');
+    expect(WIDGET_REGISTRY.checklist.permission).toBe('tasks.view');
+    expect(WIDGET_REGISTRY.rating.permission).toBe('analytics.view');
+    expect(WIDGET_REGISTRY.processes.permission).toBe('tasks.view');
+    expect(WIDGET_REGISTRY.reports.permission).toBe('reports.view');
+    expect(WIDGET_REGISTRY.suggestions.permission).toBe('support.write');
+    expect(WIDGET_REGISTRY.team.permission).toBe('team.view');
+    expect(WIDGET_REGISTRY.integrations.permission).toBe('integrations.view');
+    expect(WIDGET_REGISTRY.competitors.permission).toBe('competitive.view');
+  });
+
+  test('personal or composite widgets do not invent unsupported permissions', () => {
+    expect(WIDGET_REGISTRY.calendar.permission).toBeUndefined();
+    expect(WIDGET_REGISTRY.security.permission).toBeUndefined();
+    expect(WIDGET_REGISTRY.quick.permission).toBeUndefined();
+  });
 });
