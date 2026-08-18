@@ -69,8 +69,8 @@ async function unlockPortal(page) {
   });
 }
 
-async function expectDashboardReady(page) {
-  await expect.poll(() => page.evaluate(() => {
+async function readDashboardState(page, diagnostics = {}) {
+  const browserState = await page.evaluate(() => {
     const portal = document.querySelector('.portal');
     const workspace = document.querySelector('#dashboard-workspace');
     return {
@@ -78,14 +78,30 @@ async function expectDashboardReady(page) {
       workspaceMounted: Boolean(workspace),
       portalLocked: portal ? portal.classList.contains('portal--locked') : null,
       workspaceAriaHidden: workspace?.closest('.portal__contentWrap')?.getAttribute('aria-hidden') || null,
-      screen: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 260),
+      screen: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 500),
+      rootHtml: document.getElementById('root')?.innerHTML?.replace(/\s+/g, ' ').trim().slice(0, 500) || '',
     };
-  }), { timeout: 30_000 }).toMatchObject({
-    pathname: '/dashboard',
-    workspaceMounted: true,
-    portalLocked: false,
-    workspaceAriaHidden: null,
   });
+  return {
+    ...browserState,
+    pageErrors: diagnostics.pageErrors?.slice(-5) || [],
+    consoleErrors: diagnostics.consoleErrors?.slice(-5) || [],
+  };
+}
+
+async function expectDashboardReady(page, diagnostics) {
+  let latest = await readDashboardState(page, diagnostics);
+  try {
+    await expect.poll(async () => {
+      latest = await readDashboardState(page, diagnostics);
+      return latest.pathname === '/dashboard'
+        && latest.workspaceMounted
+        && latest.portalLocked === false
+        && latest.workspaceAriaHidden === null;
+    }, { timeout: 30_000 }).toBe(true);
+  } catch {
+    throw new Error(`Dashboard readiness failed: ${JSON.stringify(latest)}`);
+  }
 }
 
 async function assertNoHorizontalOverflow(page) {
@@ -110,6 +126,11 @@ async function assertNoHorizontalOverflow(page) {
 test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile layout', async ({ page, context }) => {
   const marker = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let workspace;
+  const diagnostics = { pageErrors: [], consoleErrors: [] };
+  page.on('pageerror', (error) => diagnostics.pageErrors.push(error?.stack || error?.message || String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') diagnostics.consoleErrors.push(message.text());
+  });
 
   await page.addInitScript((configuredApiBase) => {
     window.__BUSINESS_SHIELD_ENV__ = { API_BASE: configuredApiBase };
@@ -136,7 +157,7 @@ test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile 
     await page.goto('/dashboard');
     const meResponse = await meResponsePromise;
     expect(meResponse.ok()).toBe(true);
-    await expectDashboardReady(page);
+    await expectDashboardReady(page, diagnostics);
     await expect(page.getByRole('region', { name: 'Настраиваемая доска' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Моя доска' })).toBeVisible();
 
@@ -173,7 +194,7 @@ test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile 
 
     await page.setViewportSize({ width: 480, height: 900 });
     await page.reload();
-    await expectDashboardReady(page);
+    await expectDashboardReady(page, diagnostics);
     await expect(page.getByRole('heading', { name: 'Моя доска' })).toBeVisible();
     await assertNoHorizontalOverflow(page);
 
