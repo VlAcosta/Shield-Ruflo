@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
 import { getDashboardOverview } from './dashboard.service.js';
+import {
+  getPersistedDashboardLayout,
+  resetPersistedDashboardLayout,
+  savePersistedDashboardLayout,
+} from './dashboard-layout.service.js';
+import { saveDashboardLayoutSchema } from './dashboard-layout.schemas.js';
 
 function requireOrganizationId(request: FastifyRequest): string {
   const organizationId = request.auth?.organizationId;
@@ -12,6 +18,18 @@ function requireOrganizationId(request: FastifyRequest): string {
     });
   }
   return organizationId;
+}
+
+function requireUserId(request: FastifyRequest): string {
+  const userId = request.auth?.userId;
+  if (!userId) {
+    throw new AppError({
+      code: 'UNAUTHENTICATED',
+      message: 'Требуется авторизация',
+      statusCode: 401,
+    });
+  }
+  return userId;
 }
 
 export const dashboardRoutes: FastifyPluginAsync = async (app) => {
@@ -41,4 +59,32 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
       reputation: result.reputation,
     };
   });
+
+  app.get('/dashboard/layout', {
+    preHandler: [app.authenticate, app.authorize('dashboard.view')],
+  }, async (request) => getPersistedDashboardLayout(
+    app,
+    requireOrganizationId(request),
+    requireUserId(request),
+  ));
+
+  app.put('/dashboard/layout', {
+    preHandler: [app.authenticate, app.authorize('dashboard.edit')],
+  }, async (request) => {
+    const { layout } = saveDashboardLayoutSchema.parse(request.body);
+    return savePersistedDashboardLayout(
+      app,
+      requireOrganizationId(request),
+      requireUserId(request),
+      layout,
+    );
+  });
+
+  app.delete('/dashboard/layout', {
+    preHandler: [app.authenticate, app.authorize('dashboard.edit')],
+  }, async (request) => resetPersistedDashboardLayout(
+    app,
+    requireOrganizationId(request),
+    requireUserId(request),
+  ));
 };
