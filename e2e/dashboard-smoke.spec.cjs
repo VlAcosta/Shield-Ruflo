@@ -105,22 +105,95 @@ async function expectDashboardReady(page, diagnostics) {
 }
 
 async function assertNoHorizontalOverflow(page) {
-  await expect.poll(() => page.evaluate(() => ({
-    viewport: window.innerWidth,
-    root: document.documentElement.scrollWidth,
-    body: document.body.scrollWidth,
-  }))).toEqual(expect.objectContaining({
-    viewport: 480,
-    root: expect.any(Number),
-    body: expect.any(Number),
-  }));
+  const report = await page.evaluate(() => {
+    const viewport = window.innerWidth;
+    const root = document.documentElement.scrollWidth;
+    const body = document.body.scrollWidth;
+    const overflow = Math.max(0, root - viewport, body - viewport);
+    const round = (value) => Math.round(value * 10) / 10;
+    const describe = (node) => {
+      const className = typeof node.className === 'string'
+        ? node.className.trim().split(/\s+/).filter(Boolean).slice(0, 5).join('.')
+        : '';
+      return `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${className ? `.${className}` : ''}`;
+    };
 
-  const overflow = await page.evaluate(() => Math.max(
-    0,
-    document.documentElement.scrollWidth - window.innerWidth,
-    document.body.scrollWidth - window.innerWidth,
-  ));
-  expect(overflow).toBeLessThanOrEqual(1);
+    const visibleNodes = Array.from(document.body.querySelectorAll('*')).filter((node) => {
+      const style = getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+
+    const offenders = visibleNodes
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const rightOverflow = Math.max(0, rect.right - viewport);
+        const leftOverflow = Math.max(0, -rect.left);
+        return {
+          selector: describe(node),
+          left: round(rect.left),
+          right: round(rect.right),
+          width: round(rect.width),
+          rightOverflow: round(rightOverflow),
+          leftOverflow: round(leftOverflow),
+          position: style.position,
+          transform: style.transform === 'none' ? null : style.transform,
+          overflowX: style.overflowX,
+          text: (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 90),
+        };
+      })
+      .filter((item) => item.rightOverflow > 1 || item.leftOverflow > 1)
+      .sort((a, b) => Math.max(b.rightOverflow, b.leftOverflow) - Math.max(a.rightOverflow, a.leftOverflow))
+      .slice(0, 20);
+
+    const wideContainers = visibleNodes
+      .filter((node) => node.scrollWidth > node.clientWidth + 1)
+      .map((node) => ({
+        selector: describe(node),
+        clientWidth: node.clientWidth,
+        scrollWidth: node.scrollWidth,
+        delta: node.scrollWidth - node.clientWidth,
+      }))
+      .sort((a, b) => b.delta - a.delta)
+      .slice(0, 15);
+
+    const gridItemPseudo = Array.from(document.querySelectorAll('.dashboard-grid__item')).slice(0, 6).map((node) => {
+      const before = getComputedStyle(node, '::before');
+      const after = getComputedStyle(node, '::after');
+      return {
+        selector: describe(node),
+        before: {
+          content: before.content,
+          position: before.position,
+          inset: before.inset,
+          top: before.top,
+          right: before.right,
+          bottom: before.bottom,
+          left: before.left,
+          width: before.width,
+          transform: before.transform,
+        },
+        after: {
+          content: after.content,
+          position: after.position,
+          inset: after.inset,
+          right: after.right,
+          left: after.left,
+          width: after.width,
+          transform: after.transform,
+        },
+      };
+    });
+
+    return { viewport, root, body, overflow, offenders, wideContainers, gridItemPseudo };
+  });
+
+  expect(report.viewport).toBe(480);
+  if (report.overflow > 1) {
+    throw new Error(`Horizontal overflow detected: ${JSON.stringify(report)}`);
+  }
 }
 
 test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile layout', async ({ page, context }) => {
