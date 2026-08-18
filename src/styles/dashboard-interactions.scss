@@ -4,8 +4,8 @@
 @media (hover: none), (pointer: coarse) {
   .dashboard-page {
     .dashboard-grid__widget-menu {
-      top: -5px;
-      right: -5px;
+      top: 4px;
+      right: 4px;
     }
 
     .dashboard-grid__menu-trigger {
@@ -55,9 +55,14 @@
 
 @media (max-width: 620px) {
   .dashboard-page {
+    .dashboard-grid__item::before {
+      inset: 0;
+      border-radius: inherit;
+    }
+
     .dashboard-grid__widget-menu {
-      top: -3px;
-      right: -3px;
+      top: 4px;
+      right: 4px;
     }
 
     .dashboard-grid__menu-trigger {
