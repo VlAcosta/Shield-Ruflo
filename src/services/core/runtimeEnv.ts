@@ -13,6 +13,7 @@ const SAFE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
 
 const API_RELATIVE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
   DASHBOARD_OVERVIEW_ENDPOINT: '/dashboard/overview',
+  DASHBOARD_LAYOUT_ENDPOINT: '/dashboard/layout',
   TASKS_ENDPOINT: '/tasks',
   INTEGRATIONS_ENDPOINT: '/integrations',
   AUTOMATIONS_ENDPOINT: '/automations',
