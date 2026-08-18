@@ -69,6 +69,25 @@ async function unlockPortal(page) {
   });
 }
 
+async function expectDashboardReady(page) {
+  await expect.poll(() => page.evaluate(() => {
+    const portal = document.querySelector('.portal');
+    const workspace = document.querySelector('#dashboard-workspace');
+    return {
+      pathname: window.location.pathname,
+      workspaceMounted: Boolean(workspace),
+      portalLocked: portal ? portal.classList.contains('portal--locked') : null,
+      workspaceAriaHidden: workspace?.closest('.portal__contentWrap')?.getAttribute('aria-hidden') || null,
+      screen: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 260),
+    };
+  }), { timeout: 30_000 }).toMatchObject({
+    pathname: '/dashboard',
+    workspaceMounted: true,
+    portalLocked: false,
+    workspaceAriaHidden: null,
+  });
+}
+
 async function assertNoHorizontalOverflow(page) {
   await expect.poll(() => page.evaluate(() => ({
     viewport: window.innerWidth,
@@ -117,7 +136,7 @@ test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile 
     await page.goto('/dashboard');
     const meResponse = await meResponsePromise;
     expect(meResponse.ok()).toBe(true);
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expectDashboardReady(page);
     await expect(page.getByRole('region', { name: 'Настраиваемая доска' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Моя доска' })).toBeVisible();
 
@@ -154,6 +173,7 @@ test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile 
 
     await page.setViewportSize({ width: 480, height: 900 });
     await page.reload();
+    await expectDashboardReady(page);
     await expect(page.getByRole('heading', { name: 'Моя доска' })).toBeVisible();
     await assertNoHorizontalOverflow(page);
 
