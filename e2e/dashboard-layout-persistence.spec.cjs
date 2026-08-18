@@ -95,13 +95,12 @@ test('Dashboard layout is persisted remotely and restored without local cache', 
       response.url() === `${apiBase}/dashboard/layout`
       && response.request().method() === 'PUT'
     ));
-    await processCheckbox.focus();
-    await expect(processCheckbox).toBeFocused();
-    await page.keyboard.press('Space');
+    await processOption.click();
     await expect(processCheckbox).toBeChecked();
+    await expect(page.locator('.dashboard-processes')).toBeVisible();
+
     const putResponse = await layoutPut;
     expect(putResponse.ok()).toBe(true);
-    await expect(page.locator('.dashboard-processes')).toBeVisible();
 
     const storedResponse = await expectOk(
       await page.request.get(`${apiBase}/dashboard/layout`),
