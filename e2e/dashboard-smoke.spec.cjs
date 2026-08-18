@@ -196,7 +196,7 @@ async function assertNoHorizontalOverflow(page) {
   }
 }
 
-test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile layout', async ({ page, context }) => {
+test('Dashboard supports backend aggregate, keyboard actions and 480px mobile layout', async ({ page, context }) => {
   const marker = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let workspace;
   const diagnostics = { pageErrors: [], consoleErrors: [] };
@@ -227,9 +227,28 @@ test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile 
     const meResponsePromise = page.waitForResponse((response) => (
       response.url() === `${apiBase}/me` && response.request().method() === 'GET'
     ));
+    const overviewResponsePromise = page.waitForResponse((response) => (
+      response.url() === `${apiBase}/dashboard/overview` && response.request().method() === 'GET'
+    ));
+
     await page.goto('/dashboard');
-    const meResponse = await meResponsePromise;
+    const [meResponse, overviewResponse] = await Promise.all([meResponsePromise, overviewResponsePromise]);
     expect(meResponse.ok()).toBe(true);
+    expect(overviewResponse.ok()).toBe(true);
+
+    const overviewPayload = await overviewResponse.json();
+    expect(overviewPayload).toMatchObject({
+      measured: false,
+      dataAvailability: {
+        tasks: true,
+        reports: true,
+        team: true,
+      },
+      teamMeta: { total: 1 },
+    });
+    expect(Array.isArray(overviewPayload.team)).toBe(true);
+    expect(overviewPayload.team).toHaveLength(1);
+
     await expectDashboardReady(page, diagnostics);
     await expect(page.getByRole('region', { name: 'Настраиваемая доска' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Моя доска' })).toBeVisible();
