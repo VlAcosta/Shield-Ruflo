@@ -16,6 +16,10 @@ import {
 const SAVE_DELAY = 520;
 const STATUS_RESET_DELAY = 1800;
 
+function serializeLayout(layout) {
+  return JSON.stringify(normalizeDashboardLayout(layout));
+}
+
 function moveItem(order, sourceId, targetId) {
   if (!sourceId || !targetId || sourceId === targetId) return order;
 
@@ -55,11 +59,11 @@ export default function useDashboardLayout() {
   const [saveState, setSaveState] = useState('idle');
   const [syncSource, setSyncSource] = useState('loading');
 
-  const skipNextRemoteSave = useRef(true);
   const saveTimer = useRef(null);
   const statusTimer = useRef(null);
   const requestVersion = useRef(0);
   const layoutRef = useRef(layout);
+  const lastPersistedLayout = useRef(null);
 
   const apiEnabled = hasDashboardLayoutApi();
 
@@ -89,9 +93,11 @@ export default function useDashboardLayout() {
     getDashboardLayout().then((result) => {
       if (!active) return;
 
-      setLayout(normalizeDashboardLayout(result.layout));
+      const hydratedLayout = normalizeDashboardLayout(result.layout);
+      layoutRef.current = hydratedLayout;
+      lastPersistedLayout.current = serializeLayout(hydratedLayout);
+      setLayout(hydratedLayout);
       setSyncSource(result.source);
-      skipNextRemoteSave.current = true;
       setIsHydrated(true);
 
       if (result.source === 'local-fallback') {
@@ -108,14 +114,17 @@ export default function useDashboardLayout() {
   useEffect(() => {
     if (!isHydrated) return undefined;
 
+    const serializedLayout = serializeLayout(layout);
+
     // Local cache is written immediately so a quick tab close cannot lose a drag/resize change.
     const cached = cacheDashboardLayout(layout);
     if (!cached.stored && !apiEnabled) {
       setSaveState('error');
     }
 
-    if (skipNextRemoteSave.current) {
-      skipNextRemoteSave.current = false;
+    // A freshly hydrated or already persisted layout must not produce a redundant PUT.
+    // Any real user change has a different serialized value and therefore always syncs.
+    if (lastPersistedLayout.current === serializedLayout) {
       return undefined;
     }
 
@@ -128,6 +137,10 @@ export default function useDashboardLayout() {
       const result = await saveDashboardLayout(layout);
 
       if (currentRequestVersion !== requestVersion.current) return;
+
+      if (result.sync === 'remote' || result.sync === 'local') {
+        lastPersistedLayout.current = serializedLayout;
+      }
 
       setSyncSource(
         result.sync === 'remote'
@@ -162,6 +175,10 @@ export default function useDashboardLayout() {
     const result = await saveDashboardLayout(layoutRef.current);
     if (currentRequestVersion !== requestVersion.current) return;
 
+    if (result.sync === 'remote' || result.sync === 'local') {
+      lastPersistedLayout.current = serializeLayout(layoutRef.current);
+    }
+
     setSyncSource(
       result.sync === 'remote'
         ? 'remote'
@@ -184,6 +201,7 @@ export default function useDashboardLayout() {
   }, [apiEnabled, retrySync]);
 
   const reorder = useCallback((sourceId, targetId) => {
+    if (!isHydrated) return;
     setLayout((current) => {
       const order = moveItem(current.order, sourceId, targetId);
       if (order === current.order) return current;
@@ -193,9 +211,10 @@ export default function useDashboardLayout() {
         order,
       };
     });
-  }, []);
+  }, [isHydrated]);
 
   const moveWidget = useCallback((widgetId, offset) => {
+    if (!isHydrated) return;
     setLayout((current) => {
       const order = moveItemByOffset(current.order, widgetId, offset);
       if (order === current.order) return current;
@@ -205,10 +224,10 @@ export default function useDashboardLayout() {
         order,
       };
     });
-  }, []);
+  }, [isHydrated]);
 
   const setWidgetVisibility = useCallback((widgetId, visible) => {
-    if (!WIDGET_REGISTRY[widgetId]) return;
+    if (!isHydrated || !WIDGET_REGISTRY[widgetId]) return;
 
     setLayout((current) => ({
       ...current,
@@ -220,10 +239,10 @@ export default function useDashboardLayout() {
         },
       },
     }));
-  }, []);
+  }, [isHydrated]);
 
   const setDensity = useCallback((density) => {
-    if (!Object.values(DASHBOARD_DENSITIES).includes(density)) return;
+    if (!isHydrated || !Object.values(DASHBOARD_DENSITIES).includes(density)) return;
 
     setLayout((current) => {
       if (current.preferences?.density === density) return current;
@@ -236,9 +255,10 @@ export default function useDashboardLayout() {
         },
       };
     });
-  }, []);
+  }, [isHydrated]);
 
   const resetWidgetSize = useCallback((widgetId) => {
+    if (!isHydrated) return;
     const meta = WIDGET_REGISTRY[widgetId];
     if (!meta) return;
 
@@ -257,9 +277,10 @@ export default function useDashboardLayout() {
         },
       };
     });
-  }, []);
+  }, [isHydrated]);
 
   const resizeWidget = useCallback((widgetId, nextSize) => {
+    if (!isHydrated) return;
     const meta = WIDGET_REGISTRY[widgetId];
     if (!meta) return;
 
@@ -292,15 +313,18 @@ export default function useDashboardLayout() {
         },
       };
     });
-  }, []);
+  }, [isHydrated]);
 
   const resetLayout = useCallback(async () => {
+    if (!isHydrated) return;
     clearTimers();
     ++requestVersion.current;
 
     const result = await resetDashboardLayout();
-    skipNextRemoteSave.current = true;
-    setLayout(normalizeDashboardLayout(result.layout));
+    const normalizedLayout = normalizeDashboardLayout(result.layout);
+    layoutRef.current = normalizedLayout;
+    lastPersistedLayout.current = serializeLayout(normalizedLayout);
+    setLayout(normalizedLayout);
     setSyncSource(
       result.sync === 'remote'
         ? 'remote'
@@ -309,7 +333,7 @@ export default function useDashboardLayout() {
           : 'local'
     );
     settleSaveState(statusFromSync(result.sync));
-  }, [clearTimers, settleSaveState]);
+  }, [clearTimers, isHydrated, settleSaveState]);
 
   const widgets = useMemo(() => layout.order
     .filter((id) => WIDGET_REGISTRY[id] && layout.widgets[id])
