@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
 import { getDashboardOverview } from './dashboard.service.js';
+import { enrichDashboardWithAnswerTimeline } from './dashboard-answer-timeline.service.js';
 import {
   getPersistedDashboardLayout,
   resetPersistedDashboardLayout,
@@ -36,11 +37,12 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
   app.get('/dashboard/overview', {
     preHandler: [app.authenticate, app.authorize('dashboard.view')],
   }, async (request) => {
-    const result = await getDashboardOverview(app, requireOrganizationId(request));
+    const organizationId = requireOrganizationId(request);
+    const result = await getDashboardOverview(app, organizationId);
     if (!result) {
       throw new AppError({ code: 'ORGANIZATION_NOT_FOUND', message: 'Организация не найдена', statusCode: 404 });
     }
-    return result;
+    return enrichDashboardWithAnswerTimeline(app, organizationId, result);
   });
 
   app.get('/dashboard/reputation', {
