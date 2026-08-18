@@ -80,10 +80,15 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
       },
       pulse: { measured: false, score: null, status: 'Недостаточно данных', signals: [] },
       reputation: { totalReviews: 0, averageRating: null, positiveShare: 0, negativeShare: 0, responseCoverage: 0 },
+      processes: [],
+      reports: { month: [], quarter: [] },
+      teamMeta: { total: 1 },
     });
+    expect(response.json().team).toHaveLength(1);
+    expect(response.json().team[0]).toMatchObject({ name: 'P6 Owner A', role: 'Владелец' });
   });
 
-  it('calculates only current-tenant reviews, published replies and tasks', async () => {
+  it('calculates and enriches only current-tenant dashboard data', async () => {
     const reviewOneId = randomUUID();
     const reviewTwoId = randomUUID();
     await app.prisma.review.createMany({
@@ -132,6 +137,25 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
         deadline: new Date(Date.now() - 60_000),
       },
     });
+    await app.prisma.report.create({
+      data: {
+        organizationId: organizationAId,
+        type: 'dashboard-test',
+        title: 'Current tenant report',
+        status: 'READY',
+        periodStart: new Date(Date.now() - 7 * 86_400_000),
+        periodEnd: new Date(),
+        generatedAt: new Date(),
+      },
+    });
+    const integrationA = await app.prisma.integrationAccount.create({
+      data: {
+        organizationId: organizationAId,
+        provider: 'p6-connected-a',
+        name: 'Current tenant integration',
+        status: 'CONNECTED',
+      },
+    });
 
     const businessB = await app.prisma.business.create({ data: { organizationId: organizationBId, name: 'P6 Business B', isPrimary: true } });
     const sourceB = await app.prisma.reviewSource.create({ data: { organizationId: organizationBId, businessId: businessB.id, provider: 'p6-b', name: 'P6 Source B' } });
@@ -146,10 +170,40 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
         receivedAt: new Date(),
       },
     });
+    await app.prisma.task.create({
+      data: {
+        organizationId: organizationBId,
+        createdByUserId: userBId,
+        title: 'Foreign private task',
+        priority: 'CRITICAL',
+        status: 'IN_PROGRESS',
+      },
+    });
+    await app.prisma.report.create({
+      data: {
+        organizationId: organizationBId,
+        type: 'dashboard-test',
+        title: 'Foreign private report',
+        status: 'READY',
+        periodStart: new Date(Date.now() - 7 * 86_400_000),
+        periodEnd: new Date(),
+        generatedAt: new Date(),
+      },
+    });
+    await app.prisma.integrationAccount.create({
+      data: {
+        organizationId: organizationBId,
+        provider: 'p6-connected-b',
+        name: 'Foreign private integration',
+        status: 'CONNECTED',
+      },
+    });
 
     const response = await app.inject({ method: 'GET', url: '/api/v1/dashboard/overview', headers: { cookie } });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    const payload = response.json();
+
+    expect(payload).toMatchObject({
       measured: true,
       metrics: {
         reviews: { value: 2 },
@@ -167,10 +221,32 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
         responseCoverage: 50,
         activeSources: 1,
       },
+      teamMeta: { total: 1 },
     });
-    expect(JSON.stringify(response.json())).not.toContain('p6-private');
-    expect(response.json().reputation.sourceDistribution).toHaveLength(1);
-    expect(response.json().reputation.sourceDistribution[0]).toMatchObject({ sourceId: sourceAId, count: 2 });
+
+    expect(payload.reputation.sourceDistribution).toHaveLength(1);
+    expect(payload.reputation.sourceDistribution[0]).toMatchObject({ sourceId: sourceAId, count: 2 });
+    expect(payload.tasks.week).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'priority-high', total: 1, overdue: 1 }),
+    ]));
+    expect(payload.processes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Current tenant reputation task', status: 'В работе' }),
+    ]));
+    expect(payload.reports.month).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Current tenant report', status: 'Готов' }),
+    ]));
+    expect(payload.team).toHaveLength(1);
+    expect(payload.team[0]).toMatchObject({ name: 'P6 Owner A', role: 'Владелец' });
+    expect(payload.integrations).toEqual([
+      expect.objectContaining({ id: integrationA.id, name: 'Current tenant integration', status: 'CONNECTED' }),
+    ]);
+
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain('p6-private');
+    expect(serialized).not.toContain('Foreign private task');
+    expect(serialized).not.toContain('Foreign private report');
+    expect(serialized).not.toContain('Foreign private integration');
+    expect(serialized).not.toContain('P6 Owner B');
 
     const reputation = await app.inject({ method: 'GET', url: '/api/v1/dashboard/reputation', headers: { cookie } });
     expect(reputation.statusCode).toBe(200);
