@@ -111,9 +111,14 @@ test('Dashboard supports keyboard actions, catalog Escape flow and 480px mobile 
     await markOnboardingCompleted(workspace);
     await unlockPortal(page);
 
+    const meResponsePromise = page.waitForResponse((response) => (
+      response.url() === `${apiBase}/me` && response.request().method() === 'GET'
+    ));
     await page.goto('/dashboard');
+    const meResponse = await meResponsePromise;
+    expect(meResponse.ok()).toBe(true);
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByRole('heading', { name: 'Репутация под контролем' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Настраиваемая доска' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Моя доска' })).toBeVisible();
 
     const sessionCookie = (await context.cookies(backendOrigin)).find((cookie) => cookie.name === 'bs_session');
