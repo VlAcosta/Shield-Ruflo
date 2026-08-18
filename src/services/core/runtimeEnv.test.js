@@ -15,6 +15,8 @@ describe('runtime endpoint defaults', () => {
 
     expect(getRuntimeEnv('DASHBOARD_OVERVIEW_ENDPOINT'))
       .toBe('http://127.0.0.1:8081/api/v1/dashboard/overview');
+    expect(getRuntimeEnv('DASHBOARD_LAYOUT_ENDPOINT'))
+      .toBe('http://127.0.0.1:8081/api/v1/dashboard/layout');
     expect(getRuntimeEnv('TASKS_ENDPOINT'))
       .toBe('http://127.0.0.1:8081/api/v1/tasks');
     expect(getRuntimeEnv('REPORTS_ENDPOINT'))
