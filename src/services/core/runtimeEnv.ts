@@ -9,13 +9,16 @@ declare global {
 
 const SAFE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
   API_BASE: '/api/v1',
-  DASHBOARD_OVERVIEW_ENDPOINT: '/api/v1/dashboard/overview',
-  TASKS_ENDPOINT: '/api/v1/tasks',
-  INTEGRATIONS_ENDPOINT: '/api/v1/integrations',
-  AUTOMATIONS_ENDPOINT: '/api/v1/automations',
-  REPORTS_ENDPOINT: '/api/v1/reports',
-  NOTIFICATIONS_ENDPOINT: '/api/v1/notifications',
-  SUBSCRIPTIONS_ENDPOINT: '/api/v1/billing/subscription',
+});
+
+const API_RELATIVE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
+  DASHBOARD_OVERVIEW_ENDPOINT: '/dashboard/overview',
+  TASKS_ENDPOINT: '/tasks',
+  INTEGRATIONS_ENDPOINT: '/integrations',
+  AUTOMATIONS_ENDPOINT: '/automations',
+  REPORTS_ENDPOINT: '/reports',
+  NOTIFICATIONS_ENDPOINT: '/notifications',
+  SUBSCRIPTIONS_ENDPOINT: '/billing/subscription',
 });
 
 function normalizeName(name: string): string {
@@ -27,9 +30,13 @@ function normalizeValue(value: PublicRuntimeValue): string | undefined {
   return String(value);
 }
 
-export function getRuntimeEnv(name: string, fallback = ''): string {
-  const rawName = String(name || '').trim();
-  const normalized = normalizeName(rawName);
+function joinEndpoint(base: string, path: string): string {
+  const normalizedBase = String(base || '').replace(/\/$/, '');
+  const normalizedPath = String(path || '').startsWith('/') ? String(path || '') : `/${String(path || '')}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
+function readExplicitRuntimeValue(rawName: string, normalized: string): string | undefined {
   const viteName = `VITE_${normalized}`;
   const legacyName = `REACT_APP_${normalized}`;
 
@@ -48,6 +55,20 @@ export function getRuntimeEnv(name: string, fallback = ''): string {
   for (const key of [viteName, legacyName, rawName]) {
     const value = buildEnv[key];
     if (value !== undefined) return String(value);
+  }
+
+  return undefined;
+}
+
+export function getRuntimeEnv(name: string, fallback = ''): string {
+  const rawName = String(name || '').trim();
+  const normalized = normalizeName(rawName);
+  const explicitValue = readExplicitRuntimeValue(rawName, normalized);
+  if (explicitValue !== undefined) return explicitValue;
+
+  if (Object.prototype.hasOwnProperty.call(API_RELATIVE_DEFAULTS, normalized)) {
+    const apiBase = getRuntimeEnv('API_BASE', SAFE_DEFAULTS.API_BASE || '/api/v1');
+    return joinEndpoint(apiBase, API_RELATIVE_DEFAULTS[normalized] || '');
   }
 
   if (Object.prototype.hasOwnProperty.call(SAFE_DEFAULTS, normalized)) {
