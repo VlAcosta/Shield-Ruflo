@@ -93,15 +93,29 @@ export default function useDashboardLayout() {
     }
   }, []);
 
-  const schedulePersist = useCallback((nextLayout) => {
+  const persistLayout = useCallback(async (targetLayout, currentRequestVersion) => {
+    const targetSerialized = serializeLayout(targetLayout);
+    const result = await saveDashboardLayout(targetLayout);
+
+    if (!mountedRef.current || currentRequestVersion !== requestVersion.current) return;
+
+    if (result.sync === 'remote' || result.sync === 'local') {
+      lastPersistedLayout.current = targetSerialized;
+    }
+
+    setSyncSource(syncSourceFromResult(result.sync));
+    settleSaveState(statusFromSync(result.sync));
+  }, [settleSaveState]);
+
+  const schedulePersist = useCallback((nextLayout, { immediate = false } = {}) => {
     const normalizedLayout = normalizeDashboardLayout(nextLayout);
     const serializedLayout = serializeLayout(normalizedLayout);
 
     layoutRef.current = normalizedLayout;
     setLayout(normalizedLayout);
 
-    // Keep a synchronous local copy before the debounced network write. A fast
-    // navigation/tab close cannot lose the latest drag, resize or visibility change.
+    // Keep a synchronous local copy before the network write. A fast navigation
+    // or tab close cannot lose the latest drag, resize or visibility change.
     const cached = cacheDashboardLayout(normalizedLayout);
     if (!cached.stored && !apiEnabled) {
       settleSaveState('error');
@@ -120,21 +134,15 @@ export default function useDashboardLayout() {
     setSaveState('saving');
     const currentRequestVersion = ++requestVersion.current;
 
-    saveTimer.current = window.setTimeout(async () => {
-      const targetLayout = layoutRef.current;
-      const targetSerialized = serializeLayout(targetLayout);
-      const result = await saveDashboardLayout(targetLayout);
+    if (immediate) {
+      void persistLayout(normalizedLayout, currentRequestVersion);
+      return;
+    }
 
-      if (!mountedRef.current || currentRequestVersion !== requestVersion.current) return;
-
-      if (result.sync === 'remote' || result.sync === 'local') {
-        lastPersistedLayout.current = targetSerialized;
-      }
-
-      setSyncSource(syncSourceFromResult(result.sync));
-      settleSaveState(statusFromSync(result.sync));
+    saveTimer.current = window.setTimeout(() => {
+      void persistLayout(layoutRef.current, currentRequestVersion);
     }, SAVE_DELAY);
-  }, [apiEnabled, settleSaveState]);
+  }, [apiEnabled, persistLayout, settleSaveState]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -179,19 +187,8 @@ export default function useDashboardLayout() {
     if (typeof window !== 'undefined') window.clearTimeout(saveTimer.current);
     const currentRequestVersion = ++requestVersion.current;
     setSaveState('saving');
-
-    const targetLayout = layoutRef.current;
-    const targetSerialized = serializeLayout(targetLayout);
-    const result = await saveDashboardLayout(targetLayout);
-    if (!mountedRef.current || currentRequestVersion !== requestVersion.current) return;
-
-    if (result.sync === 'remote' || result.sync === 'local') {
-      lastPersistedLayout.current = targetSerialized;
-    }
-
-    setSyncSource(syncSourceFromResult(result.sync));
-    settleSaveState(statusFromSync(result.sync));
-  }, [isHydrated, settleSaveState]);
+    await persistLayout(layoutRef.current, currentRequestVersion);
+  }, [isHydrated, persistLayout]);
 
   useEffect(() => {
     if (!apiEnabled || typeof window === 'undefined') return undefined;
@@ -234,7 +231,7 @@ export default function useDashboardLayout() {
           visible,
         },
       },
-    });
+    }, { immediate: true });
   }, [isHydrated, schedulePersist]);
 
   const setDensity = useCallback((density) => {
@@ -248,7 +245,7 @@ export default function useDashboardLayout() {
         ...current.preferences,
         density,
       },
-    });
+    }, { immediate: true });
   }, [isHydrated, schedulePersist]);
 
   const resetWidgetSize = useCallback((widgetId) => {
