@@ -86,6 +86,11 @@ export async function enrichDashboardWithAnswerTimeline(
   const monthRatingValues = Array.isArray(overview.rating?.month?.values)
     ? overview.rating.month.values.map(Number)
     : [];
+  const totalReviews = Number(
+    overview.rating?.month?.totalReviews
+      ?? overview.reputation?.totalReviews
+      ?? 0,
+  );
 
   if (!monthLabels.length) {
     const emptyReviewPeriod: ReviewPeriod = {
@@ -102,7 +107,7 @@ export async function enrichDashboardWithAnswerTimeline(
       current: Number(overview.rating?.month?.current ?? 0),
       growth: 0,
       reviews: 0,
-      totalReviews: Number(overview.rating?.month?.totalReviews ?? 0),
+      totalReviews,
       positive: 0,
       answered: 0,
     };
@@ -186,7 +191,7 @@ export async function enrichDashboardWithAnswerTimeline(
       current: Number(overview.rating?.month?.current ?? 0),
       growth: ratingGrowth(values),
       reviews: rows.length,
-      totalReviews: Number(overview.rating?.month?.totalReviews ?? 0),
+      totalReviews,
       positive: percentage(positive, rows.length),
       answered: percentage(answered, rows.length),
     };
