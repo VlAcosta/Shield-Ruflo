@@ -4,8 +4,8 @@
 @media (hover: none), (pointer: coarse) {
   .dashboard-page {
     .dashboard-grid__widget-menu {
-      top: -5px;
-      right: -5px;
+      top: 4px;
+      right: 4px;
     }
 
     .dashboard-grid__menu-trigger {
@@ -53,11 +53,36 @@
   }
 }
 
+@keyframes dashboard-card-mobile-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 @media (max-width: 620px) {
   .dashboard-page {
+    // Horizontal entrance motion can temporarily widen document.scrollWidth on
+    // narrow viewports. Keep the premium entrance effect, but make it vertical.
+    .dashboard-card--motion-left,
+    .dashboard-card--motion-right,
+    .dashboard-card--motion-rise {
+      animation-name: dashboard-card-mobile-enter;
+    }
+
+    .dashboard-grid__item::before {
+      inset: 0;
+      border-radius: inherit;
+    }
+
     .dashboard-grid__widget-menu {
-      top: -3px;
-      right: -3px;
+      top: 4px;
+      right: 4px;
     }
 
     .dashboard-grid__menu-trigger {

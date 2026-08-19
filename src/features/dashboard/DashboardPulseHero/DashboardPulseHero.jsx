@@ -18,6 +18,55 @@ function buildSparkPath(values = []) {
   }).join(' ');
 }
 
+function percentLabel(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value ?? '—';
+  return `${Number(numeric.toFixed(1))}%`;
+}
+
+function normalizePulseSignal(signal = {}) {
+  const id = String(signal.id || '').toLowerCase();
+  const numeric = Number(signal.value);
+
+  if (id === 'rating') {
+    return {
+      ...signal,
+      value: Number.isFinite(numeric) ? `${numeric.toFixed(2)}/5` : signal.value,
+      caption: signal.caption || 'средняя оценка',
+      tone: signal.tone || (numeric >= 4.2 ? 'green' : numeric >= 3.5 ? 'violet' : 'orange'),
+    };
+  }
+  if (id === 'positive') {
+    return {
+      ...signal,
+      value: percentLabel(signal.value),
+      caption: signal.caption || 'оценки 4–5',
+      tone: signal.tone || (numeric >= 75 ? 'green' : numeric >= 55 ? 'violet' : 'orange'),
+    };
+  }
+  if (id === 'coverage' || id === 'answers') {
+    return {
+      ...signal,
+      value: percentLabel(signal.value),
+      caption: signal.caption || 'отзывов с ответом',
+      tone: signal.tone || (numeric >= 80 ? 'green' : numeric >= 55 ? 'violet' : 'orange'),
+    };
+  }
+  if (id === 'negative') {
+    return {
+      ...signal,
+      value: typeof signal.value === 'string' && signal.value.includes('%') ? signal.value : percentLabel(signal.value),
+      caption: signal.caption || 'доля низких оценок',
+      tone: signal.tone || (numeric <= 15 ? 'green' : numeric <= 30 ? 'violet' : 'orange'),
+    };
+  }
+  return {
+    ...signal,
+    caption: signal.caption || '',
+    tone: signal.tone || 'violet',
+  };
+}
+
 function ShieldIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -36,10 +85,24 @@ function DashboardPulseHero({ organizationName }) {
   const { data, status, source, apiEnabled, refreshing } = useDashboardData();
   const pulse = data?.pulse;
   const loading = status === 'loading' && !pulse;
-  const sparkPath = useMemo(() => buildSparkPath(pulse?.spark), [pulse?.spark]);
+  const sparkValues = useMemo(() => {
+    const direct = Array.isArray(pulse?.spark)
+      ? pulse.spark.map(Number).filter(Number.isFinite)
+      : [];
+    if (direct.length > 1) return direct;
+
+    const timeline = Array.isArray(data?.reputation?.timeline) ? data.reputation.timeline : [];
+    return timeline
+      .map((item) => Number(item?.averageRating))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .map((value) => Math.round(value * 20));
+  }, [data?.reputation?.timeline, pulse?.spark]);
+  const sparkPath = useMemo(() => buildSparkPath(sparkValues), [sparkValues]);
   const score = Number(pulse?.score || 0);
   const measured = Boolean(pulse?.measured);
-  const signals = Array.isArray(pulse?.signals) ? pulse.signals : [];
+  const signals = useMemo(() => (
+    Array.isArray(pulse?.signals) ? pulse.signals.map(normalizePulseSignal) : []
+  ), [pulse?.signals]);
   const sourceState = useMemo(() => {
     if (status === 'offline') return { label: 'НЕТ СВЯЗИ', tone: 'offline' };
     if (source === 'local-demo') return { label: 'ДЕМО', tone: 'demo' };
@@ -72,7 +135,7 @@ function DashboardPulseHero({ organizationName }) {
         </div>
 
         <div className="dashboard-pulse-hero__spark">
-          {loading ? <div className="dashboard-pulse-hero__spark-skeleton" /> : pulse?.spark?.length > 1 ? (
+          {loading ? <div className="dashboard-pulse-hero__spark-skeleton" /> : sparkValues.length > 1 ? (
             <svg viewBox="0 0 260 72" preserveAspectRatio="none" aria-hidden="true">
               <defs><linearGradient id="dashboardPulseArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8d65ff" stopOpacity=".28" /><stop offset="100%" stopColor="#8d65ff" stopOpacity="0" /></linearGradient></defs>
               <path className="dashboard-pulse-hero__spark-area" d={`${sparkPath} L 260 72 L 0 72 Z`} />

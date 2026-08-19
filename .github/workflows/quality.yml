@@ -173,7 +173,7 @@ jobs:
       - name: Install Chromium and host dependencies
         run: npx playwright install --with-deps chromium
 
-      - name: Browser E2E - HttpOnly session + PostgreSQL Reviews Inbox
+      - name: Browser E2E - session, Reviews Inbox and Dashboard smoke
         run: npm run test:e2e:p0
 
   secret-scan:
