@@ -241,6 +241,24 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
       expect.objectContaining({ id: integrationA.id, name: 'Current tenant integration', status: 'CONNECTED' }),
     ]);
 
+    expect(payload.reviews.week.labels).toHaveLength(7);
+    expect(payload.reviews.week.received).toHaveLength(7);
+    expect(payload.reviews.week.answered).toHaveLength(7);
+    expect(payload.reviews.week.total).toBe(2);
+    expect(payload.reviews.week.answeredTotal).toBe(1);
+    expect(payload.rating.week.labels).toHaveLength(7);
+    expect(payload.rating.week.values).toHaveLength(7);
+    expect(payload.rating.week).toMatchObject({
+      current: 3,
+      reviews: 2,
+      totalReviews: 2,
+      positive: 50,
+      answered: 50,
+    });
+    expect(payload.rating.month.reviews).toBe(2);
+    expect(payload.rating.month.positive).toBe(50);
+    expect(payload.rating.month.answered).toBe(50);
+
     const serialized = JSON.stringify(payload);
     expect(serialized).not.toContain('p6-private');
     expect(serialized).not.toContain('Foreign private task');
