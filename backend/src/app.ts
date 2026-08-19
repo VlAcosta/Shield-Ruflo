@@ -38,6 +38,7 @@ import { askShieldRoutes } from './modules/ask-shield/ask-shield.routes.js';
 import { agencyRoutes } from './modules/agency/agency.routes.js';
 import { apiIdentityRoutes } from './modules/api-identity/api-identity.routes.js';
 import { externalApiRoutes } from './modules/api-identity/external-api.routes.js';
+import { webhookRoutes } from './modules/webhooks/webhook.routes.js';
 import { billingRoutes } from './modules/billing/billing.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
@@ -62,6 +63,9 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.code',
           '*.credentials',
           '*.encryptedValue',
+          '*.secretEncrypted',
+          '*.signingSecret',
+          '*.signature',
           '*.AUTH_SECRET',
           '*.AUTH_OTP_WEBHOOK_TOKEN',
           '*.COMPANY_LOOKUP_WEBHOOK_TOKEN',
@@ -120,6 +124,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(agencyRoutes, { prefix: '/api/v1' });
   await app.register(apiIdentityRoutes, { prefix: '/api/v1' });
   await app.register(externalApiRoutes, { prefix: '/api/v1' });
+  await app.register(webhookRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(googleBusinessProfileRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });
