@@ -113,6 +113,23 @@ export async function enqueueReport(
       },
     });
 
+    const auditMetadata = asJson({
+      type: created.type,
+      periodStart: created.periodStart.toISOString(),
+      periodEnd: created.periodEnd.toISOString(),
+    });
+
+    await tx.auditLog.create({
+      data: {
+        organizationId: actor.organizationId,
+        actorUserId: actor.userId,
+        action: 'report.created',
+        entityType: 'Report',
+        entityId: created.id,
+        metadata: auditMetadata,
+      },
+    });
+
     await tx.auditLog.create({
       data: {
         organizationId: actor.organizationId,
@@ -120,11 +137,7 @@ export async function enqueueReport(
         action: 'report.generate.queued',
         entityType: 'Report',
         entityId: created.id,
-        metadata: asJson({
-          type: created.type,
-          periodStart: created.periodStart.toISOString(),
-          periodEnd: created.periodEnd.toISOString(),
-        }),
+        metadata: auditMetadata,
       },
     });
 
