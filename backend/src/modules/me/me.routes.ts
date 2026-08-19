@@ -14,6 +14,10 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
             membershipId: request.auth.membershipId,
             role: request.auth.role,
             permissions: request.auth.permissions,
+            accessMode: request.auth.accessMode,
+            agencyOrganizationId: request.auth.agencyOrganizationId,
+            delegatedGrantId: request.auth.delegatedGrantId,
+            agencyClientLinkId: request.auth.agencyClientLinkId,
           }
         : null,
     };

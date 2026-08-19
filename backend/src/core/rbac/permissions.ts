@@ -23,6 +23,12 @@ export const permissions = [
   'ai_visibility.view',
   'ai_visibility.manage',
   'ai_visibility.run',
+  'agency.view',
+  'agency.manage',
+  'api_keys.view',
+  'api_keys.manage',
+  'webhooks.view',
+  'webhooks.manage',
   'ai.brand_voice.manage',
   'ai.autopilot.manage',
   'tasks.view',
@@ -67,6 +73,7 @@ const readOnly: Permission[] = [
   'acquisition.view',
   'competitive.view',
   'ai_visibility.view',
+  'agency.view',
   'tasks.view',
   'integrations.view',
   'automations.view',
@@ -87,6 +94,7 @@ const manager: Permission[] = [
   'acquisition.view', 'acquisition.manage',
   'competitive.view', 'competitive.manage',
   'ai_visibility.view', 'ai_visibility.manage', 'ai_visibility.run',
+  'agency.view',
   'tasks.view', 'tasks.manage', 'tasks.create', 'tasks.edit',
   'integrations.view', 'automations.view', 'analytics.view',
   'reports.view', 'reports.create', 'reports.export',
@@ -136,12 +144,71 @@ export type PermissionOverrides = {
 
 export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
   'billing.manage',
+  'api_keys.manage',
+  'webhooks.manage',
+]);
+
+/**
+ * Delegated agency access is intentionally narrower than ordinary organization
+ * membership. The database value is treated as untrusted input and is always
+ * intersected with this allowlist at runtime.
+ */
+export const delegatedPermissionAllowlist: readonly Permission[] = Object.freeze([
+  'dashboard.view',
+  'business.view',
+  'locations.view',
+  'reviews.view',
+  'reviews.reply',
+  'reviews.moderate',
+  'reviews.intelligence.read',
+  'reviews.intelligence.reanalyze',
+  'cases.view',
+  'cases.manage',
+  'acquisition.view',
+  'competitive.view',
+  'ai_visibility.view',
+  'tasks.view',
+  'tasks.manage',
+  'tasks.create',
+  'tasks.edit',
+  'reports.view',
+  'reports.create',
+  'reports.export',
+  'analytics.view',
+  'company.view',
+  'support.view',
+  'support.write',
+]);
+
+/**
+ * Service-account keys intentionally start read-only. Existing mutation routes
+ * assume a human actor FK in several domains; write scopes must only be added
+ * after those domains accept an explicit actor principal rather than a user ID.
+ */
+export const apiKeyPermissionAllowlist: readonly Permission[] = Object.freeze([
+  'dashboard.view',
+  'business.view',
+  'locations.view',
+  'reviews.view',
+  'reviews.intelligence.read',
+  'cases.view',
+  'acquisition.view',
+  'competitive.view',
+  'ai_visibility.view',
+  'tasks.view',
+  'reports.view',
+  'reports.export',
+  'integrations.view',
+  'automations.view',
+  'analytics.view',
+  'company.view',
 ]);
 
 /** Permissions an OWNER must retain so an organization cannot be administratively locked. */
 export const essentialOwnerPermissions: readonly Permission[] = Object.freeze([
   'team.manage',
   'billing.manage',
+  'api_keys.manage',
 ]);
 
 export function isPermission(value: string): value is Permission {
@@ -150,6 +217,30 @@ export function isPermission(value: string): value is Permission {
 
 export function isNonDelegablePermission(value: string): value is Permission {
   return isPermission(value) && nonDelegablePermissions.includes(value);
+}
+
+export function sanitizeDelegatedPermissions(value: unknown): Permission[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<Permission>(delegatedPermissionAllowlist);
+  const result = new Set<Permission>();
+  for (const candidate of value) {
+    if (typeof candidate === 'string' && isPermission(candidate) && allowed.has(candidate)) {
+      result.add(candidate);
+    }
+  }
+  return [...result];
+}
+
+export function sanitizeApiKeyPermissions(value: unknown): Permission[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<Permission>(apiKeyPermissionAllowlist);
+  const result = new Set<Permission>();
+  for (const candidate of value) {
+    if (typeof candidate === 'string' && isPermission(candidate) && allowed.has(candidate)) {
+      result.add(candidate);
+    }
+  }
+  return [...result];
 }
 
 export function effectivePermissions(role: string, overrides: PermissionOverrides | null | undefined): Permission[] {

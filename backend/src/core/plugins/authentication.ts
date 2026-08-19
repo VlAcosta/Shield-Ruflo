@@ -6,6 +6,7 @@ import { hashSessionToken } from '../../shared/security/tokens.js';
 import { presentUser, publicUserInclude } from '../../modules/auth/auth.presenter.js';
 import { readCookie, serializeClearedSessionCookie } from '../../shared/http/cookies.js';
 import { effectivePermissions } from '../rbac/permissions.js';
+import { resolveDelegatedWorkspaceAccess } from '../../modules/agency/agency.repository.js';
 
 function readBearerToken(request: FastifyRequest): string {
   const authorization = request.headers.authorization;
@@ -50,9 +51,6 @@ export const authenticationPlugin = fp(async (app) => {
     });
 
     if (!session || session.revokedAt || session.expiresAt <= now || session.user.status !== 'ACTIVE') {
-      // Remove a stale browser credential as part of the 401 response. This
-      // avoids retry loops after expiry/revocation while preserving the same
-      // generic error for unknown, revoked and expired sessions.
       reply.header('set-cookie', serializeClearedSessionCookie());
       throw new AppError({ code: 'SESSION_INVALID', message: 'Сессия недействительна или истекла', statusCode: 401 });
     }
@@ -60,22 +58,43 @@ export const authenticationPlugin = fp(async (app) => {
     const usableMemberships = session.user.memberships.filter((membership) => (
       !membership.accessExpiresAt || membership.accessExpiresAt > now
     ));
-    const activeMembership = resolveActiveMembership(usableMemberships, session.activeOrganizationId);
+    const directMembership = resolveActiveMembership(usableMemberships, session.activeOrganizationId);
 
-    const activeOrganizationId = activeMembership?.organizationId ?? null;
-    if (activeOrganizationId !== session.activeOrganizationId) {
-      await app.prisma.session.update({ where: { id: session.id }, data: { activeOrganizationId } });
+    // Direct membership always wins. Delegated access is considered only when
+    // the selected workspace is not a direct membership of the current user.
+    const delegatedAccess = !directMembership && session.activeOrganizationId
+      ? await resolveDelegatedWorkspaceAccess(app.prisma, session.userId, session.activeOrganizationId, now)
+      : null;
+
+    const resolvedOrganizationId = directMembership?.organizationId
+      ?? delegatedAccess?.clientOrganizationId
+      ?? null;
+    if (resolvedOrganizationId !== session.activeOrganizationId) {
+      await app.prisma.session.update({
+        where: { id: session.id },
+        data: { activeOrganizationId: resolvedOrganizationId },
+      });
     }
 
+    const accessMode = directMembership ? 'DIRECT' : delegatedAccess ? 'DELEGATED' : 'NONE';
     request.auth = {
       sessionId: session.id,
       tokenHash,
       userId: session.userId,
-      organizationId: activeOrganizationId,
-      membershipId: activeMembership?.id ?? null,
-      role: activeMembership?.role ?? null,
-      permissions: activeMembership ? effectivePermissions(activeMembership.role, activeMembership.permissionOverrides as { allow?: string[]; deny?: string[] } | null) : [],
-      user: presentUser(session.user, activeOrganizationId),
+      organizationId: resolvedOrganizationId,
+      membershipId: directMembership?.id ?? null,
+      role: directMembership?.role ?? null,
+      permissions: directMembership
+        ? effectivePermissions(
+            directMembership.role,
+            directMembership.permissionOverrides as { allow?: string[]; deny?: string[] } | null,
+          )
+        : delegatedAccess?.permissions ?? [],
+      accessMode,
+      agencyOrganizationId: delegatedAccess?.agencyOrganizationId ?? null,
+      delegatedGrantId: delegatedAccess?.grantId ?? null,
+      agencyClientLinkId: delegatedAccess?.linkId ?? null,
+      user: presentUser(session.user, resolvedOrganizationId),
     };
 
     const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);

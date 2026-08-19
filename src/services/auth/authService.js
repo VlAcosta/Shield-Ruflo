@@ -18,6 +18,20 @@ const requestJson = async (path, options = {}, timeoutMs = 6000) => {
   return apiRequest(joinEndpoint(API_BASE, path), { ...options, timeout: timeoutMs });
 };
 
+function directContextFromMembership(membership) {
+  if (!membership?.id || !membership?.organizationId) return null;
+  return {
+    organizationId: membership.organizationId,
+    membershipId: membership.id,
+    role: membership.role || null,
+    permissions: Array.isArray(membership.permissions) ? membership.permissions : [],
+    accessMode: 'DIRECT',
+    agencyOrganizationId: null,
+    delegatedGrantId: null,
+    agencyClientLinkId: null,
+  };
+}
+
 export const authService = {
   async requestCode({ phone, mode, planId, invitationToken }) {
     return requestJson('/auth/request-code', {
@@ -50,19 +64,24 @@ export const authService = {
     });
   },
 
-  persistSession({ user }) {
+  persistSession({ user, organizationContext = null }) {
     localStorage.removeItem('token');
     if (user) {
       const sessionEstablishedAt = new Date().toISOString();
+      const resolvedOrganizationContext = organizationContext
+        || user.organizationContext
+        || directContextFromMembership(user.membership)
+        || null;
       const normalizedUser = {
         ...user,
+        organizationContext: resolvedOrganizationContext,
         authSessionStartedAt: sessionEstablishedAt,
         ...(user.membership ? {
           membership: {
             ...user.membership,
             sessionEstablishedAt,
           },
-        } : {}),
+        } : { membership: null }),
       };
       localStorage.setItem('currentUser', JSON.stringify(normalizedUser));
       if (normalizedUser.membership) {
@@ -93,14 +112,16 @@ export const authService = {
     const payload = await requestJson('/me', { signal });
     const user = payload?.user || null;
     if (!user) throw new Error('Сессия не содержит пользователя');
-    const membership = user.membership || (payload.organizationContext ? {
-      id: payload.organizationContext.membershipId,
-      organizationId: payload.organizationContext.organizationId,
-      role: payload.organizationContext.role,
-      permissions: payload.organizationContext.permissions,
+    const organizationContext = payload?.organizationContext || null;
+    const hasDirectMembership = Boolean(organizationContext?.membershipId);
+    const membership = user.membership || (hasDirectMembership ? {
+      id: organizationContext.membershipId,
+      organizationId: organizationContext.organizationId,
+      role: organizationContext.role,
+      permissions: organizationContext.permissions,
     } : null);
-    const normalized = membership ? { ...user, membership } : user;
-    this.persistSession({ user: normalized });
+    const normalized = { ...user, membership, organizationContext };
+    this.persistSession({ user: normalized, organizationContext });
     return normalized;
   },
 

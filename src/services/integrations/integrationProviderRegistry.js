@@ -2,25 +2,27 @@ import { apiRequest, createIdempotencyKey, joinEndpoint } from '../core/apiClien
 import { getRuntimeEnv } from '../core/runtimeEnv';
 
 export const INTEGRATION_PROVIDER_ENDPOINT = getRuntimeEnv('INTEGRATIONS_ENDPOINT', '');
+const API_BASE = String(getRuntimeEnv('API_BASE', '/api/v1')).replace(/\/$/, '');
 
 const BACKEND_PROVIDER_IDS = Object.freeze({
   google: 'google-business-profile',
+  gis: '2gis',
+});
+const CLIENT_PROVIDER_IDS = Object.freeze({
+  'google-business-profile': 'google',
+  '2gis': 'gis',
 });
 
-export const PROVIDER_CAPABILITIES = Object.freeze({
-  yandex: ['reviews.read', 'rating.read', 'replies.write'],
-  gis: ['reviews.read', 'rating.read', 'replies.write'],
-  ozon: ['reviews.read', 'rating.read', 'marketplace.read', 'replies.write'],
-  otzovik: ['reviews.read', 'rating.read'],
-  wb: ['reviews.read', 'rating.read', 'marketplace.read', 'replies.write'],
-  google: ['oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read'],
-  telegram: ['notifications.write'],
-  whatsapp: ['notifications.write'],
-  amo: ['crm.read', 'crm.write'],
-});
+export const PROVIDER_TRUTH_CHANGED_EVENT = 'business-shield:provider-truth-changed';
+
+let providerTruthCache = new Map();
 
 export function getBackendProviderId(providerId) {
   return BACKEND_PROVIDER_IDS[providerId] || providerId;
+}
+
+function getClientProviderId(providerId) {
+  return CLIENT_PROVIDER_IDS[providerId] || providerId;
 }
 
 function providerPath(providerId, action = '') {
@@ -28,21 +30,75 @@ function providerPath(providerId, action = '') {
   return joinEndpoint(INTEGRATION_PROVIDER_ENDPOINT, `${path}${action ? `/${action}` : ''}`);
 }
 
+function capabilitiesFromTruth(item) {
+  if (!item || item.releaseStage === 'PLANNED') return [];
+  const capabilities = [];
+  if (item.capabilities?.oauth) capabilities.push('oauth');
+  if (item.capabilities?.accountsRead) capabilities.push('accounts.read');
+  if (item.capabilities?.locationsRead) capabilities.push('locations.read');
+  if (item.capabilities?.profileRead) capabilities.push('profile.read');
+  if (item.capabilities?.reviewRead || item.capabilities?.reviewIngest) capabilities.push('reviews.read', 'rating.read');
+  if (item.capabilities?.reviewReply) capabilities.push('replies.write');
+  return capabilities;
+}
+
+function normalizeTruth(item) {
+  const clientId = getClientProviderId(String(item?.id || '').toLowerCase());
+  return {
+    ...item,
+    id: clientId,
+    backendProviderId: String(item?.id || ''),
+    capabilitiesList: capabilitiesFromTruth(item),
+  };
+}
+
+export async function refreshProviderTruth({ signal } = {}) {
+  const payload = await apiRequest(joinEndpoint(API_BASE, '/meta/providers'), {
+    signal,
+    retries: 0,
+    timeout: 6000,
+  });
+  const items = Array.isArray(payload?.providers) ? payload.providers.map(normalizeTruth) : [];
+  providerTruthCache = new Map(items.map((item) => [item.id, item]));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PROVIDER_TRUTH_CHANGED_EVENT, { detail: { providers: items } }));
+  }
+  return items;
+}
+
+export function clearProviderTruthCache() {
+  providerTruthCache = new Map();
+}
+
 export function hasIntegrationBackend() {
   return Boolean(INTEGRATION_PROVIDER_ENDPOINT);
 }
 
+export function getProviderTruth(providerId) {
+  return providerTruthCache.get(providerId) || null;
+}
+
 export function getProviderCapabilities(providerId) {
-  return PROVIDER_CAPABILITIES[providerId] || [];
+  return [...(getProviderTruth(providerId)?.capabilitiesList || [])];
 }
 
 export function getProviderRuntime(providerId) {
+  const truth = getProviderTruth(providerId);
+  const releaseStage = truth?.releaseStage || 'UNKNOWN';
+  const connectable = Boolean(truth?.configured && truth?.connectable && releaseStage === 'PRODUCTION_ADAPTER');
   return {
     providerId,
     backendProviderId: getBackendProviderId(providerId),
-    transport: INTEGRATION_PROVIDER_ENDPOINT ? 'backend' : 'unresolved',
+    transport: connectable ? 'backend' : (releaseStage === 'PLANNED' ? 'planned' : 'unavailable'),
     endpointConfigured: Boolean(INTEGRATION_PROVIDER_ENDPOINT),
+    adapterInstalled: Boolean(truth && releaseStage !== 'PLANNED'),
+    configured: Boolean(truth?.configured),
+    connectable,
+    releaseStage,
     capabilities: getProviderCapabilities(providerId),
+    sync: truth?.sync || { supported: false, frequency: 'unavailable', retryAttempts: null, dedupe: false },
+    reasonCode: truth?.availability?.reasonCode || (truth ? null : 'PROVIDER_TRUTH_NOT_LOADED'),
+    reasonMessage: truth?.availability?.reasonMessage || null,
   };
 }
 

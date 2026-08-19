@@ -146,19 +146,26 @@ describeWithPostgres('Integration and billing provider truth', () => {
     expect(JSON.stringify(diagnostics.json())).not.toContain('Foreign private integration');
   });
 
-  it('never fakes successful checkout or promo validation without a payment provider', async () => {
+  it('never fakes payment success when online checkout is unavailable', async () => {
     const checkout = await app.inject({
       method: 'POST',
       url: '/api/v1/billing/subscription/checkout',
-      headers: { cookie },
-      payload: { plan: 'PRO', total: 1980 },
+      headers: { cookie, 'idempotency-key': `provider-truth-checkout-${randomUUID()}` },
+      payload: { planId: 'START', billing: 'monthly', amount: 1, currency: 'USD' },
     });
-    expect(checkout.statusCode).toBe(503);
+    expect(checkout.statusCode).toBe(202);
     expect(checkout.json()).toMatchObject({
-      error: {
-        code: 'PAYMENT_PROVIDER_NOT_CONFIGURED',
-        details: { status: 'payment_unavailable' },
+      mode: 'SALES_ASSISTED',
+      paymentCreated: false,
+      subscriptionActivated: false,
+      request: {
+        planCode: 'START',
+        billingInterval: 'monthly',
+        quotedAmountCents: 349000,
+        currency: 'RUB',
+        status: 'OPEN',
       },
+      nextAction: { type: 'SALES_CONTACT', status: 'REQUEST_RECORDED' },
     });
 
     const promo = await app.inject({

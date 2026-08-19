@@ -1,0 +1,107 @@
+enum WebhookEndpointStatus {
+  ACTIVE
+  PAUSED
+  REVOKED
+
+  @@map("webhook_endpoint_status")
+}
+
+enum WebhookEventType {
+  REVIEW_CREATED          @map("review.created")
+  REVIEW_UPDATED          @map("review.updated")
+  CASE_CREATED            @map("case.created")
+  CASE_UPDATED            @map("case.updated")
+  CASE_RESOLVED           @map("case.resolved")
+  REPLY_PUBLISHED         @map("reply.published")
+  LOCATION_HEALTH_CHANGED @map("location.health_changed")
+
+  @@map("webhook_event_type")
+}
+
+enum WebhookDeliveryStatus {
+  QUEUED
+  RETRYING
+  DELIVERED
+  DEAD
+
+  @@map("webhook_delivery_status")
+}
+
+enum WebhookAttemptOutcome {
+  DELIVERED
+  RETRYABLE_FAILURE
+  NON_RETRYABLE_FAILURE
+
+  @@map("webhook_attempt_outcome")
+}
+
+model WebhookEndpoint {
+  id                 String                @id @default(uuid()) @db.Uuid
+  organizationId     String                @map("organization_id") @db.Uuid
+  name               String                @db.VarChar(160)
+  url                String                @db.Text
+  status             WebhookEndpointStatus @default(ACTIVE)
+  events             WebhookEventType[]
+  secretEncrypted    String                @map("secret_encrypted") @db.Text
+  secretHint         String                @map("secret_hint") @db.VarChar(24)
+  secretVersion      Int                   @default(1) @map("secret_version")
+  createdByUserId    String                @map("created_by_user_id") @db.Uuid
+  pausedAt           DateTime?             @map("paused_at")
+  revokedAt          DateTime?             @map("revoked_at")
+  lastDeliveryAt     DateTime?             @map("last_delivery_at")
+  lastDeliveryStatus WebhookDeliveryStatus? @map("last_delivery_status")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  deliveries         WebhookDelivery[]
+
+  @@index([organizationId, status], map: "webhook_endpoints_org_status_idx")
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id                  String                @id @default(uuid()) @db.Uuid
+  organizationId      String                @map("organization_id") @db.Uuid
+  endpointId          String                @map("endpoint_id") @db.Uuid
+  eventId             String                @map("event_id") @db.Uuid
+  eventType           WebhookEventType      @map("event_type")
+  eventVersion        Int                   @default(1) @map("event_version")
+  payload             Json
+  requestBody         String                @map("request_body") @db.Text
+  status              WebhookDeliveryStatus @default(QUEUED)
+  attempts            Int                   @default(0)
+  maxAttempts         Int                   @default(8) @map("max_attempts")
+  responseStatus      Int?                  @map("response_status")
+  responseBodySnippet String?               @map("response_body_snippet") @db.Text
+  lastError           String?               @map("last_error") @db.Text
+  nextAttemptAt       DateTime?             @map("next_attempt_at")
+  deliveredAt         DateTime?             @map("delivered_at")
+  deadAt              DateTime?             @map("dead_at")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  endpoint            WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  attemptHistory      WebhookDeliveryAttempt[]
+
+  @@unique([endpointId, eventId], map: "webhook_deliveries_endpoint_event_key")
+  @@index([organizationId, createdAt], map: "webhook_deliveries_org_created_idx")
+  @@index([endpointId, status, createdAt], map: "webhook_deliveries_endpoint_status_idx")
+  @@index([status, nextAttemptAt], map: "webhook_deliveries_status_next_idx")
+  @@map("webhook_deliveries")
+}
+
+model WebhookDeliveryAttempt {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  deliveryId          String                 @map("delivery_id") @db.Uuid
+  attemptNumber       Int                    @map("attempt_number")
+  outcome             WebhookAttemptOutcome
+  signatureTimestamp  Int                    @map("signature_timestamp")
+  responseStatus      Int?                   @map("response_status")
+  durationMs          Int?                   @map("duration_ms")
+  responseBodySnippet String?                @map("response_body_snippet") @db.Text
+  error               String?                @db.Text
+  createdAt           DateTime               @default(now()) @map("created_at")
+  delivery            WebhookDelivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryId, attemptNumber], map: "webhook_delivery_attempts_delivery_number_key")
+  @@index([deliveryId, createdAt], map: "webhook_delivery_attempts_delivery_created_idx")
+  @@map("webhook_delivery_attempts")
+}

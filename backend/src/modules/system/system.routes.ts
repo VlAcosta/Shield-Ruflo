@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { env } from '../../config/env.js';
+import { providerTruthMatrix } from '../integrations/providers/provider.truth.js';
 
 export const systemRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -27,4 +28,10 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
       apiVersion: 'v1',
     }),
   );
+
+  // Public, credential-free product truth used by landing/pricing/integration UI.
+  // It exposes only adapter capabilities/availability and never tenant data.
+  app.get('/meta/providers', async () => ({
+    providers: providerTruthMatrix(),
+  }));
 };
