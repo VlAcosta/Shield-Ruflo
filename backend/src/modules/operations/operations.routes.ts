@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
@@ -6,7 +6,6 @@ import { assertEntitlement } from '../billing/billing.service.js';
 import { dispatchAutomationEvent } from './automation-engine.js';
 
 const automationIdParams = z.object({ automationId: z.string().uuid() });
-const reportIdParams = z.object({ reportId: z.string().uuid() });
 const notificationIdParams = z.object({ notificationId: z.string().uuid() });
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 const automationActionSchema = z.union([
@@ -22,12 +21,6 @@ const automationSchema = z.object({
   enabled: z.boolean().default(true),
 });
 const automationPatchSchema = automationSchema.partial();
-const reportSchema = z.object({
-  type: z.enum(['weekly_reputation', 'monthly_reputation', 'custom']).default('custom'),
-  title: z.string().trim().min(1).max(240),
-  periodStart: z.string().datetime(),
-  periodEnd: z.string().datetime(),
-});
 const notificationPreferencesSchema = z.record(z.string(), z.unknown());
 const AUTOMATION_DESCRIPTION_KEY = '__description';
 
@@ -55,45 +48,6 @@ function automationConditions(conditions: Record<string, unknown>, description?:
     else delete value[AUTOMATION_DESCRIPTION_KEY];
   }
   return value;
-}
-
-async function createQueuedReport(
-  app: FastifyInstance,
-  organizationId: string,
-  userId: string,
-  body: z.infer<typeof reportSchema>,
-) {
-  const start = new Date(body.periodStart);
-  const end = new Date(body.periodEnd);
-  if (start >= end) {
-    throw new AppError({ code: 'INVALID_REPORT_PERIOD', message: 'Некорректный период отчёта', statusCode: 422 });
-  }
-
-  return app.prisma.$transaction(async (tx) => {
-    const row = await tx.report.create({
-      data: { organizationId, type: body.type, title: body.title, periodStart: start, periodEnd: end, status: 'QUEUED' },
-    });
-    await tx.job.create({
-      data: {
-        organizationId,
-        type: 'report.generate',
-        payload: { reportId: row.id },
-        dedupeKey: `report:${row.id}`,
-        maxAttempts: 3,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        organizationId,
-        actorUserId: userId,
-        action: 'report.created',
-        entityType: 'Report',
-        entityId: row.id,
-        metadata: { type: row.type, periodStart: start.toISOString(), periodEnd: end.toISOString() },
-      },
-    });
-    return row;
-  });
 }
 
 export const operationsRoutes: FastifyPluginAsync = async (app) => {
@@ -206,41 +160,6 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
       }));
     }
     return { evaluated: reviews.length, runs };
-  });
-
-  app.get('/reports', { preHandler: [app.authenticate, app.authorize('reports.view')] }, async (request) => {
-    const { organizationId } = authContext(request);
-    await assertEntitlement(app, organizationId, 'reports');
-    return { reports: await app.prisma.report.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 100 }), schedules: [] };
-  });
-
-  const createReportHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    const { organizationId, userId } = authContext(request);
-    await assertEntitlement(app, organizationId, 'reports');
-    const report = await createQueuedReport(app, organizationId, userId, reportSchema.parse(request.body));
-    return reply.code(202).send({ report });
-  };
-
-  app.post('/reports', { preHandler: [app.authenticate, app.authorize('reports.create')] }, createReportHandler);
-  app.post('/reports/generate', { preHandler: [app.authenticate, app.authorize('reports.create')] }, createReportHandler);
-
-  app.get('/reports/:reportId', { preHandler: [app.authenticate, app.authorize('reports.view')] }, async (request) => {
-    const { organizationId } = authContext(request);
-    await assertEntitlement(app, organizationId, 'reports');
-    const { reportId } = reportIdParams.parse(request.params);
-    const report = await app.prisma.report.findFirst({ where: { id: reportId, organizationId } });
-    if (!report) throw new AppError({ code: 'REPORT_NOT_FOUND', message: 'Отчёт не найден', statusCode: 404 });
-    return { report };
-  });
-
-  app.put('/reports/schedules', { preHandler: [app.authenticate, app.authorize('reports.create')] }, async (request) => {
-    const { organizationId } = authContext(request);
-    await assertEntitlement(app, organizationId, 'reports');
-    const { schedules } = z.object({ schedules: z.array(z.unknown()).max(50) }).parse(request.body);
-    if (schedules.length) {
-      throw new AppError({ code: 'REPORT_SCHEDULING_NOT_CONFIGURED', message: 'Планировщик отчётов ещё не настроен', statusCode: 422 });
-    }
-    return { schedules: [] };
   });
 
   app.get('/notifications', { preHandler: [app.authenticate] }, async (request) => {
