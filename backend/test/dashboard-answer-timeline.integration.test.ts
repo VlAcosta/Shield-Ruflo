@@ -21,6 +21,7 @@ describeWithPostgres('Dashboard published answer timeline', () => {
   const organizationAId = randomUUID();
   const organizationBId = randomUUID();
   const userAId = randomUUID();
+  const userBId = randomUUID();
   const sessionToken = `dashboard-answers-${randomUUID()}`;
   const cookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(sessionToken)}`;
 
@@ -32,16 +33,27 @@ describeWithPostgres('Dashboard published answer timeline', () => {
         { id: organizationBId, name: 'Answer Timeline B', slug: `answer-b-${randomUUID()}`, timezone: 'Europe/Moscow' },
       ],
     });
-    await app.prisma.user.create({
-      data: {
-        id: userAId,
-        phone: `+7${Date.now()}81`,
-        displayName: 'Answer Timeline Owner',
-        profileCompletedAt: new Date(),
-      },
+    await app.prisma.user.createMany({
+      data: [
+        {
+          id: userAId,
+          phone: `+7${Date.now()}81`,
+          displayName: 'Answer Timeline Owner A',
+          profileCompletedAt: new Date(),
+        },
+        {
+          id: userBId,
+          phone: `+7${Date.now()}82`,
+          displayName: 'Answer Timeline Owner B',
+          profileCompletedAt: new Date(),
+        },
+      ],
     });
-    await app.prisma.organizationMember.create({
-      data: { organizationId: organizationAId, userId: userAId, role: 'OWNER', status: 'ACTIVE' },
+    await app.prisma.organizationMember.createMany({
+      data: [
+        { organizationId: organizationAId, userId: userAId, role: 'OWNER', status: 'ACTIVE' },
+        { organizationId: organizationBId, userId: userBId, role: 'OWNER', status: 'ACTIVE' },
+      ],
     });
     await app.prisma.session.create({
       data: {
@@ -52,14 +64,17 @@ describeWithPostgres('Dashboard published answer timeline', () => {
       },
     });
 
-    for (const [organizationId, suffix] of [[organizationAId, 'a'], [organizationBId, 'b']] as const) {
+    for (const [organizationId, suffix, authorUserId] of [
+      [organizationAId, 'a', userAId],
+      [organizationBId, 'b', userBId],
+    ] as const) {
       const business = await app.prisma.business.create({
         data: { organizationId, name: `Answer Business ${suffix}`, isPrimary: true },
       });
       const source = await app.prisma.reviewSource.create({
         data: { organizationId, businessId: business.id, provider: `answer-${suffix}`, name: `Answer Source ${suffix}` },
       });
-      await app.prisma.review.create({
+      const review = await app.prisma.review.create({
         data: {
           organizationId,
           businessId: business.id,
@@ -73,13 +88,25 @@ describeWithPostgres('Dashboard published answer timeline', () => {
           repliedAt: new Date(),
         },
       });
+      await app.prisma.reviewReply.create({
+        data: {
+          organizationId,
+          reviewId: review.id,
+          authorUserId,
+          text: `Provider-confirmed reply tenant ${suffix}`,
+          status: 'PUBLISHED',
+          version: 1,
+          providerReplyId: `answer-provider-${suffix}-${randomUUID()}`,
+          publishedAt: new Date(),
+        },
+      });
     }
   });
 
   afterAll(async () => {
     if (!app) return;
     await app.prisma.organization.deleteMany({ where: { id: { in: [organizationAId, organizationBId] } } });
-    await app.prisma.user.deleteMany({ where: { id: userAId } });
+    await app.prisma.user.deleteMany({ where: { id: { in: [userAId, userBId] } } });
     await app.close();
   });
 
