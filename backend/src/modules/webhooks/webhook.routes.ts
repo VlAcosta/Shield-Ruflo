@@ -33,7 +33,13 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [app.authenticate, app.authorize('webhooks.manage')],
   }, async (request) => {
     const { endpointId } = webhookEndpointParamsSchema.parse(request.params);
-    const input = updateWebhookEndpointSchema.parse(request.body);
+    const parsed = updateWebhookEndpointSchema.parse(request.body);
+    const input = {
+      ...(parsed.name === undefined ? {} : { name: parsed.name }),
+      ...(parsed.url === undefined ? {} : { url: parsed.url }),
+      ...(parsed.events === undefined ? {} : { events: parsed.events }),
+      ...(parsed.status === undefined ? {} : { status: parsed.status }),
+    };
     return updateWebhookEndpoint(app, request, endpointId, input);
   });
 
@@ -53,7 +59,17 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/webhooks/deliveries', {
     preHandler: [app.authenticate, app.authorize('webhooks.view')],
-  }, async (request) => listWebhookDeliveries(app, request, webhookDeliveryQuerySchema.parse(request.query)));
+  }, async (request) => {
+    const parsed = webhookDeliveryQuerySchema.parse(request.query);
+    const query = {
+      page: parsed.page,
+      pageSize: parsed.pageSize,
+      ...(parsed.endpointId === undefined ? {} : { endpointId: parsed.endpointId }),
+      ...(parsed.status === undefined ? {} : { status: parsed.status }),
+      ...(parsed.eventType === undefined ? {} : { eventType: parsed.eventType }),
+    };
+    return listWebhookDeliveries(app, request, query);
+  });
 
   app.get('/webhooks/deliveries/:deliveryId', {
     preHandler: [app.authenticate, app.authorize('webhooks.view')],
