@@ -24,6 +24,7 @@ import { profileRoutes } from './modules/profile/profile.routes.js';
 import { teamRoutes } from './modules/team/team.routes.js';
 import { reviewsRoutes } from './modules/reviews/reviews.routes.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
+import { calendarRoutes } from './modules/calendar/calendar.routes.js';
 import { tasksRoutes } from './modules/tasks/tasks.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { integrationsRoutes } from './modules/integrations/integrations.routes.js';
@@ -115,6 +116,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(reviewIntelligenceRoutes, { prefix: '/api/v1' });
   await app.register(replyCopilotRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/v1' });
+  await app.register(calendarRoutes, { prefix: '/api/v1' });
   await app.register(tasksRoutes, { prefix: '/api/v1' });
   await app.register(reportsRoutes, { prefix: '/api/v1' });
   await app.register(casesRoutes, { prefix: '/api/v1' });
