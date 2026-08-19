@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import DashboardCard from '../../../components/ui/DashboardCard';
+import useAccessControl from '../../access/hooks/useAccessControl';
 import DashboardWidgetState from '../components/DashboardWidgetState';
 import {
   createCalendarEvent,
@@ -8,6 +9,7 @@ import {
   getCalendarEvents,
 } from '../../../services/dashboard/dashboardCalendarService';
 import './Calendar.scss';
+import './CalendarPermissions.scss';
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -121,17 +123,27 @@ function EventComposer({ draft, setDraft, onClose, onSubmit }) {
 }
 
 function Calendar() {
+  const access = useAccessControl();
+  const canViewCalendar = access.can('calendar.view');
+  const canManageCalendar = access.can('calendar.manage');
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState(() => ({ year: today.getFullYear(), month: today.getMonth() }));
   const [selected, setSelected] = useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(canViewCalendar);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [composerOpen, setComposerOpen] = useState(false);
   const [draft, setDraft] = useState(() => ({ title: '', date: dateKey(today), time: '10:00', type: 'work', tone: 'violet', note: '' }));
 
   const loadEvents = useCallback(async () => {
+    if (!canViewCalendar) {
+      setEvents([]);
+      setError('');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
@@ -142,9 +154,13 @@ function Calendar() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewCalendar]);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
+
+  useEffect(() => {
+    if (!canManageCalendar && composerOpen) setComposerOpen(false);
+  }, [canManageCalendar, composerOpen]);
 
   const filteredEvents = useMemo(() => filter === 'all' ? events : events.filter((event) => getEventMeta(event).id === filter), [events, filter]);
   const cells = useMemo(() => {
@@ -195,13 +211,14 @@ function Calendar() {
   }, []);
 
   const openComposer = useCallback(() => {
+    if (!canManageCalendar) return;
     setDraft({ title: '', date: dateKey(selected), time: '10:00', type: 'work', tone: 'violet', note: '' });
     setComposerOpen(true);
-  }, [selected]);
+  }, [canManageCalendar, selected]);
 
   const addEvent = useCallback(async (event) => {
     event.preventDefault();
-    if (!draft.title.trim() || !draft.date) return;
+    if (!canManageCalendar || !draft.title.trim() || !draft.date) return;
     const meta = EVENT_TYPES.find((item) => item.id === draft.type) || EVENT_TYPES[0];
     const payload = { title: draft.title.trim(), date: draft.date, time: draft.time || '10:00', type: meta.id, tone: meta.tone, note: draft.note.trim() };
     try {
@@ -214,9 +231,10 @@ function Calendar() {
     } catch (nextError) {
       setError(nextError?.message || 'Не удалось добавить событие');
     }
-  }, [draft, events]);
+  }, [canManageCalendar, draft, events]);
 
   const removeEvent = useCallback(async (eventId) => {
+    if (!canManageCalendar) return;
     const previous = events;
     setEvents((current) => current.filter((item) => item.id !== eventId));
     try {
@@ -226,18 +244,28 @@ function Calendar() {
       setEvents(previous);
       setError(nextError?.message || 'Не удалось удалить событие');
     }
-  }, [events]);
+  }, [canManageCalendar, events]);
+
+  const headerActions = (
+    <div className="dashboard-calendar__header-actions">
+      <button type="button" className="dashboard-calendar__today" onClick={goToday}>Сегодня</button>
+      {canManageCalendar ? <button type="button" className="dashboard-calendar__add" onClick={openComposer}><PlusIcon /><span>Событие</span></button> : <span className="dashboard-calendar__read-only">Только просмотр</span>}
+    </div>
+  );
+
+  if (!canViewCalendar) {
+    return (
+      <DashboardCard title="Календарь" eyebrow="План работы" className="dashboard-calendar" motion="right">
+        <DashboardWidgetState title="Календарь недоступен" text="У вашей роли нет права просмотра общего календаря организации." />
+      </DashboardCard>
+    );
+  }
 
   return (
     <DashboardCard
       title="Календарь"
       eyebrow="План работы"
-      action={(
-        <div className="dashboard-calendar__header-actions">
-          <button type="button" className="dashboard-calendar__today" onClick={goToday}>Сегодня</button>
-          <button type="button" className="dashboard-calendar__add" onClick={openComposer}><PlusIcon /><span>Событие</span></button>
-        </div>
-      )}
+      action={headerActions}
       className="dashboard-calendar"
       motion="right"
     >
@@ -298,11 +326,13 @@ function Calendar() {
                     <article className="dashboard-calendar__event" key={event.id}>
                       <i className={`is-${meta.tone}`} />
                       <div><small>{meta.label}</small><strong>{event.title}</strong><span>{event.time}{event.note ? ` · ${event.note}` : ''}</span></div>
-                      <button type="button" onClick={() => removeEvent(event.id)} aria-label={`Удалить ${event.title}`}><TrashIcon /></button>
+                      {canManageCalendar ? <button type="button" onClick={() => removeEvent(event.id)} aria-label={`Удалить ${event.title}`}><TrashIcon /></button> : null}
                     </article>
                   );
-                }) : (
+                }) : canManageCalendar ? (
                   <button type="button" className="dashboard-calendar__empty" onClick={openComposer}><PlusIcon /><span><strong>Свободный день</strong><small>Добавить событие</small></span></button>
+                ) : (
+                  <div className="dashboard-calendar__empty dashboard-calendar__empty--read-only"><CalendarIcon /><span><strong>Свободный день</strong><small>Нет запланированных событий</small></span></div>
                 )}
               </div>
 
@@ -319,7 +349,7 @@ function Calendar() {
       )}
 
       {error && events.length ? <div className="dashboard-calendar__inline-error">{error}</div> : null}
-      {composerOpen ? <EventComposer draft={draft} setDraft={setDraft} onClose={() => setComposerOpen(false)} onSubmit={addEvent} /> : null}
+      {composerOpen && canManageCalendar ? <EventComposer draft={draft} setDraft={setDraft} onClose={() => setComposerOpen(false)} onSubmit={addEvent} /> : null}
     </DashboardCard>
   );
 }
