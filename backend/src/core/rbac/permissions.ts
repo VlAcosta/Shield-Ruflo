@@ -5,6 +5,8 @@ export const permissions = [
   'locations.view',
   'locations.manage',
   'dashboard.edit',
+  'calendar.view',
+  'calendar.manage',
   'reviews.view',
   'reviews.reply',
   'reviews.moderate',
@@ -61,6 +63,7 @@ export type OrganizationRoleName = 'OWNER' | 'ADMIN' | 'MANAGER' | 'ANALYST' | '
 const all = [...permissions] as Permission[];
 const readOnly: Permission[] = [
   'dashboard.view',
+  'calendar.view',
   'business.view',
   'locations.view',
   'reviews.view',
@@ -83,7 +86,7 @@ const readOnly: Permission[] = [
 ];
 
 const manager: Permission[] = [
-  'dashboard.view', 'dashboard.edit',
+  'dashboard.view', 'dashboard.edit', 'calendar.view', 'calendar.manage',
   'business.view', 'business.manage', 'locations.view', 'locations.manage',
   'reviews.view', 'reviews.reply', 'reviews.moderate', 'reviews.legal', 'reviews.intelligence.read', 'reviews.intelligence.reanalyze',
   'cases.view', 'cases.manage', 'cases.verify',
@@ -101,7 +104,7 @@ const manager: Permission[] = [
 ];
 
 const member: Permission[] = [
-  'dashboard.view',
+  'dashboard.view', 'calendar.view', 'calendar.manage',
   'business.view', 'locations.view',
   'reviews.view', 'reviews.reply', 'reviews.intelligence.read',
   'cases.view',
@@ -149,6 +152,8 @@ export const nonDelegablePermissions: readonly Permission[] = Object.freeze([
  */
 export const delegatedPermissionAllowlist: readonly Permission[] = Object.freeze([
   'dashboard.view',
+  'calendar.view',
+  'calendar.manage',
   'business.view',
   'locations.view',
   'reviews.view',
