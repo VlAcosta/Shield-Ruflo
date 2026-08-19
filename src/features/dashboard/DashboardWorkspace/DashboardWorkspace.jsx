@@ -7,11 +7,20 @@ import useAccessControl from '../../access/hooks/useAccessControl';
 import useDashboardData from '../hooks/useDashboardData';
 
 const TOAST_LIFETIME = 2200;
+const FIRST_RUN_WIDGET_IDS = new Set(['integrations', 'security', 'quick']);
 
 function TuneIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 7H13M17 7H20M4 17H8M12 17H20M13 4V10M8 14V20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -103,7 +112,7 @@ function DashboardWorkspace({ firstRun = false }) {
   }, []);
 
   const visibleItems = useMemo(() => widgets
-    .filter(({ id, config }) => config.visible && (!firstRun || ['integrations', 'security', 'quick'].includes(id)))
+    .filter(({ id, config }) => (firstRun ? FIRST_RUN_WIDGET_IDS.has(id) : config.visible))
     .map(({ id, meta, config }) => {
       const Widget = meta.component;
       const revision = widgetRevision[id] || 0;
@@ -158,6 +167,13 @@ function DashboardWorkspace({ firstRun = false }) {
       }
       return next;
     });
+  }, [canEditDashboard]);
+
+  const handleOpenCatalog = useCallback(() => {
+    if (!canEditDashboard) return;
+    setEditing(true);
+    setPanelOpen(true);
+    setResetArmed(false);
   }, [canEditDashboard]);
 
   const handleHide = useCallback((id) => {
@@ -229,7 +245,7 @@ function DashboardWorkspace({ firstRun = false }) {
               ? 'Тяните блок за ручку, меняйте ширину за угол. Alt + стрелки перемещают блок точно, Esc завершает настройку.'
               : firstRun
                 ? 'Показываем только блоки, которые полезны на старте. Полная доска откроется после завершения знакомства.'
-                : 'Ваши основные показатели, задачи и инструменты в одном пространстве.'}
+                : 'Добавляйте только нужные блоки и собирайте рабочее пространство под задачи вашей команды.'}
           </p>
         </div>
 
@@ -262,6 +278,14 @@ function DashboardWorkspace({ firstRun = false }) {
                 {resetArmed ? 'Подтвердить сброс' : 'Сбросить'}
               </button>
             </>
+          ) : null}
+
+          {!firstRun && !editing && canEditDashboard ? (
+            <button className="dashboard-workspace__ghost-button dashboard-workspace__add-button" type="button" onClick={handleOpenCatalog}>
+              <PlusIcon />
+              Добавить блок
+              {hiddenCount ? <span>{hiddenCount}</span> : null}
+            </button>
           ) : null}
 
           {!firstRun ? <button
@@ -351,8 +375,8 @@ function DashboardWorkspace({ firstRun = false }) {
       {!visibleItems.length ? (
         <div className="dashboard-workspace__empty">
           <strong>Доска пустая</strong>
-          <span>Откройте список блоков и верните нужные виджеты.</span>
-          <button type="button" onClick={() => { setEditing(true); setPanelOpen(true); }}>Выбрать блоки</button>
+          <span>Добавьте нужные блоки и соберите рабочее пространство под себя.</span>
+          <button type="button" onClick={handleOpenCatalog}>Добавить блоки</button>
         </div>
       ) : null}
 

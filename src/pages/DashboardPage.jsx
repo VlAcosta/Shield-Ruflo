@@ -9,6 +9,10 @@ import useDashboardFirstRun from '../features/dashboard/hooks/useDashboardFirstR
 import useDashboardTheme from '../features/dashboard/hooks/useDashboardTheme';
 import useOrganization from '../hooks/useOrganization';
 import '../styles/dashboard.scss';
+import '../styles/dashboard-responsive.scss';
+import '../styles/dashboard-phase2.scss';
+import '../styles/dashboard-source-state.scss';
+import '../styles/dashboard-phase3.scss';
 
 export default function DashboardPage() {
   const organization = useOrganization();
@@ -36,7 +40,7 @@ export default function DashboardPage() {
             <DashboardPulseHero organizationName={organization.title || 'Организация'} />
           )}
           {!firstRun.active ? <DashboardDataStatusBar /> : null}
-          <HeaderAnalytick firstRun={firstRun.active} connectedCount={firstRun.integrations?.length || 0} />
+          {firstRun.active ? <HeaderAnalytick firstRun connectedCount={firstRun.integrations?.length || 0} /> : null}
           <DashboardWorkspace firstRun={firstRun.active} />
         </div>
       </DashboardDataProvider>

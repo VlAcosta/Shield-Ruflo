@@ -12,7 +12,7 @@ import Competitors from '../Competitors';
 import QuickActions from '../QuickActions';
 import Integrations from '../Integrations';
 
-export const DASHBOARD_LAYOUT_VERSION = 6;
+export const DASHBOARD_LAYOUT_VERSION = 7;
 
 export const DASHBOARD_DENSITIES = Object.freeze({
   comfortable: 'comfortable',
@@ -155,6 +155,13 @@ export const DEFAULT_WIDGET_ORDER = Object.freeze([
   'quick',
 ]);
 
+export const DEFAULT_VISIBLE_WIDGET_IDS = Object.freeze([
+  'reviews',
+  'tasks',
+  'rating',
+  'quick',
+]);
+
 export function createDefaultDashboardLayout() {
   return {
     version: DASHBOARD_LAYOUT_VERSION,
@@ -166,7 +173,7 @@ export function createDefaultDashboardLayout() {
       DEFAULT_WIDGET_ORDER.map((id) => [
         id,
         {
-          visible: true,
+          visible: DEFAULT_VISIBLE_WIDGET_IDS.includes(id),
           span: WIDGET_REGISTRY[id].defaultSpan,
         },
       ])
@@ -196,11 +203,14 @@ export function normalizeDashboardLayout(layout) {
       const span = Number.isFinite(rawSpan)
         ? Math.min(meta.maxSpan, Math.max(meta.minSpan, Math.round(rawSpan)))
         : meta.defaultSpan;
+      const visible = typeof config.visible === 'boolean'
+        ? config.visible
+        : fallback.widgets[id].visible;
 
       return [
         id,
         {
-          visible: config.visible !== false,
+          visible,
           span,
         },
       ];

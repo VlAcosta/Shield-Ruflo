@@ -33,13 +33,20 @@ function ArrowIcon() {
 
 function DashboardPulseHero({ organizationName }) {
   const navigate = useNavigate();
-  const { data, status, refreshing } = useDashboardData();
+  const { data, status, source, apiEnabled, refreshing } = useDashboardData();
   const pulse = data?.pulse;
   const loading = status === 'loading' && !pulse;
   const sparkPath = useMemo(() => buildSparkPath(pulse?.spark), [pulse?.spark]);
   const score = Number(pulse?.score || 0);
   const measured = Boolean(pulse?.measured);
   const signals = Array.isArray(pulse?.signals) ? pulse.signals : [];
+  const sourceState = useMemo(() => {
+    if (status === 'offline') return { label: 'НЕТ СВЯЗИ', tone: 'offline' };
+    if (source === 'local-demo') return { label: 'ДЕМО', tone: 'demo' };
+    if (!apiEnabled || source === 'local') return { label: 'ЛОКАЛЬНО', tone: 'local' };
+    if (status === 'stale' || refreshing) return { label: 'СИНХРОНИЗАЦИЯ', tone: 'sync' };
+    return { label: 'ОНЛАЙН', tone: 'live' };
+  }, [apiEnabled, refreshing, source, status]);
 
   return (
     <section className={`dashboard-pulse-hero ${loading ? 'is-loading' : ''}`} aria-label="Состояние репутации" aria-busy={loading || refreshing}>
@@ -47,14 +54,14 @@ function DashboardPulseHero({ organizationName }) {
 
       <div className="dashboard-pulse-hero__copy">
         <div className="dashboard-pulse-hero__eyebrow">
-          <span className="dashboard-pulse-hero__live"><i /> {status === 'offline' ? 'OFFLINE' : 'LIVE'}</span>
-          <span>REPUTATION CONTROL</span>
+          <span className={`dashboard-pulse-hero__live is-${sourceState.tone}`}><i /> {sourceState.label}</span>
+          <span>ЦЕНТР РЕПУТАЦИИ</span>
         </div>
         <h2>Репутация под контролем</h2>
         <p>{organizationName || 'Компания'} — единый центр собирает рейтинг, отзывы, задачи и состояние подключённых площадок.</p>
         <div className="dashboard-pulse-hero__actions">
-          <button type="button" className="dashboard-pulse-hero__primary" onClick={() => navigate('/reports')}>Открыть аналитику <ArrowIcon /></button>
-          <button type="button" className="dashboard-pulse-hero__secondary" onClick={() => navigate('/chat?channel=manager')}>Обсудить стратегию</button>
+          <button type="button" className="dashboard-pulse-hero__primary" onClick={() => navigate('/reviews')}>Перейти к отзывам <ArrowIcon /></button>
+          <button type="button" className="dashboard-pulse-hero__secondary" onClick={() => navigate('/reports')}>Открыть отчёты</button>
         </div>
       </div>
 

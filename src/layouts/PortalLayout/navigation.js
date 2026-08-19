@@ -4,8 +4,6 @@ import {
   ReportsIcon,
   ReviewsIcon,
   ReputationIcon,
-  AutomationIcon,
-  IntegrationIcon,
   TasksIcon,
   ProfileIcon,
   FaqIcon,
@@ -42,7 +40,6 @@ export const navigationGroups = Object.freeze([
     Icon: TasksIcon,
     items: [
       { to: '/tasks', label: 'Задачи', Icon: TasksIcon, permission: 'tasks.view' },
-      { to: '/automations', label: 'Автоматизации', Icon: AutomationIcon, permission: 'automations.view' },
       { to: '/reports', label: 'Отчёты', Icon: ReportsIcon, permission: 'reports.view' },
     ],
   },
@@ -60,7 +57,6 @@ export const navigationGroups = Object.freeze([
     Icon: ProfileIcon,
     items: [
       { to: '/profile', label: 'Аккаунт и компания', Icon: ProfileIcon },
-      { to: '/integrations', label: 'Интеграции', Icon: IntegrationIcon, permission: 'integrations.view' },
       { to: '/subscriptions', label: 'Тариф и оплата', Icon: SubscriptionsIcon, permission: 'billing.view' },
     ],
   },
