@@ -1,6 +1,7 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
+import { assertEntitlement } from '../billing/billing.service.js';
 import {
   enqueueReport,
   getReport,
@@ -41,11 +42,16 @@ function actor(request: FastifyRequest) {
   return { organizationId, userId };
 }
 
+async function requireReportsEntitlement(app: Parameters<FastifyPluginAsync>[0], organizationId: string) {
+  await assertEntitlement(app, organizationId, 'reports');
+}
+
 export const reportsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/reports', {
     preHandler: [app.authenticate, app.authorize('reports.view')],
   }, async (request) => {
     const tenant = actor(request);
+    await requireReportsEntitlement(app, tenant.organizationId);
     return listReports(app, tenant.organizationId);
   });
 
@@ -53,14 +59,14 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [app.authenticate, app.authorize('reports.view')],
   }, async (request) => {
     const tenant = actor(request);
+    await requireReportsEntitlement(app, tenant.organizationId);
     const { reportId } = reportIdParams.parse(request.params);
     return { report: await getReport(app, tenant.organizationId, reportId) };
   });
 
-  app.post('/reports/generate', {
-    preHandler: [app.authenticate, app.authorize('reports.create')],
-  }, async (request, reply) => {
+  const generateReportHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     const tenant = actor(request);
+    await requireReportsEntitlement(app, tenant.organizationId);
     const body = generateSchema.parse(request.body);
     const periodStart = new Date(body.periodStart);
     const periodEnd = new Date(body.periodEnd);
@@ -78,12 +84,21 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
       periodEnd,
     });
     return reply.code(202).send({ report });
-  });
+  };
+
+  app.post('/reports', {
+    preHandler: [app.authenticate, app.authorize('reports.create')],
+  }, generateReportHandler);
+
+  app.post('/reports/generate', {
+    preHandler: [app.authenticate, app.authorize('reports.create')],
+  }, generateReportHandler);
 
   app.put('/reports/schedules', {
     preHandler: [app.authenticate, app.authorize('reports.create')],
   }, async (request) => {
     const tenant = actor(request);
+    await requireReportsEntitlement(app, tenant.organizationId);
     const { schedules } = schedulesSchema.parse(request.body);
     return { schedules: await saveReportSchedules(app, tenant, schedules) };
   });
