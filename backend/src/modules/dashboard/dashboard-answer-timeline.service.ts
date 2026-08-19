@@ -129,22 +129,25 @@ export async function enrichDashboardWithAnswerTimeline(
   }
 
   // Query a little wider than 28*24h so timezone offsets/DST cannot drop the
-  // first visible dashboard day. The OR keeps both newly received reviews and
-  // replies published during the visible period without scanning old history.
+  // first visible dashboard day. Published ReviewReply rows are the canonical
+  // provider-confirmed answer source, matching the global response metric.
   const since = new Date(Date.now() - (TIMELINE_DAYS + 2) * DAY_MS);
   const activityRows = await app.prisma.review.findMany({
     where: {
       organizationId,
       OR: [
         { receivedAt: { gte: since } },
-        { workflowStatus: 'PUBLISHED', repliedAt: { gte: since } },
+        { replies: { some: { status: 'PUBLISHED', publishedAt: { gte: since } } } },
       ],
     },
     select: {
       receivedAt: true,
       rating: true,
-      workflowStatus: true,
-      repliedAt: true,
+      replies: {
+        where: { status: 'PUBLISHED', publishedAt: { gte: since } },
+        select: { publishedAt: true },
+        orderBy: { publishedAt: 'asc' },
+      },
     },
     orderBy: { receivedAt: 'asc' },
     take: 50_000,
@@ -152,8 +155,11 @@ export async function enrichDashboardWithAnswerTimeline(
 
   const answeredByDay = new Map<string, number>();
   for (const row of activityRows) {
-    if (row.workflowStatus !== 'PUBLISHED' || !row.repliedAt) continue;
-    const key = dateKey(row.repliedAt, overview.timezone);
+    // A review can have reply versions/history, but only one review should
+    // contribute to coverage for a given published-answer day.
+    const publishedAt = row.replies.find((reply) => reply.publishedAt)?.publishedAt;
+    if (!publishedAt) continue;
+    const key = dateKey(publishedAt, overview.timezone);
     answeredByDay.set(key, (answeredByDay.get(key) ?? 0) + 1);
   }
 
@@ -173,7 +179,7 @@ export async function enrichDashboardWithAnswerTimeline(
     values: number[],
   ): RatingPeriod => {
     const positive = rows.filter((row) => row.rating >= 4).length;
-    const answered = rows.filter((row) => row.workflowStatus === 'PUBLISHED' && row.repliedAt).length;
+    const answered = rows.filter((row) => row.replies.some((reply) => Boolean(reply.publishedAt))).length;
     return {
       labels,
       values,
