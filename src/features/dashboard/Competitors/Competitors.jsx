@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import DashboardCard from '../../../components/ui/DashboardCard';
 import DashboardWidgetState from '../components/DashboardWidgetState';
 import useDashboardData from '../hooks/useDashboardData';
+import useAccessControl from '../../access/hooks/useAccessControl';
 import { createCompetitor, getCompetitors, removeCompetitor } from '../../../services/competitors/competitorService';
 import './Competitors.scss';
 
@@ -70,12 +71,14 @@ function CompetitorModal({ open, items, onClose, onAdd, onRemove }) {
 }
 
 function Competitors() {
+  const access = useAccessControl();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const { section: metrics } = useDashboardData('metrics');
   const ownRating = Number(metrics?.rating?.value || 0) || null;
+  const canManage = access.can('competitive.manage');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -95,19 +98,21 @@ function Competitors() {
   }, [items, ownRating]);
 
   const add = useCallback(async (payload) => {
+    if (!canManage) return;
     try { const result = await createCompetitor(payload, items); setItems(result.items || items); }
     catch (nextError) { setError(nextError?.message || 'Не удалось добавить конкурента'); }
-  }, [items]);
+  }, [canManage, items]);
   const remove = useCallback(async (id) => {
+    if (!canManage) return;
     const previous = items; setItems((current) => current.filter((item) => item.id !== id));
     try { setItems(await removeCompetitor(id, previous)); }
     catch (nextError) { setItems(previous); setError(nextError?.message || 'Не удалось удалить конкурента'); }
-  }, [items]);
+  }, [canManage, items]);
 
   return <>
-    <DashboardCard title="Конкуренты" eyebrow="Market intelligence" action={<button type="button" className="dashboard-competitors__manage" onClick={() => setModalOpen(true)}>{items.length ? 'Настроить' : '+ Добавить'}</button>} className="dashboard-competitors" motion="right">
+    <DashboardCard title="Конкуренты" eyebrow="Market intelligence" action={canManage?<button type="button" className="dashboard-competitors__manage" onClick={() => setModalOpen(true)}>{items.length ? 'Настроить' : '+ Добавить'}</button>:null} className="dashboard-competitors" motion="right">
       {loading ? <DashboardWidgetState type="loading" /> : error && !items.length ? <DashboardWidgetState type="error" text={error} onRetry={load} /> : !items.length ? (
-        <button type="button" className="dashboard-competitors__empty" onClick={() => setModalOpen(true)}><span>CI</span><div><strong>Соберите конкурентный benchmark</strong><p>Добавьте 3–5 прямых конкурентов. Система сравнит рейтинг, негатив и работу с отзывами.</p><b>Добавить первого конкурента →</b></div></button>
+        canManage ? <button type="button" className="dashboard-competitors__empty" onClick={() => setModalOpen(true)}><span>CI</span><div><strong>Соберите конкурентный benchmark</strong><p>Добавьте 3–5 прямых конкурентов. Система сравнит рейтинг, негатив и работу с отзывами.</p><b>Добавить первого конкурента →</b></div></button> : <DashboardWidgetState title="Конкуренты пока не настроены" text="Benchmark появится здесь после добавления конкурентов пользователем с правом управления." />
       ) : (
         <div className="dashboard-competitors__body">
           <div className="dashboard-competitors__benchmark">
@@ -126,7 +131,7 @@ function Competitors() {
       )}
       {error && items.length ? <div className="dashboard-competitors__error">{error}</div> : null}
     </DashboardCard>
-    <CompetitorModal open={modalOpen} items={items} onClose={() => setModalOpen(false)} onAdd={add} onRemove={remove} />
+    {canManage ? <CompetitorModal open={modalOpen} items={items} onClose={() => setModalOpen(false)} onAdd={add} onRemove={remove} /> : null}
   </>;
 }
 export default memo(Competitors);

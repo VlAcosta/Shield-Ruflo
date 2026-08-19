@@ -1,6 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useDashboardData from '../hooks/useDashboardData';
+import useAccessControl from '../../access/hooks/useAccessControl';
 import AnimatedValue from '../components/AnimatedValue';
 import './DashboardPulseHero.scss';
 
@@ -33,6 +34,7 @@ function ArrowIcon() {
 
 function DashboardPulseHero({ organizationName }) {
   const navigate = useNavigate();
+  const access = useAccessControl();
   const { data, status, source, apiEnabled, refreshing } = useDashboardData();
   const pulse = data?.pulse;
   const loading = status === 'loading' && !pulse;
@@ -47,6 +49,14 @@ function DashboardPulseHero({ organizationName }) {
     if (status === 'stale' || refreshing) return { label: 'СИНХРОНИЗАЦИЯ', tone: 'sync' };
     return { label: 'ОНЛАЙН', tone: 'live' };
   }, [apiEnabled, refreshing, source, status]);
+  const actions = useMemo(() => {
+    const candidates = [];
+    if (access.can('reviews.view')) candidates.push({ label: 'Перейти к отзывам', route: '/reviews' });
+    if (access.can('reports.view')) candidates.push({ label: 'Открыть отчёты', route: '/reports' });
+    if (access.can('tasks.view')) candidates.push({ label: 'Открыть задачи', route: '/tasks' });
+    if (!candidates.length) candidates.push({ label: 'Открыть профиль', route: '/profile' });
+    return candidates.slice(0, 2);
+  }, [access]);
 
   return (
     <section className={`dashboard-pulse-hero ${loading ? 'is-loading' : ''}`} aria-label="Состояние репутации" aria-busy={loading || refreshing}>
@@ -60,8 +70,8 @@ function DashboardPulseHero({ organizationName }) {
         <h2>Репутация под контролем</h2>
         <p>{organizationName || 'Компания'} — единый центр собирает рейтинг, отзывы, задачи и состояние подключённых площадок.</p>
         <div className="dashboard-pulse-hero__actions">
-          <button type="button" className="dashboard-pulse-hero__primary" onClick={() => navigate('/reviews')}>Перейти к отзывам <ArrowIcon /></button>
-          <button type="button" className="dashboard-pulse-hero__secondary" onClick={() => navigate('/reports')}>Открыть отчёты</button>
+          <button type="button" className="dashboard-pulse-hero__primary" onClick={() => navigate(actions[0].route)}>{actions[0].label} <ArrowIcon /></button>
+          {actions[1] ? <button type="button" className="dashboard-pulse-hero__secondary" onClick={() => navigate(actions[1].route)}>{actions[1].label}</button> : null}
         </div>
       </div>
 
