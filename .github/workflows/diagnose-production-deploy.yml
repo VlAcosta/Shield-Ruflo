@@ -1,0 +1,151 @@
+name: Business Shield Production Deploy Diagnostics
+
+on:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - .github/workflows/diagnose-production-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PROD_SSH_HOST: bis-shield.ru
+  PROD_SSH_PORT: "22"
+  PROD_SSH_USER: acosta
+  APP_DIR: /var/www/bis-shield
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Load release manifest
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source deploy/production-release.env
+          set +a
+          echo "release_branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        id: ssh
+        shell: bash
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          cp deploy/production-known-hosts "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          if [[ -n "$PROD_SSH_PRIVATE_KEY" ]]; then
+            printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+            chmod 600 "$HOME/.ssh/business-shield-production"
+            echo 'auth_mode=key' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PROD_SSH_PASSWORD" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass >/dev/null
+            echo 'auth_mode=password' >> "$GITHUB_OUTPUT"
+          else
+            echo 'auth_mode=missing' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect non-mutating deployment guard state
+        id: remote
+        shell: bash
+        env:
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+          RELEASE_BRANCH: ${{ steps.release.outputs.release_branch }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
+        run: |
+          set +e
+          remote="cd '$APP_DIR' || exit 90
+          actual=\$(git rev-parse HEAD 2>/dev/null || echo unavailable)
+          dirty=\$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+          fetch_code=0
+          git fetch origin 'refs/heads/$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH' >/dev/null 2>&1 || fetch_code=1
+          remote_sha=\$(git rev-parse 'refs/remotes/origin/$RELEASE_BRANCH' 2>/dev/null || echo unavailable)
+          sudo_code=0; sudo -n true >/dev/null 2>&1 || sudo_code=1
+          node_version=\$(node --version 2>/dev/null || echo unavailable)
+          npm_version=\$(npm --version 2>/dev/null || echo unavailable)
+          pg_dump_code=0; command -v pg_dump >/dev/null 2>&1 || pg_dump_code=1
+          env_present=0; test -s backend/.env && env_present=1
+          printf 'DIAG|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \"\$actual\" \"\$dirty\" \"\$fetch_code\" \"\$remote_sha\" \"\$sudo_code\" \"\$node_version\" \"\$npm_version\" \"\$pg_dump_code\" \"\$env_present\" '$RELEASE_SHA'"
+          output=''
+          ssh_code=99
+          if [[ "$AUTH_MODE" == key ]]; then
+            output="$(ssh -i "$HOME/.ssh/business-shield-production" -p "$PROD_SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "$PROD_SSH_USER@$PROD_SSH_HOST" "$remote" 2>&1)"
+            ssh_code=$?
+          elif [[ "$AUTH_MODE" == password ]]; then
+            output="$(SSHPASS="$PROD_SSH_PASSWORD" sshpass -e ssh -p "$PROD_SSH_PORT" -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "$PROD_SSH_USER@$PROD_SSH_HOST" "$remote" 2>&1)"
+            ssh_code=$?
+          fi
+          line="$(printf '%s\n' "$output" | grep '^DIAG|' | tail -1)"
+          IFS='|' read -r _ actual dirty fetch_code remote_sha sudo_code node_version npm_version pg_dump_code env_present expected <<< "$line"
+          {
+            echo "ssh_code=$ssh_code"
+            echo "actual_sha=${actual:-unknown}"
+            echo "dirty_count=${dirty:-unknown}"
+            echo "fetch_code=${fetch_code:-unknown}"
+            echo "remote_sha=${remote_sha:-unknown}"
+            echo "sudo_code=${sudo_code:-unknown}"
+            echo "node_version=${node_version:-unknown}"
+            echo "npm_version=${npm_version:-unknown}"
+            echo "pg_dump_code=${pg_dump_code:-unknown}"
+            echo "env_present=${env_present:-unknown}"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record sanitized deploy diagnostics
+        shell: bash
+        env:
+          RELEASE_BRANCH: ${{ steps.release.outputs.release_branch }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
+          SSH_CODE: ${{ steps.remote.outputs.ssh_code }}
+          ACTUAL_SHA: ${{ steps.remote.outputs.actual_sha }}
+          DIRTY_COUNT: ${{ steps.remote.outputs.dirty_count }}
+          FETCH_CODE: ${{ steps.remote.outputs.fetch_code }}
+          REMOTE_SHA: ${{ steps.remote.outputs.remote_sha }}
+          SUDO_CODE: ${{ steps.remote.outputs.sudo_code }}
+          NODE_VERSION: ${{ steps.remote.outputs.node_version }}
+          NPM_VERSION: ${{ steps.remote.outputs.npm_version }}
+          PG_DUMP_CODE: ${{ steps.remote.outputs.pg_dump_code }}
+          ENV_PRESENT: ${{ steps.remote.outputs.env_present }}
+        run: |
+          set -euo pipefail
+          git fetch origin ops/production-deploy
+          git reset --hard origin/ops/production-deploy
+          {
+            echo "RELEASE_BRANCH=$RELEASE_BRANCH"
+            echo "RELEASE_SHA=$RELEASE_SHA"
+            echo "ACTUAL_SHA=$ACTUAL_SHA"
+            echo "SSH_CODE=$SSH_CODE"
+            echo "DIRTY_COUNT=$DIRTY_COUNT"
+            echo "FETCH_CODE=$FETCH_CODE"
+            echo "REMOTE_SHA=$REMOTE_SHA"
+            echo "SUDO_CODE=$SUDO_CODE"
+            echo "NODE_VERSION=$NODE_VERSION"
+            echo "NPM_VERSION=$NPM_VERSION"
+            echo "PG_DUMP_CODE=$PG_DUMP_CODE"
+            echo "ENV_PRESENT=$ENV_PRESENT"
+            echo "CHECKED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > deploy/production-deploy-diagnostic.env
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/production-deploy-diagnostic.env
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record production deploy guard diagnostics'
+            git push origin HEAD:ops/production-deploy
+          fi
