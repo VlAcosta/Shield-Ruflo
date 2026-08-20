@@ -1,0 +1,151 @@
+name: Prepare Business Shield Production Env for P26
+
+on:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - .github/workflows/prepare-production-env-p26.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PROD_SSH_HOST: bis-shield.ru
+  PROD_SSH_PORT: "22"
+  PROD_SSH_USER: acosta
+  APP_DIR: /var/www/bis-shield
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure SSH
+        id: ssh
+        shell: bash
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          cp deploy/production-known-hosts "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          if [[ -n "$PROD_SSH_PRIVATE_KEY" ]]; then
+            printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+            chmod 600 "$HOME/.ssh/business-shield-production"
+            echo 'auth_mode=key' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PROD_SSH_PASSWORD" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass >/dev/null
+            echo 'auth_mode=password' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Missing production SSH credential' >&2
+            exit 20
+          fi
+
+      - name: Backup and migrate production environment
+        id: migrate
+        shell: bash
+        env:
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/prepare-env.sh <<'REMOTE'
+          set -euo pipefail
+          APP_DIR="$1"
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+            . "$NVM_DIR/nvm.sh"
+            nvm use 22 >/dev/null
+          fi
+          cd "$APP_DIR/backend"
+          test -s .env
+          stamp="$(date +%Y%m%d-%H%M%S)"
+          backup_dir="/var/backups/bis-shield/env-migrations"
+          sudo mkdir -p "$backup_dir"
+          sudo cp -a .env "$backup_dir/backend.env.$stamp"
+          sudo chmod 600 "$backup_dir/backend.env.$stamp"
+
+          upsert_secret() {
+            local key="$1"
+            local current
+            current="$(sed -n "s/^${key}=//p" .env | tail -n 1)"
+            if [[ ${#current} -ge 32 && "$current" != development-* && "$current" != CHANGE_ME* ]]; then
+              return 0
+            fi
+            local generated
+            generated="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")"
+            if grep -q "^${key}=" .env; then
+              sed -i "s|^${key}=.*|${key}=${generated}|" .env
+            else
+              printf '\n%s=%s\n' "$key" "$generated" >> .env
+            fi
+          }
+
+          ensure_default() {
+            local key="$1" value="$2"
+            if ! grep -q "^${key}=" .env; then printf '%s=%s\n' "$key" "$value" >> .env; fi
+          }
+
+          upsert_secret OPERATIONS_METRICS_TOKEN
+          ensure_default AI_RATE_LIMIT_USER_PER_MINUTE 20
+          ensure_default AI_RATE_LIMIT_TENANT_PER_MINUTE 100
+          chmod 600 .env
+
+          token_len="$(sed -n 's/^OPERATIONS_METRICS_TOKEN=//p' .env | tail -n 1 | awk '{print length}')"
+          user_limit="$(sed -n 's/^AI_RATE_LIMIT_USER_PER_MINUTE=//p' .env | tail -n 1)"
+          tenant_limit="$(sed -n 's/^AI_RATE_LIMIT_TENANT_PER_MINUTE=//p' .env | tail -n 1)"
+          [[ "$token_len" -ge 32 ]]
+          [[ "$user_limit" =~ ^[0-9]+$ ]]
+          [[ "$tenant_limit" =~ ^[0-9]+$ ]]
+          [[ "$tenant_limit" -ge "$user_limit" ]]
+          printf 'ENV_OK|%s|%s|%s|%s\n' "$token_len" "$user_limit" "$tenant_limit" "$backup_dir/backend.env.$stamp"
+          REMOTE
+
+          remote="bash -s -- '$APP_DIR'"
+          if [[ "$AUTH_MODE" == key ]]; then
+            output="$(ssh -i "$HOME/.ssh/business-shield-production" -p "$PROD_SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$PROD_SSH_USER@$PROD_SSH_HOST" "$remote" < /tmp/prepare-env.sh)"
+          else
+            output="$(SSHPASS="$PROD_SSH_PASSWORD" sshpass -e ssh -p "$PROD_SSH_PORT" -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o StrictHostKeyChecking=yes "$PROD_SSH_USER@$PROD_SSH_HOST" "$remote" < /tmp/prepare-env.sh)"
+          fi
+          line="$(printf '%s\n' "$output" | grep '^ENV_OK|' | tail -1)"
+          IFS='|' read -r _ token_len user_limit tenant_limit backup_path <<< "$line"
+          [[ "$token_len" -ge 32 ]]
+          echo "token_length=$token_len" >> "$GITHUB_OUTPUT"
+          echo "user_limit=$user_limit" >> "$GITHUB_OUTPUT"
+          echo "tenant_limit=$tenant_limit" >> "$GITHUB_OUTPUT"
+          echo "Environment migration completed; secret value was not exported."
+
+      - name: Record sanitized migration result
+        shell: bash
+        env:
+          TOKEN_LENGTH: ${{ steps.migrate.outputs.token_length }}
+          USER_LIMIT: ${{ steps.migrate.outputs.user_limit }}
+          TENANT_LIMIT: ${{ steps.migrate.outputs.tenant_limit }}
+        run: |
+          set -euo pipefail
+          git fetch origin ops/production-deploy
+          git reset --hard origin/ops/production-deploy
+          {
+            echo 'STATUS=PASS'
+            echo "OPERATIONS_METRICS_TOKEN_LENGTH=$TOKEN_LENGTH"
+            echo "AI_RATE_LIMIT_USER_PER_MINUTE=$USER_LIMIT"
+            echo "AI_RATE_LIMIT_TENANT_PER_MINUTE=$TENANT_LIMIT"
+            echo "CHECKED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > deploy/production-env-p26-status.env
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/production-env-p26-status.env
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record P26 production environment migration'
+            git push origin HEAD:ops/production-deploy
+          fi
