@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout production control branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Load pinned release
         id: release
@@ -39,110 +41,167 @@ jobs:
           echo "release_branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Configure production SSH
+        id: ssh
         shell: bash
         env:
           PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
         run: |
           set -euo pipefail
-          [[ -n "$PROD_SSH_PRIVATE_KEY" ]] || { echo 'Missing PROD_SSH_PRIVATE_KEY' >&2; exit 20; }
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
-          chmod 600 "$HOME/.ssh/business-shield-production"
           cp deploy/production-known-hosts "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Verify exact production release and host health
-        shell: bash
-        env:
-          EXPECTED_SHA: ${{ steps.release.outputs.release_sha }}
-        run: |
-          set -euo pipefail
-          ssh \
-            -i "$HOME/.ssh/business-shield-production" \
-            -p "$PROD_SSH_PORT" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=10 \
-            "$PROD_SSH_USER@$PROD_SSH_HOST" \
-            "APP_DIR='$APP_DIR' EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
-          set -euo pipefail
-          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-          if [[ -s "$NVM_DIR/nvm.sh" ]]; then
-            . "$NVM_DIR/nvm.sh"
-            nvm use 22 >/dev/null
+          if [[ -n "$PROD_SSH_PRIVATE_KEY" ]]; then
+            printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > "$HOME/.ssh/business-shield-production"
+            chmod 600 "$HOME/.ssh/business-shield-production"
+            echo 'auth_mode=key' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$PROD_SSH_PASSWORD" ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass >/dev/null
+            echo 'auth_mode=password' >> "$GITHUB_OUTPUT"
+          else
+            echo 'auth_mode=missing' >> "$GITHUB_OUTPUT"
+            echo 'Missing production SSH credential' >&2
           fi
-          cd "$APP_DIR"
-          ACTUAL_SHA="$(git rev-parse HEAD)"
-          echo "Production SHA: $ACTUAL_SHA"
-          [[ "$ACTUAL_SHA" == "$EXPECTED_SHA" ]] || { echo "Production SHA mismatch: expected $EXPECTED_SHA, got $ACTUAL_SHA" >&2; exit 30; }
-          echo "Node: $(node --version)"
-          sudo systemctl is-active --quiet bis-shield-api
-          sudo systemctl is-active --quiet bis-shield-worker
-          curl -fsS --max-time 10 http://127.0.0.1:8081/health >/dev/null
-          curl -fsS --max-time 10 http://127.0.0.1:8081/health/ready >/dev/null
-          bash scripts/production-preflight.sh
-          REMOTE
 
-      - name: Verify public HTTPS surface
-        shell: bash
-        run: |
-          set -euo pipefail
-          check() {
-            local path="$1"
-            local expected="$2"
-            local actual
-            actual="$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' --connect-timeout 5 --max-time 15 --retry 2 --retry-all-errors "$PUBLIC_URL$path")"
-            [[ "$actual" == "$expected" ]] || { echo "$path expected $expected, got $actual" >&2; exit 1; }
-            echo "$path -> $actual"
-          }
-          check / 200
-          check /reviews 200
-          check /api/v1/meta 200
-          check /api/v1/me 401
-
-      - name: Smoke summary
-        if: success()
-        env:
-          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
-          RELEASE_BRANCH: ${{ steps.release.outputs.release_branch }}
-        run: |
-          {
-            echo '## Production smoke passed'
-            echo
-            echo "- Release branch: \`$RELEASE_BRANCH\`"
-            echo "- Exact production SHA: \`$RELEASE_SHA\`"
-            echo '- API service: active'
-            echo '- Worker service: active'
-            echo '- Internal health/readiness: healthy'
-            echo '- Production preflight: passed'
-            echo '- Public HTTPS `/`: 200'
-            echo '- Public HTTPS `/reviews`: 200'
-            echo '- Public HTTPS `/api/v1/meta`: 200'
-            echo '- Public HTTPS `/api/v1/me`: 401 unauthenticated boundary'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Record machine-readable smoke result
+      - name: Diagnose exact production release and host health
+        id: host
         if: always()
         shell: bash
         env:
-          SMOKE_STATUS: ${{ job.status }}
+          AUTH_MODE: ${{ steps.ssh.outputs.auth_mode }}
+          PROD_SSH_PASSWORD: ${{ secrets.PROD_SSH_PASSWORD }}
+          EXPECTED_SHA: ${{ steps.release.outputs.release_sha }}
+        run: |
+          set +e
+          remote_script='set +e
+          export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+          if [[ -s "$NVM_DIR/nvm.sh" ]]; then . "$NVM_DIR/nvm.sh"; nvm use 22 >/dev/null 2>&1; fi
+          cd "'$APP_DIR'" 2>/dev/null
+          actual_sha="$(git rev-parse HEAD 2>/dev/null || echo unavailable)"
+          api_state="$(sudo -n systemctl is-active bis-shield-api 2>/dev/null || echo inactive)"
+          worker_state="$(sudo -n systemctl is-active bis-shield-worker 2>/dev/null || echo inactive)"
+          health_code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:8081/health 2>/dev/null || echo 000)"
+          ready_code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:8081/health/ready 2>/dev/null || echo 000)"
+          bash scripts/production-preflight.sh >/tmp/bis-shield-preflight.log 2>&1
+          preflight_code="$?"
+          printf "RESULT|%s|%s|%s|%s|%s|%s\n" "$actual_sha" "$api_state" "$worker_state" "$health_code" "$ready_code" "$preflight_code"'
+
+          output=''
+          ssh_code=99
+          if [[ "$AUTH_MODE" == 'key' ]]; then
+            output="$(ssh -i "$HOME/.ssh/business-shield-production" -p "$PROD_SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "$PROD_SSH_USER@$PROD_SSH_HOST" "$remote_script" 2>&1)"
+            ssh_code=$?
+          elif [[ "$AUTH_MODE" == 'password' ]]; then
+            output="$(SSHPASS="$PROD_SSH_PASSWORD" sshpass -e ssh -p "$PROD_SSH_PORT" -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "$PROD_SSH_USER@$PROD_SSH_HOST" "$remote_script" 2>&1)"
+            ssh_code=$?
+          else
+            output='SSH credential unavailable'
+          fi
+          echo "$output"
+
+          result_line="$(printf '%s\n' "$output" | grep '^RESULT|' | tail -n 1)"
+          IFS='|' read -r _ actual_sha api_state worker_state health_code ready_code preflight_code <<< "$result_line"
+          {
+            echo "ssh_code=$ssh_code"
+            echo "actual_sha=${actual_sha:-unknown}"
+            echo "api_state=${api_state:-unknown}"
+            echo "worker_state=${worker_state:-unknown}"
+            echo "health_code=${health_code:-000}"
+            echo "ready_code=${ready_code:-000}"
+            echo "preflight_code=${preflight_code:-99}"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Diagnose public HTTPS surface
+        id: public
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          code() {
+            curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' --connect-timeout 5 --max-time 15 --retry 1 --retry-all-errors "$PUBLIC_URL$1" 2>/dev/null || printf '000'
+          }
+          {
+            echo "root=$(code /)"
+            echo "reviews=$(code /reviews)"
+            echo "meta=$(code /api/v1/meta)"
+            echo "me=$(code /api/v1/me)"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record machine-readable smoke result
+        id: record
+        if: always()
+        shell: bash
+        env:
           RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
           RELEASE_BRANCH: ${{ steps.release.outputs.release_branch }}
+          SSH_CODE: ${{ steps.host.outputs.ssh_code }}
+          ACTUAL_SHA: ${{ steps.host.outputs.actual_sha }}
+          API_STATE: ${{ steps.host.outputs.api_state }}
+          WORKER_STATE: ${{ steps.host.outputs.worker_state }}
+          HEALTH_CODE: ${{ steps.host.outputs.health_code }}
+          READY_CODE: ${{ steps.host.outputs.ready_code }}
+          PREFLIGHT_CODE: ${{ steps.host.outputs.preflight_code }}
+          ROOT_CODE: ${{ steps.public.outputs.root }}
+          REVIEWS_CODE: ${{ steps.public.outputs.reviews }}
+          META_CODE: ${{ steps.public.outputs.meta }}
+          ME_CODE: ${{ steps.public.outputs.me }}
         run: |
           set -euo pipefail
-          status="FAIL"
-          if [[ "$SMOKE_STATUS" == "success" ]]; then status="PASS"; fi
+          status='PASS'
+          [[ "$SSH_CODE" == '0' ]] || status='FAIL'
+          [[ "$ACTUAL_SHA" == "$RELEASE_SHA" ]] || status='FAIL'
+          [[ "$API_STATE" == 'active' ]] || status='FAIL'
+          [[ "$WORKER_STATE" == 'active' ]] || status='FAIL'
+          [[ "$HEALTH_CODE" == '200' ]] || status='FAIL'
+          [[ "$READY_CODE" == '200' ]] || status='FAIL'
+          [[ "$PREFLIGHT_CODE" == '0' ]] || status='FAIL'
+          [[ "$ROOT_CODE" == '200' ]] || status='FAIL'
+          [[ "$REVIEWS_CODE" == '200' ]] || status='FAIL'
+          [[ "$META_CODE" == '200' ]] || status='FAIL'
+          [[ "$ME_CODE" == '401' ]] || status='FAIL'
+
+          git fetch origin ops/production-deploy
+          git reset --hard origin/ops/production-deploy
           mkdir -p deploy
           {
             echo "STATUS=$status"
             echo "RELEASE_BRANCH=${RELEASE_BRANCH:-unknown}"
             echo "RELEASE_SHA=${RELEASE_SHA:-unknown}"
+            echo "ACTUAL_SHA=${ACTUAL_SHA:-unknown}"
+            echo "SSH_CODE=${SSH_CODE:-99}"
+            echo "API_STATE=${API_STATE:-unknown}"
+            echo "WORKER_STATE=${WORKER_STATE:-unknown}"
+            echo "HEALTH_CODE=${HEALTH_CODE:-000}"
+            echo "READY_CODE=${READY_CODE:-000}"
+            echo "PREFLIGHT_CODE=${PREFLIGHT_CODE:-99}"
+            echo "PUBLIC_ROOT=${ROOT_CODE:-000}"
+            echo "PUBLIC_REVIEWS=${REVIEWS_CODE:-000}"
+            echo "PUBLIC_META=${META_CODE:-000}"
+            echo "PUBLIC_ME=${ME_CODE:-000}"
             echo "CHECKED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > deploy/production-smoke-status.env
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add deploy/production-smoke-status.env
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Record production smoke: $status ${RELEASE_SHA:-unknown}"
-          git push
+          if ! git diff --cached --quiet; then
+            git commit -m "Record production diagnostics: $status ${RELEASE_SHA:-unknown}"
+            git push origin HEAD:ops/production-deploy
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Assert production smoke passed
+        if: always()
+        shell: bash
+        env:
+          STATUS: ${{ steps.record.outputs.status }}
+        run: |
+          if [[ "$STATUS" != 'PASS' ]]; then
+            echo 'Production smoke failed; see deploy/production-smoke-status.env for sanitized diagnostics.' >&2
+            exit 1
+          fi
+          echo 'Production smoke passed.'
