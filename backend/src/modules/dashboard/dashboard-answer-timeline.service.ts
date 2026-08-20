@@ -7,6 +7,7 @@ const WEEK_DAYS = 7;
 type DashboardOverview = NonNullable<Awaited<ReturnType<typeof import('./dashboard.service.js').getDashboardOverview>>>;
 
 type ReviewPeriod = {
+  dates: string[];
   labels: string[];
   received: number[];
   answered: number[];
@@ -16,6 +17,7 @@ type ReviewPeriod = {
 };
 
 type RatingPeriod = {
+  dates: string[];
   labels: string[];
   values: number[];
   current: number;
@@ -60,6 +62,12 @@ function percentage(part: number, total: number): number {
   return total > 0 ? Number(((part / total) * 100).toFixed(1)) : 0;
 }
 
+function normalizedDates(candidate: unknown, labels: string[]): string[] {
+  if (!Array.isArray(candidate)) return [...labels];
+  const dates = candidate.map(String);
+  return dates.length === labels.length ? dates : [...labels];
+}
+
 export async function enrichDashboardWithAnswerTimeline(
   app: FastifyInstance,
   organizationId: string,
@@ -77,12 +85,14 @@ export async function enrichDashboardWithAnswerTimeline(
   const monthLabels = Array.isArray(overview.reviews?.month?.labels)
     ? overview.reviews.month.labels.map(String)
     : [];
+  const monthDates = normalizedDates(overview.reviews?.month?.dates, monthLabels);
   const monthReceived = Array.isArray(overview.reviews?.month?.received)
     ? overview.reviews.month.received.map(Number)
     : [];
   const monthRatingLabels = Array.isArray(overview.rating?.month?.labels)
     ? overview.rating.month.labels.map(String)
     : [];
+  const monthRatingDates = normalizedDates(overview.rating?.month?.dates, monthRatingLabels);
   const monthRatingValues = Array.isArray(overview.rating?.month?.values)
     ? overview.rating.month.values.map(Number)
     : [];
@@ -92,8 +102,9 @@ export async function enrichDashboardWithAnswerTimeline(
       ?? 0,
   );
 
-  if (!monthLabels.length) {
+  if (!monthDates.length) {
     const emptyReviewPeriod: ReviewPeriod = {
+      dates: [],
       labels: [],
       received: [],
       answered: [],
@@ -102,6 +113,7 @@ export async function enrichDashboardWithAnswerTimeline(
       growth: 0,
     };
     const emptyRatingPeriod: RatingPeriod = {
+      dates: [],
       labels: [],
       values: [],
       current: Number(overview.rating?.month?.current ?? 0),
@@ -168,24 +180,27 @@ export async function enrichDashboardWithAnswerTimeline(
     answeredByDay.set(key, (answeredByDay.get(key) ?? 0) + 1);
   }
 
-  const monthAnswered = monthLabels.map((label) => answeredByDay.get(label) ?? 0);
+  const monthAnswered = monthDates.map((key) => answeredByDay.get(key) ?? 0);
+  const weekDates = monthDates.slice(-WEEK_DAYS);
   const weekLabels = monthLabels.slice(-WEEK_DAYS);
   const weekReceived = monthReceived.slice(-WEEK_DAYS);
   const weekAnswered = monthAnswered.slice(-WEEK_DAYS);
 
-  const visibleMonthKeys = new Set(monthLabels);
-  const visibleWeekKeys = new Set(weekLabels);
+  const visibleMonthKeys = new Set(monthDates);
+  const visibleWeekKeys = new Set(weekDates);
   const monthReviewRows = activityRows.filter((row) => visibleMonthKeys.has(dateKey(row.receivedAt, overview.timezone)));
   const weekReviewRows = monthReviewRows.filter((row) => visibleWeekKeys.has(dateKey(row.receivedAt, overview.timezone)));
 
   const periodRating = (
     rows: typeof monthReviewRows,
+    dates: string[],
     labels: string[],
     values: number[],
   ): RatingPeriod => {
     const positive = rows.filter((row) => row.rating >= 4).length;
     const answered = rows.filter((row) => row.replies.some((reply) => Boolean(reply.publishedAt))).length;
     return {
+      dates,
       labels,
       values,
       current: Number(overview.rating?.month?.current ?? 0),
@@ -197,12 +212,14 @@ export async function enrichDashboardWithAnswerTimeline(
     };
   };
 
+  const weekRatingDates = monthRatingDates.slice(-WEEK_DAYS);
   const weekRatingLabels = monthRatingLabels.slice(-WEEK_DAYS);
   const weekRatingValues = monthRatingValues.slice(-WEEK_DAYS);
-  const weekRating = periodRating(weekReviewRows, weekRatingLabels, weekRatingValues);
-  const monthRating = periodRating(monthReviewRows, monthRatingLabels, monthRatingValues);
+  const weekRating = periodRating(weekReviewRows, weekRatingDates, weekRatingLabels, weekRatingValues);
+  const monthRating = periodRating(monthReviewRows, monthRatingDates, monthRatingLabels, monthRatingValues);
 
   const monthReviewPeriod: ReviewPeriod = {
+    dates: monthDates,
     labels: monthLabels,
     received: monthReceived,
     answered: monthAnswered,
@@ -211,6 +228,7 @@ export async function enrichDashboardWithAnswerTimeline(
     growth: growth(monthReceived),
   };
   const weekReviewPeriod: ReviewPeriod = {
+    dates: weekDates,
     labels: weekLabels,
     received: weekReceived,
     answered: weekAnswered,
