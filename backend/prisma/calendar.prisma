@@ -1,0 +1,19 @@
+model CalendarEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  createdByUserId String  @map("created_by_user_id") @db.Uuid
+  title          String   @db.VarChar(240)
+  eventDate      DateTime @map("event_date") @db.Date
+  eventTime      String   @map("event_time") @db.VarChar(5)
+  type           String   @db.VarChar(24)
+  tone           String   @db.VarChar(24)
+  note           String?  @db.Text
+  idempotencyKey String?  @map("idempotency_key") @db.VarChar(128)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([organizationId, idempotencyKey], map: "calendar_events_org_idempotency_key")
+  @@index([organizationId, eventDate], map: "calendar_events_org_date_idx")
+  @@index([organizationId, createdAt], map: "calendar_events_org_created_idx")
+  @@map("calendar_events")
+}

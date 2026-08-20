@@ -11,6 +11,7 @@ const SAFE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
   API_BASE: '/api/v1',
   DASHBOARD_OVERVIEW_ENDPOINT: '/api/v1/dashboard/overview',
   TASKS_ENDPOINT: '/api/v1/tasks',
+  CALENDAR_ENDPOINT: '/api/v1/calendar/events',
   INTEGRATIONS_ENDPOINT: '/api/v1/integrations',
   AUTOMATIONS_ENDPOINT: '/api/v1/automations',
   REPORTS_ENDPOINT: '/api/v1/reports',
