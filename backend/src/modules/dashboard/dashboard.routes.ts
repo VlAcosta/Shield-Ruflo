@@ -1,6 +1,13 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
 import { getDashboardOverview, type DashboardOverviewAccess } from './dashboard.service.js';
+import { enrichDashboardWithAnswerTimeline } from './dashboard-answer-timeline.service.js';
+import {
+  getPersistedDashboardLayout,
+  resetPersistedDashboardLayout,
+  savePersistedDashboardLayout,
+} from './dashboard-layout.service.js';
+import { saveDashboardLayoutSchema } from './dashboard-layout.schemas.js';
 
 function requireOrganizationId(request: FastifyRequest): string {
   const organizationId = request.auth?.organizationId;
@@ -14,6 +21,18 @@ function requireOrganizationId(request: FastifyRequest): string {
   return organizationId;
 }
 
+function requireUserId(request: FastifyRequest): string {
+  const userId = request.auth?.userId;
+  if (!userId) {
+    throw new AppError({
+      code: 'UNAUTHENTICATED',
+      message: 'Требуется авторизация',
+      statusCode: 401,
+    });
+  }
+  return userId;
+}
+
 function overviewAccess(request: FastifyRequest): DashboardOverviewAccess {
   const permissions = new Set(request.auth?.permissions ?? []);
   return {
@@ -23,6 +42,7 @@ function overviewAccess(request: FastifyRequest): DashboardOverviewAccess {
     reports: permissions.has('reports.view'),
     team: permissions.has('team.view'),
     integrations: permissions.has('integrations.view'),
+    billing: permissions.has('billing.view'),
   };
 }
 
@@ -30,11 +50,19 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
   app.get('/dashboard/overview', {
     preHandler: [app.authenticate, app.authorize('dashboard.view')],
   }, async (request) => {
-    const result = await getDashboardOverview(app, requireOrganizationId(request), overviewAccess(request));
+    const organizationId = requireOrganizationId(request);
+    const access = overviewAccess(request);
+    const result = await getDashboardOverview(app, organizationId, access);
     if (!result) {
       throw new AppError({ code: 'ORGANIZATION_NOT_FOUND', message: 'Организация не найдена', statusCode: 404 });
     }
-    return result;
+
+    const enriched = await enrichDashboardWithAnswerTimeline(app, organizationId, result);
+    return {
+      ...enriched,
+      reviews: access.reviews ? enriched.reviews : {},
+      rating: access.analytics ? enriched.rating : {},
+    };
   });
 
   app.get('/dashboard/reputation', {
@@ -54,4 +82,32 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
       reputation: result.reputation,
     };
   });
+
+  app.get('/dashboard/layout', {
+    preHandler: [app.authenticate, app.authorize('dashboard.view')],
+  }, async (request) => getPersistedDashboardLayout(
+    app,
+    requireOrganizationId(request),
+    requireUserId(request),
+  ));
+
+  app.put('/dashboard/layout', {
+    preHandler: [app.authenticate, app.authorize('dashboard.edit')],
+  }, async (request) => {
+    const { layout } = saveDashboardLayoutSchema.parse(request.body);
+    return savePersistedDashboardLayout(
+      app,
+      requireOrganizationId(request),
+      requireUserId(request),
+      layout,
+    );
+  });
+
+  app.delete('/dashboard/layout', {
+    preHandler: [app.authenticate, app.authorize('dashboard.edit')],
+  }, async (request) => resetPersistedDashboardLayout(
+    app,
+    requireOrganizationId(request),
+    requireUserId(request),
+  ));
 };

@@ -1,6 +1,37 @@
 import type { FastifyInstance } from 'fastify';
 
 const DAY_MS = 86_400_000;
+const ACTIVE_TASK_STATUSES = ['NEW', 'IN_PROGRESS', 'WAITING'] as const;
+
+const TASK_PRIORITY_META: Readonly<Record<string, { label: string; tone: string }>> = Object.freeze({
+  CRITICAL: { label: 'Критические', tone: 'purple' },
+  HIGH: { label: 'Высокий приоритет', tone: 'violet' },
+  MEDIUM: { label: 'Средний приоритет', tone: 'indigo' },
+  LOW: { label: 'Низкий приоритет', tone: 'cyan' },
+});
+
+const TASK_STATUS_META: Readonly<Record<string, { status: string; badge: string; tone: string }>> = Object.freeze({
+  NEW: { status: 'Новая', badge: 'neutral', tone: 'cyan' },
+  IN_PROGRESS: { status: 'В работе', badge: 'violet', tone: 'violet' },
+  WAITING: { status: 'Ожидает', badge: 'orange', tone: 'orange' },
+  DONE: { status: 'Выполнено', badge: 'green', tone: 'green' },
+  ARCHIVED: { status: 'Архив', badge: 'neutral', tone: 'neutral' },
+});
+
+const REPORT_STATUS_META: Readonly<Record<string, { status: string; size: string; tone: string }>> = Object.freeze({
+  READY: { status: 'Готов', size: 'Готов', tone: 'violet' },
+  GENERATING: { status: 'Формируется', size: 'Формируется', tone: 'orange' },
+  QUEUED: { status: 'Формируется', size: 'В очереди', tone: 'orange' },
+  FAILED: { status: 'Ошибка', size: 'Ошибка', tone: 'red' },
+});
+
+const ROLE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  OWNER: 'Владелец',
+  ADMIN: 'Администратор',
+  MANAGER: 'Менеджер',
+  ANALYST: 'Аналитик',
+  MEMBER: 'Участник',
+});
 
 export type DashboardOverviewAccess = {
   analytics: boolean;
@@ -9,6 +40,7 @@ export type DashboardOverviewAccess = {
   reports: boolean;
   team: boolean;
   integrations: boolean;
+  billing?: boolean;
 };
 
 type TimelineRow = {
@@ -22,6 +54,17 @@ type DailyPoint = {
   reviews: number;
   answered: number;
   averageRating: number | null;
+};
+
+type DashboardTaskRow = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  deadline: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  checklist: Array<{ completed: boolean }>;
 };
 
 function dateKey(date: Date, timezone: string): string {
@@ -43,11 +86,17 @@ function labelForDate(key: string, locale: string): string {
   }).format(date);
 }
 
-function buildDailySeries(
-  rows: TimelineRow[],
-  timezone: string,
-  days: number,
-): DailyPoint[] {
+function formatShortDate(date: Date | null | undefined, timezone: string, locale: string): string {
+  if (!date) return '—';
+  return new Intl.DateTimeFormat(locale || 'ru-RU', {
+    timeZone: timezone,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}
+
+function buildDailySeries(rows: TimelineRow[], timezone: string, days: number): DailyPoint[] {
   const map = new Map<string, { count: number; answered: number; ratingSum: number }>();
   for (const row of rows) {
     const key = dateKey(row.receivedAt, timezone);
@@ -101,6 +150,7 @@ function buildReviewsPeriod(rows: TimelineRow[], timezone: string, locale: strin
   const secondHalf = series.slice(Math.floor(series.length / 2)).reduce((sum, item) => sum + item.reviews, 0);
   const growth = firstHalf > 0 ? Number((((secondHalf - firstHalf) / firstHalf) * 100).toFixed(1)) : 0;
   return {
+    dates: series.map((item) => item.date),
     labels: series.map((item) => labelForDate(item.date, locale)),
     received: series.map((item) => item.reviews),
     answered: series.map((item) => item.answered),
@@ -121,6 +171,7 @@ function buildRatingPeriod(
   const positive = periodRows.filter((row) => row.rating >= 4).length;
   const answered = periodRows.filter((row) => row.answered).length;
   return {
+    dates: series.map((item) => item.date),
     labels: series.map((item) => labelForDate(item.date, locale)),
     values: series.map((item) => item.averageRating ?? 0),
     current: allCurrent ?? 0,
@@ -132,78 +183,61 @@ function buildRatingPeriod(
   };
 }
 
-function taskGroupLabel(task: {
-  reviewId: string | null;
-  caseId: string | null;
-  locationId: string | null;
-  businessId: string | null;
-}) {
-  if (task.reviewId) return 'Отзывы';
-  if (task.caseId) return 'Кейсы';
-  if (task.locationId) return 'Локации';
-  if (task.businessId) return 'Бизнес';
-  return 'Общие';
-}
+function buildTaskGroups(rows: DashboardTaskRow[], days: number, now: Date) {
+  const cutoff = now.getTime() - days * DAY_MS;
+  const groups = new Map<string, { id: string; label: string; total: number; completed: number; overdue: number; tone: string }>();
 
-function buildTaskGroups(
-  rows: Array<{
-    reviewId: string | null;
-    caseId: string | null;
-    locationId: string | null;
-    businessId: string | null;
-    status: string;
-    deadline: Date | null;
-    createdAt: Date;
-  }>,
-  days: number,
-) {
-  const cutoff = Date.now() - days * DAY_MS;
-  const source = rows.filter((task) => task.createdAt.getTime() >= cutoff);
-  const byType = new Map<string, { id: string; label: string; total: number; completed: number; overdue: number }>();
-  for (const task of source) {
-    const label = taskGroupLabel(task);
-    const current = byType.get(label) ?? {
-      id: label.toLocaleLowerCase('ru-RU').replace(/\s+/g, '-'),
-      label,
+  for (const row of rows) {
+    if (row.createdAt.getTime() < cutoff) continue;
+    const meta = TASK_PRIORITY_META[row.priority] ?? { label: row.priority, tone: 'indigo' };
+    const key = row.priority.toLowerCase();
+    const group = groups.get(key) ?? {
+      id: `priority-${key}`,
+      label: meta.label,
       total: 0,
       completed: 0,
       overdue: 0,
+      tone: meta.tone,
     };
-    current.total += 1;
-    if (task.status === 'DONE' || task.status === 'ARCHIVED') current.completed += 1;
-    if (!['DONE', 'ARCHIVED'].includes(task.status) && task.deadline && task.deadline.getTime() < Date.now()) current.overdue += 1;
-    byType.set(label, current);
+    group.total += 1;
+    if (row.status === 'DONE' || row.status === 'ARCHIVED') group.completed += 1;
+    if (!['DONE', 'ARCHIVED'].includes(row.status) && row.deadline && row.deadline < now) group.overdue += 1;
+    groups.set(key, group);
   }
-  const tones = ['indigo', 'violet', 'purple', 'indigo', 'violet'];
-  return [...byType.values()].slice(0, 8).map((item, index) => ({ ...item, tone: tones[index % tones.length] }));
+
+  const order = ['critical', 'high', 'medium', 'low'];
+  return [...groups.values()].sort((left, right) => {
+    const leftIndex = order.indexOf(left.id.replace('priority-', ''));
+    const rightIndex = order.indexOf(right.id.replace('priority-', ''));
+    return (leftIndex < 0 ? order.length : leftIndex) - (rightIndex < 0 ? order.length : rightIndex);
+  });
 }
 
-function taskProgress(status: string): number {
-  if (status === 'DONE' || status === 'ARCHIVED') return 100;
-  if (status === 'IN_PROGRESS') return 62;
-  if (status === 'WAITING') return 38;
+function taskProgress(task: DashboardTaskRow): number {
+  if (task.status === 'DONE' || task.status === 'ARCHIVED') return 100;
+  if (task.checklist.length) {
+    const completed = task.checklist.filter((item) => item.completed).length;
+    return Math.max(8, Math.round((completed / task.checklist.length) * 100));
+  }
+  if (task.status === 'IN_PROGRESS') return 62;
+  if (task.status === 'WAITING') return 38;
   return 16;
 }
 
-function buildProcesses(
-  rows: Array<{ id: string; title: string; status: string; deadline: Date | null; createdAt: Date }>,
-  locale: string,
-  timezone: string,
-) {
-  const statusMeta: Record<string, { status: string; badge: string; tone: string }> = {
-    DONE: { status: 'Выполнено', badge: 'green', tone: 'green' },
-    ARCHIVED: { status: 'Выполнено', badge: 'green', tone: 'green' },
-    IN_PROGRESS: { status: 'В работе', badge: 'violet', tone: 'violet' },
-    WAITING: { status: 'Ожидает', badge: 'orange', tone: 'orange' },
-    NEW: { status: 'Новая', badge: 'neutral', tone: 'cyan' },
-  };
-  return rows.slice(0, 4).map((task) => ({
-    id: task.id,
-    title: task.title,
-    progress: taskProgress(task.status),
-    date: new Intl.DateTimeFormat(locale || 'ru-RU', { timeZone: timezone }).format(task.deadline ?? task.createdAt),
-    ...(statusMeta[task.status] ?? statusMeta.NEW),
-  }));
+function buildProcesses(rows: DashboardTaskRow[], locale: string, timezone: string) {
+  return rows.slice(0, 4).map((task) => {
+    const status = TASK_STATUS_META[task.status] ?? TASK_STATUS_META.NEW!;
+    return {
+      id: task.id,
+      title: task.title,
+      progress: taskProgress(task),
+      date: formatShortDate(task.deadline ?? task.updatedAt, timezone, locale),
+      status: status.status,
+      badge: status.badge,
+      tone: status.tone,
+      priority: task.priority,
+    };
+  });
 }
 
 function buildReports(
@@ -213,66 +247,32 @@ function buildReports(
   days: number,
 ) {
   const cutoff = Date.now() - days * DAY_MS;
-  const statusMeta: Record<string, { status: string; size: string; tone: string }> = {
-    READY: { status: 'Готов', size: 'Готов', tone: 'violet' },
-    GENERATING: { status: 'Формируется', size: 'Формируется', tone: 'orange' },
-    QUEUED: { status: 'Формируется', size: 'В очереди', tone: 'orange' },
-    FAILED: { status: 'Ошибка', size: 'Ошибка', tone: 'red' },
-  };
   return rows
     .filter((report) => report.createdAt.getTime() >= cutoff)
     .slice(0, 6)
     .map((report) => ({
       id: report.id,
       title: report.title,
-      date: new Intl.DateTimeFormat(locale || 'ru-RU', { timeZone: timezone }).format(report.generatedAt ?? report.createdAt),
-      ...(statusMeta[report.status] ?? statusMeta.QUEUED),
+      date: formatShortDate(report.generatedAt ?? report.createdAt, timezone, locale),
+      ...(REPORT_STATUS_META[report.status] ?? REPORT_STATUS_META.QUEUED),
     }));
 }
 
-function memberInitials(member: { displayName: string | null; firstName: string | null; lastName: string | null; email: string | null }) {
-  const source = String(member.displayName || `${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || member.email || '?').trim();
-  const parts = source.split(/\s+/).filter(Boolean);
-  return `${parts[0]?.[0] ?? '?'}${parts[1]?.[0] ?? ''}`.toLocaleUpperCase('ru-RU');
+function initials(input: string): string {
+  return input
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || '?';
 }
 
-function normalizeTeam(
-  rows: Array<{
-    id: string;
-    role: string;
-    user: {
-      displayName: string | null;
-      firstName: string | null;
-      lastName: string | null;
-      email: string | null;
-      lastLoginAt: Date | null;
-    };
-  }>,
-) {
-  const roleLabels: Record<string, string> = {
-    OWNER: 'Владелец',
-    ADMIN: 'Администратор',
-    MANAGER: 'Менеджер',
-    ANALYST: 'Аналитик',
-    MEMBER: 'Участник',
-  };
-  const now = Date.now();
-  return rows.map((member, index) => {
-    const name = member.user.displayName
-      || `${member.user.firstName ?? ''} ${member.user.lastName ?? ''}`.trim()
-      || member.user.email
-      || 'Участник';
-    const age = member.user.lastLoginAt ? now - member.user.lastLoginAt.getTime() : Number.POSITIVE_INFINITY;
-    const status = age <= 15 * 60_000 ? 'online' : age <= DAY_MS ? 'away' : 'offline';
-    return {
-      id: member.id,
-      name,
-      initials: memberInitials(member.user),
-      role: roleLabels[member.role] ?? member.role,
-      status,
-      tone: ['violet', 'purple', 'cyan', 'orange'][index % 4],
-    };
-  });
+function presenceStatus(lastSeen: Date | null, lastLoginAt: Date | null, now: Date): 'online' | 'away' | 'offline' {
+  if (lastSeen && now.getTime() - lastSeen.getTime() <= 15 * 60_000) return 'online';
+  const activity = lastSeen ?? lastLoginAt;
+  if (activity && now.getTime() - activity.getTime() <= 7 * DAY_MS) return 'away';
+  return 'offline';
 }
 
 export async function getDashboardOverview(
@@ -285,6 +285,7 @@ export async function getDashboardOverview(
     reports: false,
     team: false,
     integrations: false,
+    billing: false,
   },
 ) {
   const organization = await app.prisma.organization.findFirst({
@@ -298,7 +299,7 @@ export async function getDashboardOverview(
   const since1 = new Date(now.getTime() - DAY_MS);
   const since7 = new Date(now.getTime() - 7 * DAY_MS);
   const since28 = new Date(now.getTime() - 28 * DAY_MS);
-  const since31 = new Date(now.getTime() - 31 * DAY_MS);
+  const since92 = new Date(now.getTime() - 92 * DAY_MS);
   const since365 = new Date(now.getTime() - 365 * DAY_MS);
 
   const [
@@ -315,9 +316,13 @@ export async function getDashboardOverview(
     workflowDistribution,
     sourceDistribution,
     timelineRaw,
+    openTasks,
+    overdueTasks,
     taskRows,
     reportRows,
     teamRows,
+    integrationAccounts,
+    subscription,
   ] = await Promise.all([
     app.prisma.review.aggregate({
       where: { organizationId },
@@ -330,9 +335,7 @@ export async function getDashboardOverview(
     app.prisma.review.count({ where: { organizationId, receivedAt: { gte: since365 } } }),
     app.prisma.review.count({ where: { organizationId, rating: { gte: 4 } } }),
     app.prisma.review.count({ where: { organizationId, rating: { lte: 2 } } }),
-    app.prisma.review.count({
-      where: { organizationId, replies: { some: { status: 'PUBLISHED' } } },
-    }),
+    app.prisma.review.count({ where: { organizationId, replies: { some: { status: 'PUBLISHED' } } } }),
     app.prisma.reviewSource.count({ where: { organizationId, status: 'ACTIVE' } }),
     access.analytics
       ? app.prisma.review.groupBy({ where: { organizationId }, by: ['rating'], _count: { _all: true } })
@@ -358,39 +361,58 @@ export async function getDashboardOverview(
       take: 50_000,
     }),
     access.tasks
+      ? app.prisma.task.count({ where: { organizationId, status: { in: [...ACTIVE_TASK_STATUSES] } } })
+      : Promise.resolve(0),
+    access.tasks
+      ? app.prisma.task.count({
+          where: {
+            organizationId,
+            status: { in: [...ACTIVE_TASK_STATUSES] },
+            deadline: { lt: now },
+          },
+        })
+      : Promise.resolve(0),
+    access.tasks
       ? app.prisma.task.findMany({
-          where: { organizationId, createdAt: { gte: since31 } },
+          where: { organizationId, archivedAt: null, createdAt: { gte: since92 } },
           select: {
             id: true,
             title: true,
             status: true,
+            priority: true,
             deadline: true,
             createdAt: true,
-            reviewId: true,
-            caseId: true,
-            locationId: true,
-            businessId: true,
+            updatedAt: true,
+            checklist: { select: { completed: true } },
           },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
           take: 2_000,
         })
       : Promise.resolve([]),
     access.reports
       ? app.prisma.report.findMany({
-          where: { organizationId, createdAt: { gte: since31 } },
-          select: { id: true, title: true, status: true, createdAt: true, generatedAt: true },
+          where: { organizationId, createdAt: { gte: since92 } },
+          select: { id: true, title: true, status: true, generatedAt: true, createdAt: true },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 100,
         })
       : Promise.resolve([]),
     access.team
       ? app.prisma.organizationMember.findMany({
-          where: { organizationId, status: 'ACTIVE' },
+          where: {
+            organizationId,
+            status: 'ACTIVE',
+            OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }],
+            user: { status: 'ACTIVE' },
+          },
           select: {
             id: true,
             role: true,
+            joinedAt: true,
+            createdAt: true,
             user: {
               select: {
+                id: true,
                 displayName: true,
                 firstName: true,
                 lastName: true,
@@ -399,10 +421,37 @@ export async function getDashboardOverview(
               },
             },
           },
-          orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
-          take: 8,
+          orderBy: [{ joinedAt: 'asc' }, { createdAt: 'asc' }],
+          take: 50,
         })
       : Promise.resolve([]),
+    access.integrations
+      ? app.prisma.integrationAccount.findMany({
+          where: { organizationId },
+          select: {
+            id: true,
+            provider: true,
+            name: true,
+            status: true,
+            lastSyncedAt: true,
+            lastErrorCode: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 50,
+        })
+      : Promise.resolve([]),
+    access.billing
+      ? app.prisma.subscription.findFirst({
+          where: { organizationId },
+          select: {
+            status: true,
+            currentPeriodEnd: true,
+            autoRenew: true,
+            plan: { select: { code: true, name: true } },
+          },
+          orderBy: { updatedAt: 'desc' },
+        })
+      : Promise.resolve(null),
   ]);
 
   const timelineRows: TimelineRow[] = timelineRaw.map((row) => ({
@@ -410,21 +459,41 @@ export async function getDashboardOverview(
     rating: row.rating,
     answered: row.replies.length > 0,
   }));
+
+  const memberUserIds = teamRows.map((member) => member.user.id);
+  const activeSessions = access.team && memberUserIds.length
+    ? await app.prisma.session.findMany({
+        where: {
+          userId: { in: memberUserIds },
+          activeOrganizationId: organizationId,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        select: { userId: true, lastSeenAt: true, createdAt: true },
+      })
+    : [];
+  const latestSessionByUser = new Map<string, Date>();
+  for (const session of activeSessions) {
+    const seenAt = session.lastSeenAt ?? session.createdAt;
+    const previous = latestSessionByUser.get(session.userId);
+    if (!previous || seenAt > previous) latestSessionByUser.set(session.userId, seenAt);
+  }
+
   const total = aggregate._count._all;
   const averageRating = roundRating(aggregate._avg.rating);
   const measured = total > 0;
   const positiveShare = percent(positive, total);
   const negativeShare = percent(negative, total);
   const responseCoverage = percent(answered, total);
+  const connectedIntegrations = access.integrations
+    ? integrationAccounts.filter((item) => item.status === 'CONNECTED' || item.status === 'DEGRADED').length
+    : 0;
 
   const pulseScore = measured
     ? Math.round(
         Math.min(
           100,
-          Math.max(
-            0,
-            ((averageRating ?? 0) / 5) * 55 + positiveShare * 0.25 + responseCoverage * 0.2,
-          ),
+          Math.max(0, ((averageRating ?? 0) / 5) * 55 + positiveShare * 0.25 + responseCoverage * 0.2),
         ),
       )
     : null;
@@ -438,12 +507,25 @@ export async function getDashboardOverview(
     : [];
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const pulseSeries = buildDailySeries(rowsWithinDays(timelineRows, 14), organization.timezone, 14);
-  const openTasks = access.tasks
-    ? taskRows.filter((task) => !['DONE', 'ARCHIVED'].includes(task.status)).length
-    : 0;
-  const overdueTasks = access.tasks
-    ? taskRows.filter((task) => !['DONE', 'ARCHIVED'].includes(task.status) && task.deadline && task.deadline < now).length
-    : 0;
+
+  const team = access.team
+    ? teamRows.map((member, index) => {
+        const fullName = member.user.displayName
+          || `${member.user.firstName ?? ''} ${member.user.lastName ?? ''}`.trim()
+          || member.user.email
+          || 'Участник команды';
+        const lastSeen = latestSessionByUser.get(member.user.id) ?? null;
+        return {
+          id: member.id,
+          userId: member.user.id,
+          initials: initials(fullName),
+          name: fullName,
+          role: ROLE_LABELS[member.role] ?? member.role,
+          tone: ['violet', 'purple', 'orange', 'cyan'][index % 4],
+          status: presenceStatus(lastSeen, member.user.lastLoginAt, now),
+        };
+      })
+    : [];
 
   return {
     contractVersion: 2,
@@ -457,7 +539,7 @@ export async function getDashboardOverview(
       reports: access.reports,
       team: access.team,
       integrations: access.integrations,
-      billing: false,
+      billing: Boolean(access.billing),
     },
     metrics: {
       reviews: {
@@ -476,9 +558,24 @@ export async function getDashboardOverview(
           }
         : null,
       shield: {
-        active: activeSources > 0,
-        caption: activeSources ? `${activeSources} активных источников` : 'Источники не подключены',
+        active: activeSources > 0 || connectedIntegrations > 0,
+        caption: activeSources
+          ? `${activeSources} активных источников`
+          : connectedIntegrations
+            ? `${connectedIntegrations} интеграций подключено`
+            : 'Источники не подключены',
       },
+      subscription: access.billing
+        ? {
+            activeUntil: subscription?.currentPeriodEnd?.toISOString() ?? null,
+            planName: subscription?.plan.name ?? '',
+            planCode: subscription?.plan.code ?? '',
+            status: subscription?.status.toLowerCase() ?? 'unknown',
+            autoRenew: subscription?.autoRenew ?? false,
+            connectedCount: connectedIntegrations,
+            spark: [],
+          }
+        : null,
     },
     pulse: {
       measured,
@@ -538,8 +635,11 @@ export async function getDashboardOverview(
       : {},
     tasks: access.tasks
       ? {
-          week: buildTaskGroups(taskRows, 7),
-          month: buildTaskGroups(taskRows, 31),
+          open: openTasks,
+          overdue: overdueTasks,
+          week: buildTaskGroups(taskRows, 7, now),
+          month: buildTaskGroups(taskRows, 31, now),
+          quarter: buildTaskGroups(taskRows, 92, now),
         }
       : {},
     processes: access.tasks ? buildProcesses(taskRows, organization.locale, organization.timezone) : [],
@@ -547,15 +647,22 @@ export async function getDashboardOverview(
       ? {
           week: buildReports(reportRows, organization.locale, organization.timezone, 7),
           month: buildReports(reportRows, organization.locale, organization.timezone, 31),
+          quarter: buildReports(reportRows, organization.locale, organization.timezone, 92),
         }
       : {},
-    team: access.team ? normalizeTeam(teamRows) : [],
+    team,
+    teamMeta: {
+      total: team.length,
+      online: team.filter((member) => member.status === 'online').length,
+    },
     integrations: access.integrations
-      ? sources.map((source) => ({
-          id: source.id,
-          provider: source.provider,
-          name: source.name,
-          status: source.status,
+      ? integrationAccounts.map((account) => ({
+          id: account.id,
+          provider: account.provider,
+          name: account.name,
+          status: account.status,
+          lastSyncedAt: account.lastSyncedAt?.toISOString() ?? null,
+          lastErrorCode: account.lastErrorCode,
         }))
       : [],
   };
