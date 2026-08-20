@@ -42,6 +42,7 @@ function overviewAccess(request: FastifyRequest): DashboardOverviewAccess {
     reports: permissions.has('reports.view'),
     team: permissions.has('team.view'),
     integrations: permissions.has('integrations.view'),
+    billing: permissions.has('billing.view'),
   };
 }
 
@@ -50,11 +51,18 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [app.authenticate, app.authorize('dashboard.view')],
   }, async (request) => {
     const organizationId = requireOrganizationId(request);
-    const result = await getDashboardOverview(app, organizationId, overviewAccess(request));
+    const access = overviewAccess(request);
+    const result = await getDashboardOverview(app, organizationId, access);
     if (!result) {
       throw new AppError({ code: 'ORGANIZATION_NOT_FOUND', message: 'Организация не найдена', statusCode: 404 });
     }
-    return enrichDashboardWithAnswerTimeline(app, organizationId, result);
+
+    const enriched = await enrichDashboardWithAnswerTimeline(app, organizationId, result);
+    return {
+      ...enriched,
+      reviews: access.reviews ? enriched.reviews : {},
+      rating: access.analytics ? enriched.rating : {},
+    };
   });
 
   app.get('/dashboard/reputation', {
