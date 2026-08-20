@@ -63,7 +63,6 @@ function migrateLegacyLayout() {
     if (!layout) continue;
 
     writeStorageKey(currentLayoutKey(), layout);
-    // These v2 keys predate account scoping. Treat migration as one-time.
     try { window.localStorage.removeItem(key); } catch { /* noop */ }
     return layout;
   }
@@ -105,6 +104,14 @@ async function apiRequest(options = {}) {
   return coreApiRequest(API_ENDPOINT, { ...options, timeout: 8000 });
 }
 
+async function migrateLocalLayoutToRemote(localLayout) {
+  await apiRequest({
+    method: 'PUT',
+    body: JSON.stringify({ layout: localLayout }),
+  });
+  return localLayout;
+}
+
 export async function getDashboardLayout() {
   const localLayout = readLocalLayout();
 
@@ -117,7 +124,14 @@ export async function getDashboardLayout() {
 
   try {
     const payload = await apiRequest();
-    const layout = normalizeDashboardLayout(payload?.layout ?? payload);
+    const explicitlyEmpty = payload
+      && typeof payload === 'object'
+      && Object.prototype.hasOwnProperty.call(payload, 'layout')
+      && payload.layout == null;
+
+    const layout = explicitlyEmpty
+      ? await migrateLocalLayoutToRemote(localLayout)
+      : normalizeDashboardLayout(payload?.layout ?? payload);
     cacheDashboardLayout(layout);
 
     return {

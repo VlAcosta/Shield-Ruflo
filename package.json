@@ -19,7 +19,7 @@
     "test:ci": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx --max-warnings=0",
-    "test:e2e:p0": "playwright test e2e/p0-session-reload.spec.cjs"
+    "test:e2e:p0": "playwright test e2e/p0-session-reload.spec.cjs e2e/dashboard-smoke.spec.cjs e2e/dashboard-layout-persistence.spec.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.1",

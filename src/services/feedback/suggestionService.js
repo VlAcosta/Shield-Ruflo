@@ -1,5 +1,7 @@
-const SUGGESTION_ENDPOINT = process.env.REACT_APP_SUGGESTIONS_ENDPOINT || '';
-const SUGGESTION_EMAIL = process.env.REACT_APP_SUGGESTIONS_EMAIL || '';
+import { getRuntimeEnv } from '../core/runtimeEnv';
+
+const SUGGESTION_ENDPOINT = getRuntimeEnv('SUGGESTIONS_ENDPOINT', '');
+const SUGGESTION_EMAIL = getRuntimeEnv('SUGGESTIONS_EMAIL', '');
 const QUEUE_KEY = 'business-shield:suggestions:queue:v1';
 
 function readQueue() {
