@@ -6,6 +6,42 @@ type ProviderHttpOptions = {
   successStatuses?: number[];
 };
 
+const OFFICIAL_PROVIDER_HOSTS: Readonly<Record<string, ReadonlySet<string>>> = Object.freeze({
+  wildberries: new Set(['feedbacks-api.wildberries.ru']),
+  ozon: new Set(['api-seller.ozon.ru']),
+  '2gis': new Set(['catalog.api.2gis.com']),
+});
+
+function assertAllowedProviderTarget(rawUrl: string, provider: string): void {
+  const allowedHosts = OFFICIAL_PROVIDER_HOSTS[provider.toLowerCase()];
+  if (!allowedHosts) return;
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch (error) {
+    throw new ProviderAdapterError({
+      code: `${provider.toUpperCase()}_URL_INVALID`,
+      message: `${provider}: некорректный адрес внешнего API`,
+      statusCode: 422,
+      retryable: false,
+      cause: error,
+    });
+  }
+  if (
+    url.protocol !== 'https:'
+    || Boolean(url.username)
+    || Boolean(url.password)
+    || !allowedHosts.has(url.hostname.toLowerCase())
+  ) {
+    throw new ProviderAdapterError({
+      code: `${provider.toUpperCase()}_HOST_NOT_ALLOWED`,
+      message: `${provider}: запрос разрешён только к официальному API host`,
+      statusCode: 422,
+      retryable: false,
+    });
+  }
+}
+
 function errorForStatus(provider: string, status: number): ProviderAdapterError {
   if (status === 401 || status === 403) {
     return new ProviderAdapterError({
@@ -44,6 +80,7 @@ export async function providerFetch(
   init: RequestInit,
   options: ProviderHttpOptions,
 ): Promise<Response> {
+  assertAllowedProviderTarget(url, options.provider);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12_000);
   try {
