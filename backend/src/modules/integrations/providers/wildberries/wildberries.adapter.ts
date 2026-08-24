@@ -13,6 +13,7 @@ import { ProviderAdapterError } from '../provider.errors.js';
 const DEFAULT_BASE_URL = 'https://feedbacks-api.wildberries.ru';
 const PAGE_SIZE = 1000;
 
+type WbEnvelope = { error?: boolean; errorText?: string };
 type WbFeedback = {
   id?: string;
   text?: string;
@@ -25,13 +26,11 @@ type WbFeedback = {
   photoLinks?: Array<{ fullSize?: string; miniSize?: string }>;
 };
 
-type WbListResponse = {
+type WbListResponse = WbEnvelope & {
   data?: { feedbacks?: WbFeedback[] };
-  error?: boolean;
-  errorText?: string;
 };
 
-type WbSingleResponse = { data?: WbFeedback; error?: boolean; errorText?: string };
+type WbSingleResponse = WbEnvelope & { data?: WbFeedback };
 
 type CursorState = { answered: boolean; skip: number };
 
@@ -100,7 +99,7 @@ function mapFeedback(feedback: WbFeedback): ProviderReviewRecord | null {
   };
 }
 
-function assertEnvelope(payload: WbListResponse | WbSingleResponse) {
+function assertEnvelope(payload: WbEnvelope) {
   if (payload.error) {
     throw new ProviderAdapterError({
       code: 'WILDBERRIES_API_ERROR',
@@ -122,7 +121,7 @@ export class WildberriesProviderAdapter implements ProviderAdapter {
 
   async connect(context: ProviderConnectionContext) {
     const url = new URL('/api/v1/feedbacks/count-unanswered', baseUrl(context));
-    const payload = await providerFetchJson<{ data?: number; error?: boolean; errorText?: string }>(url.toString(), {
+    const payload = await providerFetchJson<WbEnvelope & { data?: number }>(url.toString(), {
       method: 'GET',
       headers: headers(context),
     }, { provider: 'wildberries' });
@@ -183,8 +182,6 @@ export class WildberriesProviderAdapter implements ProviderAdapter {
       headers: headers(context),
       body: JSON.stringify({ id: input.reviewReference, text }),
     }, { provider: 'wildberries', successStatuses: [204] });
-    // WB accepts the request before a durable answer can be proven. Reconcile
-    // with GET /feedback before Business Shield marks the reply as published.
     return { status: 'UNKNOWN', providerState: 'ANSWER_ACCEPTED_FOR_RECONCILIATION' };
   }
 
