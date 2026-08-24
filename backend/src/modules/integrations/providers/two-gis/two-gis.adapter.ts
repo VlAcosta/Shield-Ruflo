@@ -1,8 +1,8 @@
 import type {
   ProviderAdapter,
   ProviderConnectionContext,
+  ProviderLocationProfileField,
   ProviderLocationProfileRecord,
-  ProviderLocationProfileSyncResult,
 } from '../provider.types.js';
 import { configString, providerFetchJson, requireCredential } from '../provider-http.js';
 import { ProviderAdapterError } from '../provider.errors.js';
@@ -48,15 +48,36 @@ function placeId(context: ProviderConnectionContext): string {
 }
 
 function mapItem(item: TwoGisItem): ProviderLocationProfileRecord {
+  const title = String(item.name || item.full_name || '2GIS').trim() || '2GIS';
+  const address = String(item.full_address_name || item.address_name || '').trim();
+  const attributes: Record<string, unknown> = {
+    purposeName: item.purpose_name ?? null,
+    generalRating: typeof item.reviews?.general_rating === 'number' ? item.reviews.general_rating : null,
+    generalReviewCount: typeof item.reviews?.general_review_count === 'number' ? item.reviews.general_review_count : null,
+    isReviewable: item.reviews?.is_reviewable ?? null,
+    statistics: item.statistics ?? {},
+    reviewTextAvailableViaApi: false,
+  };
+  const coveredFields: ProviderLocationProfileField[] = ['name', 'attributes'];
+  if (address) coveredFields.push('address');
+  if (item.schedule) coveredFields.push('regularHours');
+
   return {
-    externalLocationId: String(item.id || ''),
-    name: String(item.name || item.full_name || '2GIS'),
-    address: item.full_address_name || item.address_name,
-    rating: typeof item.reviews?.general_rating === 'number' ? item.reviews.general_rating : undefined,
-    reviewCount: typeof item.reviews?.general_review_count === 'number' ? item.reviews.general_review_count : undefined,
+    externalId: String(item.id || ''),
+    title,
+    ...(address ? { address } : {}),
+    ...(item.schedule ? { regularHours: item.schedule } : {}),
+    attributes,
+    coveredFields,
+    observedAt: new Date(),
     raw: {
+      id: item.id ?? null,
+      name: item.name ?? null,
+      fullName: item.full_name ?? null,
+      addressName: item.address_name ?? null,
+      fullAddressName: item.full_address_name ?? null,
       purposeName: item.purpose_name ?? null,
-      reviewable: item.reviews?.is_reviewable ?? null,
+      reviews: item.reviews ?? null,
       statistics: item.statistics ?? {},
       schedule: item.schedule ?? {},
       reviewTextAvailableViaApi: false,
@@ -128,7 +149,7 @@ export class TwoGisProviderAdapter implements ProviderAdapter {
     return { confirmed: true };
   }
 
-  async syncLocationProfiles(context: ProviderConnectionContext): Promise<ProviderLocationProfileSyncResult> {
-    return { locations: [mapItem(await loadItem(context))] };
+  async syncLocationProfiles(context: ProviderConnectionContext): Promise<ProviderLocationProfileRecord[]> {
+    return [mapItem(await loadItem(context))];
   }
 }
