@@ -3,7 +3,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.js';
 import { env } from './config/env.js';
 import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
-import { registerGoogleBusinessProfileProvider } from './modules/integrations/providers/google/index.js';
+import { registerIntegrationProviders } from './modules/integrations/providers/index.js';
+import { scheduleDueIntegrationSyncs } from './modules/integrations/integration-scheduler.service.js';
 import { processReviewAnalysisJob } from './modules/ai/review-intelligence.service.js';
 import { processAiReplyGenerationJob } from './modules/ai/reply-copilot.service.js';
 import { registerAiProviders } from './modules/ai/providers/index.js';
@@ -16,8 +17,11 @@ import {
   processWebhookDeliveryJob,
   syncWebhookDeliveryJobFailure,
 } from './modules/webhooks/webhook-delivery.service.js';
+import { scheduleDueReports, type ScheduledReportDelivery } from './modules/reports/report-scheduler.service.js';
+import { enqueueReportDelivery, processReportDeliveryJob } from './modules/reports/report-delivery.service.js';
+import { processSuggestionDeliveryJob } from './modules/feedback/feedback.service.js';
 
-registerGoogleBusinessProfileProvider();
+registerIntegrationProviders();
 registerAiProviders();
 
 const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
@@ -26,6 +30,8 @@ const workerId = crypto.randomUUID();
 const JOB_LEASE_TIMEOUT_MS = 5 * 60_000;
 const JOB_CANDIDATE_BATCH = 25;
 let stopping = false;
+let lastIntegrationSchedulerAt = 0;
+let lastReportSchedulerAt = 0;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -40,6 +46,18 @@ async function processIntegrationSync(payload: any) {
   const accountId = String(payload?.accountId || '');
   if (!syncRunId || !accountId) throw new Error('INVALID_INTEGRATION_SYNC_JOB');
   return processIntegrationReviewSync(prisma, { syncRunId, accountId });
+}
+
+function scheduledDelivery(value: unknown): ScheduledReportDelivery | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const channel = source.channel;
+  if (channel !== 'email' && channel !== 'telegram') return null;
+  const scheduleId = String(source.scheduleId || '');
+  const slot = String(source.slot || '');
+  if (!scheduleId || !slot) return null;
+  const destination = typeof source.destination === 'string' ? source.destination : undefined;
+  return { scheduleId, channel, slot, ...(destination ? { destination } : {}) };
 }
 
 async function processReport(payload: any) {
@@ -78,6 +96,15 @@ async function processReport(payload: any) {
     where: { id: report.id },
     data: { status: 'READY', data, generatedAt: new Date(), errorMessage: null },
   });
+
+  const delivery = scheduledDelivery(payload?.delivery);
+  if (delivery) {
+    await enqueueReportDelivery(prisma, {
+      organizationId: report.organizationId,
+      reportId: report.id,
+      delivery,
+    });
+  }
 }
 
 async function processJob(job: any) {
@@ -132,6 +159,18 @@ async function processJob(job: any) {
     return processWebhookDeliveryJob(prisma, { deliveryId });
   }
   if (job.type === 'report.generate') return processReport(job.payload);
+  if (job.type === 'report.deliver') {
+    const reportId = String(job.payload?.reportId || '');
+    const organizationId = String(job.organizationId || '');
+    const delivery = scheduledDelivery(job.payload?.delivery);
+    if (!reportId || !organizationId || !delivery) throw new Error('INVALID_REPORT_DELIVERY_JOB');
+    return processReportDeliveryJob(prisma, { organizationId, reportId, delivery });
+  }
+  if (job.type === 'feedback.suggestion.deliver') {
+    const suggestionId = String(job.payload?.suggestionId || '');
+    if (!suggestionId) throw new Error('INVALID_SUGGESTION_DELIVERY_JOB');
+    return processSuggestionDeliveryJob(prisma, { suggestionId });
+  }
   throw new Error(`UNSUPPORTED_JOB_TYPE:${job.type}`);
 }
 
@@ -246,11 +285,46 @@ async function finishFailure(job: any, error: unknown) {
       error: message,
     });
   }
+  if (job.type === 'feedback.suggestion.deliver' && exhausted) {
+    const suggestionId = String(job.payload?.suggestionId || '');
+    if (suggestionId) {
+      await prisma.productSuggestion.updateMany({
+        where: { id: suggestionId },
+        data: { deliveryStatus: 'FAILED', lastError: message.slice(0, 4000) },
+      });
+    }
+  }
+}
+
+async function maybeRunSchedulers() {
+  const now = Date.now();
+  if (env.INTEGRATION_SYNC_SCHEDULER_ENABLED && now - lastIntegrationSchedulerAt >= env.INTEGRATION_SYNC_POLL_SECONDS * 1000) {
+    lastIntegrationSchedulerAt = now;
+    try {
+      const result = await scheduleDueIntegrationSyncs(prisma, {
+        now: new Date(now),
+        defaultIntervalMinutes: env.INTEGRATION_SYNC_DEFAULT_INTERVAL_MINUTES,
+      });
+      if (result.scheduled) console.log(JSON.stringify({ level: 'info', message: 'Scheduled provider sync jobs', count: result.scheduled }));
+    } catch (error) {
+      console.error(JSON.stringify({ level: 'error', message: 'Provider sync scheduler failed', error: error instanceof Error ? error.message : String(error) }));
+    }
+  }
+  if (env.REPORT_SCHEDULER_ENABLED && now - lastReportSchedulerAt >= env.REPORT_SCHEDULER_POLL_SECONDS * 1000) {
+    lastReportSchedulerAt = now;
+    try {
+      const result = await scheduleDueReports(prisma, { now: new Date(now) });
+      if (result.scheduled) console.log(JSON.stringify({ level: 'info', message: 'Scheduled report jobs', count: result.scheduled }));
+    } catch (error) {
+      console.error(JSON.stringify({ level: 'error', message: 'Report scheduler failed', error: error instanceof Error ? error.message : String(error) }));
+    }
+  }
 }
 
 async function main() {
   console.log(JSON.stringify({ level: 'info', message: 'Business Shield worker started', workerId }));
   while (!stopping) {
+    await maybeRunSchedulers();
     const job = await claimNextJob();
     if (!job) {
       await sleep(1500);
