@@ -14,8 +14,8 @@ function ReportSchedule({ schedules, saving, onSave }) {
 
   const scheduleSignature = JSON.stringify(schedules);
   useEffect(() => {
-    setDraft(schedules.map((item) => ({ ...item })));
-  }, [scheduleSignature, schedules]);
+    setDraft(JSON.parse(scheduleSignature));
+  }, [scheduleSignature]);
 
   const changed = useMemo(() => JSON.stringify(draft) !== scheduleSignature, [draft, scheduleSignature]);
   const trimmedDestination = destination.trim();
