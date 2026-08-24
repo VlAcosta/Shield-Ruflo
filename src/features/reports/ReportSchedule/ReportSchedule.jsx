@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import Button from '../../../components/ui/Button';
 import { CHANNEL_ICON_MAP, CalendarIcon, ClockIcon } from '../model/icons';
 import { DELIVERY_CHANNELS, WEEK_DAYS } from '../model/reportData';
@@ -10,14 +10,23 @@ function ReportSchedule({ schedules, saving, onSave }) {
   const [time, setTime] = useState('09:00');
   const [channel, setChannel] = useState('email');
   const [title, setTitle] = useState('Еженедельный отчёт');
+  const [destination, setDestination] = useState('');
 
-  const changed = useMemo(() => JSON.stringify(draft) !== JSON.stringify(schedules), [draft, schedules]);
+  const scheduleSignature = JSON.stringify(schedules);
+  useEffect(() => {
+    setDraft(schedules.map((item) => ({ ...item })));
+  }, [scheduleSignature, schedules]);
+
+  const changed = useMemo(() => JSON.stringify(draft) !== scheduleSignature, [draft, scheduleSignature]);
+  const trimmedDestination = destination.trim();
+  const canAdd = channel !== 'telegram' || Boolean(trimmedDestination);
 
   const toggleSchedule = (id) => {
     setDraft((current) => current.map((item) => item.id === id ? { ...item, enabled: !item.enabled } : item));
   };
 
   const addSchedule = () => {
+    if (!canAdd) return;
     const dayMeta = WEEK_DAYS.find((item) => item.id === day);
     const channelMeta = DELIVERY_CHANNELS.find((item) => item.id === channel);
     setDraft((current) => [
@@ -30,9 +39,11 @@ function ReportSchedule({ schedules, saving, onSave }) {
         time,
         channel,
         channelLabel: channelMeta?.label || 'Email',
+        ...(trimmedDestination ? { destination: trimmedDestination } : {}),
         enabled: true,
       },
     ]);
+    setDestination('');
   };
 
   return (
@@ -46,10 +57,22 @@ function ReportSchedule({ schedules, saving, onSave }) {
 
         <div className="report-schedule__row">
           <label className="report-schedule__field"><span>Время</span><div className="report-schedule__input-icon"><ClockIcon/><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></div></label>
-          <div className="report-schedule__field"><span>Канал доставки</span><div className="report-schedule__channels">{DELIVERY_CHANNELS.map((item) => { const Icon = CHANNEL_ICON_MAP[item.id]; return <button key={item.id} type="button" className={channel === item.id ? 'is-active' : ''} onClick={() => setChannel(item.id)}>{Icon ? <Icon/> : null}{item.label}</button>; })}</div></div>
+          <div className="report-schedule__field"><span>Канал доставки</span><div className="report-schedule__channels">{DELIVERY_CHANNELS.map((item) => { const Icon = CHANNEL_ICON_MAP[item.id]; return <button key={item.id} type="button" className={channel === item.id ? 'is-active' : ''} onClick={() => { setChannel(item.id); setDestination(''); }}>{Icon ? <Icon/> : null}{item.label}</button>; })}</div></div>
         </div>
 
-        <Button className="report-schedule__add" variant="outline" onClick={addSchedule}>+ Добавить расписание</Button>
+        <label className="report-schedule__field report-schedule__field--title">
+          <span>{channel === 'telegram' ? 'Telegram destination' : 'Email для доставки'}</span>
+          <input
+            type={channel === 'email' ? 'email' : 'text'}
+            value={destination}
+            onChange={(event) => setDestination(event.target.value)}
+            placeholder={channel === 'telegram' ? '@channelusername или chat ID' : 'Необязательно — используем email владельца'}
+            required={channel === 'telegram'}
+          />
+          {channel === 'telegram' && !trimmedDestination ? <small>Для Telegram нужен chat ID или @channelusername.</small> : null}
+        </label>
+
+        <Button className="report-schedule__add" variant="outline" onClick={addSchedule} disabled={!canAdd}>+ Добавить расписание</Button>
       </section>
 
       <section className="report-schedule__list">
@@ -58,10 +81,11 @@ function ReportSchedule({ schedules, saving, onSave }) {
         <div className="report-schedule__items">
           {draft.map((item, index) => {
             const Icon = CHANNEL_ICON_MAP[item.channel] || CalendarIcon;
+            const destinationLabel = item.destination || (item.channel === 'email' ? 'email владельца' : 'destination не указан');
             return (
               <article className={`report-schedule__item ${item.enabled ? 'is-enabled' : ''}`} key={item.id} style={{ '--schedule-index': index }}>
                 <span className="report-schedule__item-icon"><Icon/></span>
-                <div className="report-schedule__item-copy"><strong>{item.title}</strong><span>{item.dayLabel}, {item.time} · {item.channelLabel}</span></div>
+                <div className="report-schedule__item-copy"><strong>{item.title}</strong><span>{item.dayLabel}, {item.time} · {item.channelLabel} · {destinationLabel}</span></div>
                 <button type="button" className={`report-schedule__switch ${item.enabled ? 'is-on' : ''}`} role="switch" aria-checked={item.enabled} onClick={() => toggleSchedule(item.id)}><span/></button>
               </article>
             );
