@@ -77,6 +77,9 @@ function mapFeedback(feedback: WbFeedback): ProviderReviewRecord | null {
   const rating = Number(feedback.productValuation);
   if (!id || !Number.isInteger(rating) || rating < 1 || rating > 5) return null;
   const nmId = feedback.productDetails?.nmId;
+  const productName = String(feedback.productDetails?.productName || '').trim();
+  const locationId = nmId ? String(nmId) : '';
+  const locationName = productName || (locationId ? `WB ${locationId}` : '');
   return {
     externalId: id,
     rating,
@@ -84,10 +87,10 @@ function mapFeedback(feedback: WbFeedback): ProviderReviewRecord | null {
     authorName: String(feedback.userName || 'Покупатель Wildberries'),
     authorExternalId: `wb:${id}:author`,
     publishedAt: validDate(feedback.createdDate),
-    providerUpdatedAt: feedback.updatedDate ? validDate(feedback.updatedDate) : undefined,
-    providerLocationId: nmId ? String(nmId) : undefined,
-    providerLocationName: feedback.productDetails?.productName || (nmId ? `WB ${nmId}` : undefined),
-    sourceUrl: nmId ? `https://www.wildberries.ru/catalog/${nmId}/detail.aspx` : undefined,
+    ...(feedback.updatedDate ? { providerUpdatedAt: validDate(feedback.updatedDate) } : {}),
+    ...(locationId ? { providerLocationId: locationId } : {}),
+    ...(locationName ? { providerLocationName: locationName } : {}),
+    ...(locationId ? { sourceUrl: `https://www.wildberries.ru/catalog/${locationId}/detail.aspx` } : {}),
     raw: {
       answerPresent: Boolean(feedback.answer?.text),
       answerState: feedback.answer?.state ?? null,
@@ -180,8 +183,8 @@ export class WildberriesProviderAdapter implements ProviderAdapter {
       headers: headers(context),
       body: JSON.stringify({ id: input.reviewReference, text }),
     }, { provider: 'wildberries', successStatuses: [204] });
-    // WB explicitly documents that feedback id is not validated on this POST.
-    // Mark UNKNOWN until GET /feedback reconciliation confirms the persisted answer.
+    // WB accepts the request before a durable answer can be proven. Reconcile
+    // with GET /feedback before Business Shield marks the reply as published.
     return { status: 'UNKNOWN', providerState: 'ANSWER_ACCEPTED_FOR_RECONCILIATION' };
   }
 
