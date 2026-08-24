@@ -99,6 +99,9 @@ const envSchema = z
     FNS_NPD_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(120_000).default(65_000),
 
     INTEGRATION_CREDENTIALS_KEY: z.string().min(32).default('development-integration-credential-key-change-me'),
+    INTEGRATION_SYNC_SCHEDULER_ENABLED: booleanFromString.default(true),
+    INTEGRATION_SYNC_POLL_SECONDS: z.coerce.number().int().min(10).max(3_600).default(30),
+    INTEGRATION_SYNC_DEFAULT_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1_440).default(30),
 
     GOOGLE_BUSINESS_ENABLED: booleanFromString.default(false),
     GOOGLE_BUSINESS_CLIENT_ID: z.string().default(''),
@@ -110,6 +113,18 @@ const envSchema = z
     GOOGLE_PLACES_ENABLED: booleanFromString.default(false),
     GOOGLE_PLACES_API_KEY: z.string().trim().default(''),
     GOOGLE_PLACES_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+
+    REPORT_SCHEDULER_ENABLED: booleanFromString.default(true),
+    REPORT_SCHEDULER_POLL_SECONDS: z.coerce.number().int().min(10).max(3_600).default(30),
+    REPORT_EMAIL_PROVIDER: z.enum(['disabled', 'resend', 'webhook']).default('disabled'),
+    REPORT_EMAIL_API_KEY: z.string().trim().default(''),
+    REPORT_EMAIL_FROM: z.string().trim().default(''),
+    REPORT_EMAIL_WEBHOOK_URL: optionalUrl,
+    REPORT_EMAIL_WEBHOOK_TOKEN: z.string().default(''),
+    REPORT_TELEGRAM_BOT_TOKEN: z.string().trim().default(''),
+
+    SUGGESTION_WEBHOOK_URL: optionalUrl,
+    SUGGESTION_WEBHOOK_TOKEN: z.string().default(''),
 
     AI_REVIEW_INTELLIGENCE_ENABLED: booleanFromString.default(false),
     AI_OPENAI_API_KEY: z.string().default(''),
@@ -171,6 +186,18 @@ const envSchema = z
       }
     }
 
+    if (value.REPORT_EMAIL_PROVIDER === 'resend') {
+      if (!value.REPORT_EMAIL_API_KEY) {
+        ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_API_KEY'], message: 'Resend report delivery requires an API key' });
+      }
+      if (!value.REPORT_EMAIL_FROM) {
+        ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_FROM'], message: 'Resend report delivery requires a From address' });
+      }
+    }
+    if (value.REPORT_EMAIL_PROVIDER === 'webhook' && !value.REPORT_EMAIL_WEBHOOK_URL) {
+      ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_WEBHOOK_URL'], message: 'Report email webhook provider requires URL' });
+    }
+
     if (value.NODE_ENV === 'production') {
       if (value.AUTH_SECRET === 'development-only-auth-secret-change-me-now') {
         ctx.addIssue({ code: 'custom', path: ['AUTH_SECRET'], message: 'Production requires a unique AUTH_SECRET' });
@@ -204,6 +231,12 @@ const envSchema = z
       }
       if (value.GOOGLE_BUSINESS_ENABLED && !value.GOOGLE_BUSINESS_RETURN_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_RETURN_URL'], message: 'Production Google OAuth return URL must use HTTPS' });
+      }
+      if (value.REPORT_EMAIL_PROVIDER === 'webhook' && !value.REPORT_EMAIL_WEBHOOK_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_WEBHOOK_URL'], message: 'Production report email webhook must use HTTPS' });
+      }
+      if (value.SUGGESTION_WEBHOOK_URL && !value.SUGGESTION_WEBHOOK_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['SUGGESTION_WEBHOOK_URL'], message: 'Production suggestion webhook must use HTTPS' });
       }
     }
   });
