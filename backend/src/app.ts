@@ -29,7 +29,7 @@ import { tasksRoutes } from './modules/tasks/tasks.routes.js';
 import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { integrationsRoutes } from './modules/integrations/integrations.routes.js';
 import { googleBusinessProfileRoutes } from './modules/integrations/providers/google/google-business-profile.routes.js';
-import { registerGoogleBusinessProfileProvider } from './modules/integrations/providers/google/index.js';
+import { registerIntegrationProviders } from './modules/integrations/providers/index.js';
 import { operationsRoutes } from './modules/operations/operations.routes.js';
 import { casesRoutes } from './modules/cases/cases.routes.js';
 import { acquisitionRoutes } from './modules/acquisition/acquisition.routes.js';
@@ -46,9 +46,10 @@ import { adminRoutes } from './modules/admin/admin.routes.js';
 import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.routes.js';
 import { replyCopilotRoutes } from './modules/ai/reply-copilot.routes.js';
 import { registerAiProviders } from './modules/ai/providers/index.js';
+import { feedbackRoutes } from './modules/feedback/feedback.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
-  registerGoogleBusinessProfileProvider();
+  registerIntegrationProviders();
   registerAiProviders();
 
   const app = Fastify({
@@ -62,7 +63,9 @@ export async function buildApp(): Promise<FastifyInstance> {
           'res.headers["set-cookie"]',
           '*.password',
           '*.token',
-          '*.code',
+          '*.apiKey',
+          '*.apiToken',
+          '*.bridgeToken',
           '*.credentials',
           '*.encryptedValue',
           '*.secretEncrypted',
@@ -74,6 +77,10 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.INTEGRATION_CREDENTIALS_KEY',
           '*.OPERATIONS_METRICS_TOKEN',
           '*.GOOGLE_BUSINESS_CLIENT_SECRET',
+          '*.REPORT_EMAIL_API_KEY',
+          '*.REPORT_EMAIL_WEBHOOK_TOKEN',
+          '*.REPORT_TELEGRAM_BOT_TOKEN',
+          '*.SUGGESTION_WEBHOOK_TOKEN',
           '*.AI_OPENAI_API_KEY',
           '*.refreshToken',
           '*.accessToken',
@@ -94,11 +101,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(operationalMetricsPlugin);
   await app.register(authenticationPlugin);
   await app.register(authorizationPlugin);
-  // Service-account credentials use a deliberately separate principal pipeline
-  // and are accepted only by explicitly registered /external routes.
   await app.register(apiKeyAuthenticationPlugin);
-  // Commercial capability, quota and expensive-AI budget gates must be
-  // registered before product routes so they append after authenticate/authorize.
   await app.register(premiumEntitlementsPlugin);
   await app.register(entitlementEnforcementPlugin);
   await app.register(aiRequestBudgetPlugin);
@@ -131,6 +134,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(webhookRoutes, { prefix: '/api/v1' });
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(googleBusinessProfileRoutes, { prefix: '/api/v1' });
+  await app.register(feedbackRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });
   await app.register(billingRoutes, { prefix: '/api/v1' });
   await app.register(adminRoutes, { prefix: '/api/v1' });
