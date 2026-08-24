@@ -102,21 +102,30 @@ function mapReview(review: BridgeReview): ProviderReviewRecord | null {
   const id = String(review.id || '').trim();
   const rating = Number(review.rating);
   if (!id || !Number.isInteger(rating) || rating < 1 || rating > 5) return null;
+  const authorId = String(review.author?.id || '').trim();
+  const authorName = String(review.author?.name || '').trim();
+  const avatarUrl = String(review.author?.avatarUrl || '').trim();
+  const profileUrl = String(review.author?.profileUrl || '').trim();
+  const locationId = String(review.location?.id || '').trim();
+  const locationName = String(review.location?.name || '').trim();
+  const sourceUrl = String(review.sourceUrl || '').trim();
   return {
     externalId: id,
     rating,
     text: String(review.text || ''),
-    title: review.title,
-    authorExternalId: review.author?.id,
-    authorName: review.author?.name,
-    authorAvatarUrl: review.author?.avatarUrl,
-    authorProfileUrl: review.author?.profileUrl,
     publishedAt: validDate(review.publishedAt),
-    providerUpdatedAt: review.updatedAt ? validDate(review.updatedAt) : undefined,
-    providerLocationId: review.location?.id,
-    providerLocationName: review.location?.name,
-    sourceUrl: review.sourceUrl,
-    raw: review.raw,
+    ...(authorId ? { authorExternalId: authorId } : {}),
+    ...(authorName ? { authorName } : {}),
+    ...(avatarUrl ? { authorAvatarUrl: avatarUrl } : {}),
+    ...(profileUrl ? { authorProfileUrl: profileUrl } : {}),
+    ...(review.updatedAt ? { providerUpdatedAt: validDate(review.updatedAt) } : {}),
+    ...(locationId ? { providerLocationId: locationId } : {}),
+    ...(locationName ? { providerLocationName: locationName } : {}),
+    ...(sourceUrl ? { sourceUrl } : {}),
+    raw: {
+      ...(review.raw ?? {}),
+      bridgeTitle: review.title ?? null,
+    },
   };
 }
 
