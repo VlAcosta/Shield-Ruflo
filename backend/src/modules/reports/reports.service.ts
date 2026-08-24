@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
+import { env } from '../../config/env.js';
 
 const REPORT_SCHEDULE_KEY_PREFIX = 'reports:schedules:';
 const MAX_REPORTS = 100;
@@ -25,6 +26,7 @@ export type ReportScheduleInput = {
   time: string;
   channel: 'email' | 'telegram';
   channelLabel: string;
+  destination?: string;
   enabled: boolean;
 };
 
@@ -41,6 +43,25 @@ function readSchedules(value: Prisma.JsonValue | null | undefined): ReportSchedu
   return value.filter((item): item is ReportScheduleInput => Boolean(item && typeof item === 'object')) as ReportScheduleInput[];
 }
 
+function deliveryCapabilities() {
+  const emailAvailable = env.REPORT_EMAIL_PROVIDER === 'resend'
+    ? Boolean(env.REPORT_EMAIL_API_KEY && env.REPORT_EMAIL_FROM)
+    : env.REPORT_EMAIL_PROVIDER === 'webhook'
+      ? Boolean(env.REPORT_EMAIL_WEBHOOK_URL)
+      : false;
+  return {
+    email: {
+      available: emailAvailable,
+      provider: env.REPORT_EMAIL_PROVIDER,
+      reasonCode: emailAvailable ? null : 'REPORT_EMAIL_PROVIDER_NOT_CONFIGURED',
+    },
+    telegram: {
+      available: Boolean(env.REPORT_TELEGRAM_BOT_TOKEN),
+      reasonCode: env.REPORT_TELEGRAM_BOT_TOKEN ? null : 'REPORT_TELEGRAM_BOT_NOT_CONFIGURED',
+    },
+  };
+}
+
 export async function listReports(app: FastifyInstance, organizationId: string) {
   const [reports, metadata] = await Promise.all([
     app.prisma.report.findMany({
@@ -54,6 +75,7 @@ export async function listReports(app: FastifyInstance, organizationId: string) 
   return {
     reports,
     schedules: readSchedules(metadata?.value),
+    deliveryCapabilities: deliveryCapabilities(),
   };
 }
 
@@ -170,7 +192,11 @@ export async function saveReportSchedules(
         actorUserId: actor.userId,
         action: 'report.schedules.updated',
         entityType: 'ReportSchedule',
-        metadata: asJson({ count: schedules.length, enabled: schedules.filter((item) => item.enabled).length }),
+        metadata: asJson({
+          count: schedules.length,
+          enabled: schedules.filter((item) => item.enabled).length,
+          channels: [...new Set(schedules.filter((item) => item.enabled).map((item) => item.channel))],
+        }),
       },
     });
   });
