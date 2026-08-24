@@ -7,6 +7,46 @@ import useIntegrationHub from '../hooks/useIntegrationHub';
 import './IntegrationHubWorkspace.scss';
 
 const STATUS_ORDER = ['error', 'expired', 'degraded', 'needs_setup', 'syncing', 'configured', 'connected', 'disconnected'];
+const PROVIDER_SETUP = Object.freeze({
+  wb: {
+    note: 'Используется официальный WB API категории «Вопросы и отзывы». Токен хранится только в зашифрованном credential vault.',
+    supportsScheduledSync: true,
+    fields: [
+      { key: 'apiToken', target: 'credentials', label: 'WB API token', placeholder: 'Токен категории «Вопросы и отзывы»', secret: true, required: true },
+    ],
+  },
+  ozon: {
+    note: 'Используется Ozon Seller API. Client ID и API key сохраняются зашифрованно и не возвращаются в браузер.',
+    supportsScheduledSync: true,
+    fields: [
+      { key: 'clientId', target: 'credentials', label: 'Ozon Client ID', placeholder: 'Client ID продавца', required: true },
+      { key: 'apiKey', target: 'credentials', label: 'Ozon API key', placeholder: 'API key Seller API', secret: true, required: true },
+    ],
+  },
+  gis: {
+    note: 'Официальный Places API 2GIS предоставляет карточку и статистику отзывов, но не текст отзывов. Поэтому автоматический импорт текстов отключён честно.',
+    supportsScheduledSync: false,
+    fields: [
+      { key: 'apiKey', target: 'credentials', label: '2GIS API key', placeholder: 'Ключ Places API', secret: true, required: true },
+    ],
+  },
+  yandex: {
+    note: 'Публичного review API Яндекс Бизнес нет. Подключение выполняется только через ваш verified bridge/партнёрский шлюз; HTML-скрейпинг не используется.',
+    supportsScheduledSync: true,
+    fields: [
+      { key: 'bridgeBaseUrl', target: 'configuration', label: 'Bridge URL', placeholder: 'https://bridge.example.ru', required: true },
+      { key: 'bridgeToken', target: 'credentials', label: 'Bridge token', placeholder: 'Bearer token', secret: true, required: true },
+    ],
+  },
+  otzovik: {
+    note: 'Подключение выполняется через verified bridge с контрактом Business Shield. Неавторизованный скрейпинг публичных страниц не используется.',
+    supportsScheduledSync: true,
+    fields: [
+      { key: 'bridgeBaseUrl', target: 'configuration', label: 'Bridge URL', placeholder: 'https://bridge.example.ru', required: true },
+      { key: 'bridgeToken', target: 'credentials', label: 'Bridge token', placeholder: 'Bearer token', secret: true, required: true },
+    ],
+  },
+});
 
 function formatRelative(value) {
   if (!value) return 'ещё не запускалась';
@@ -36,20 +76,31 @@ function CapabilityList({ providerId }) {
     'reviews.read': 'Импорт отзывов',
     'rating.read': 'Рейтинг',
     'replies.write': 'Публикация ответов',
+    'accounts.read': 'Аккаунты',
+    'locations.read': 'Карточки организаций',
+    'profile.read': 'Профиль и статистика',
     'marketplace.read': 'Маркетплейс',
     'notifications.write': 'Уведомления',
     'crm.read': 'Данные CRM',
     'crm.write': 'Запись в CRM',
   };
-  return <div className="integration-capabilities"><small>Целевые возможности</small>{runtime.capabilities.map((item) => <span key={item}>{labels[item] || item}</span>)}</div>;
+  return <div className="integration-capabilities"><small>Фактические возможности</small>{runtime.capabilities.map((item) => <span key={item}>{labels[item] || item}</span>)}</div>;
 }
 
 function ConnectionModal({ integration, open, busy, onClose, onSave }) {
   const [link, setLink] = useState('');
+  const [fields, setFields] = useState({});
+  const [autoSync, setAutoSync] = useState(true);
+  const [intervalMinutes, setIntervalMinutes] = useState(30);
+  const setup = PROVIDER_SETUP[integration?.id] || null;
 
   useEffect(() => {
-    if (open) setLink(integration?.link || '');
-  }, [integration?.id, integration?.link, open]);
+    if (!open) return;
+    setLink(integration?.link || '');
+    setFields({});
+    setAutoSync(integration?.syncPolicy?.enabled ?? setup?.supportsScheduledSync ?? false);
+    setIntervalMinutes(integration?.syncPolicy?.intervalMinutes || 30);
+  }, [integration?.id, integration?.link, integration?.syncPolicy?.enabled, integration?.syncPolicy?.intervalMinutes, open, setup?.supportsScheduledSync]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -65,6 +116,27 @@ function ConnectionModal({ integration, open, busy, onClose, onSave }) {
 
   if (!open || !integration || typeof document === 'undefined') return null;
   const providerReady = hasIntegrationBackend();
+  const submit = () => {
+    const configuration = {};
+    const credentials = {};
+    (setup?.fields || []).forEach((field) => {
+      const value = String(fields[field.key] || '').trim();
+      if (!value) return;
+      if (field.target === 'credentials') credentials[field.key] = value;
+      else configuration[field.key] = value;
+    });
+    onSave({
+      link,
+      configuration,
+      credentials,
+      ...(setup?.supportsScheduledSync ? {
+        syncPolicy: {
+          enabled: autoSync,
+          intervalMinutes: Math.max(5, Math.min(1440, Number(intervalMinutes) || 30)),
+        },
+      } : {}),
+    });
+  };
 
   return createPortal(
     <div className="integration-connect-modal">
@@ -77,13 +149,16 @@ function ConnectionModal({ integration, open, busy, onClose, onSave }) {
         </header>
         <div className="integration-connect-modal__body">
           <label><span>Ссылка или идентификатор</span><input autoFocus value={link} onChange={(event) => setLink(event.target.value)} placeholder={integration.placeholder || 'https://...'} /></label>
+          {(setup?.fields || []).map((field) => <label key={field.key}><span>{field.label}{field.required ? ' *' : ''}</span><input type={field.secret ? 'password' : 'text'} autoComplete="off" value={fields[field.key] || ''} onChange={(event) => setFields((state) => ({ ...state, [field.key]: event.target.value }))} placeholder={field.placeholder} /></label>)}
+          {setup?.note ? <div className="integration-connect-modal__truth"><strong>Источник данных</strong><span>{setup.note}</span></div> : null}
+          {setup?.supportsScheduledSync ? <div className="integration-connect-modal__sync-policy"><label><input type="checkbox" checked={autoSync} onChange={(event) => setAutoSync(event.target.checked)} /><span>Автоматическая синхронизация</span></label><label><span>Интервал, минут</span><input type="number" min="5" max="1440" step="5" value={intervalMinutes} onChange={(event) => setIntervalMinutes(event.target.value)} disabled={!autoSync} /></label></div> : null}
           <div className={`integration-connect-modal__provider ${providerReady ? 'is-ready' : 'is-pending'}`}>
             <i />
-            <div><strong>{providerReady ? 'Provider backend подключён' : 'Provider API ещё не выбран'}</strong><span>{providerReady ? 'После сохранения backend проверит доступ и вернёт фактический статус подключения.' : 'Сейчас мы сохраняем конфигурацию источника. Реальный импорт не имитируется.'}</span></div>
+            <div><strong>{providerReady ? 'Provider backend подключён' : 'Provider API ещё не выбран'}</strong><span>{providerReady ? 'Секреты отправляются только backend и сохраняются в зашифрованном credential vault. В браузер они не возвращаются.' : 'Сейчас мы сохраняем конфигурацию источника. Реальный импорт не имитируется.'}</span></div>
           </div>
           <CapabilityList providerId={integration.id} />
         </div>
-        <footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={Boolean(busy)} onClick={() => onSave({ link })}>{busy ? 'Сохраняем…' : providerReady ? 'Подключить источник' : 'Сохранить конфигурацию'}</button></footer>
+        <footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={Boolean(busy)} onClick={submit}>{busy ? 'Проверяем доступ…' : providerReady ? 'Проверить и подключить' : 'Сохранить конфигурацию'}</button></footer>
       </section>
     </div>,
     document.body,
@@ -119,6 +194,7 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
       <div><span>Источник</span><strong>{integration.link ? 'Идентификатор задан' : 'Не настроен'}</strong></div>
       <div><span>Состояние</span><strong>{meta.label}</strong></div>
       {integration.lastSyncStats?.reviews !== undefined ? <div><span>Последний импорт</span><strong>{integration.lastSyncStats.reviews} отзывов</strong></div> : null}
+      {integration.syncPolicy ? <div><span>Автосинхронизация</span><strong>{integration.syncPolicy.enabled ? `каждые ${integration.syncPolicy.intervalMinutes} мин.` : 'выключена'}</strong></div> : null}
       {integration.nextSyncAt ? <div><span>Следующий sync</span><strong>{formatRelative(integration.nextSyncAt)}</strong></div> : null}
     </div>
     {integration.lastError ? <div className="integration-inspector__error"><i>!</i><div><strong>Последняя ошибка</strong><span>{integration.lastError}</span></div></div> : null}
@@ -140,7 +216,7 @@ function ActivityFeed({ items }) {
 
 function ProviderCard({ integration, selected, busy, canManage, onSelect, onConfigure, onSync }) {
   const meta = INTEGRATION_STATUS_META[integration.status] || INTEGRATION_STATUS_META.disconnected;
-  const canSync = integration.enabled && integration.providerMode === 'backend' && ['connected', 'configured', 'degraded'].includes(integration.status);
+  const canSync = integration.enabled && integration.providerMode === 'backend' && ['connected', 'configured', 'degraded'].includes(integration.status) && getProviderRuntime(integration.id).capabilities.includes('reviews.read');
   return <article className={`integration-provider-card is-${integration.tone || 'violet'} ${selected ? 'is-selected' : ''}`}>
     <button type="button" className="integration-provider-card__main" onClick={onSelect}>
       <div className="integration-provider-card__head"><ProviderMark integration={integration} /><StatusBadge status={integration.status} /></div>
@@ -206,7 +282,7 @@ function IntegrationHubWorkspace() {
       <article className={hub.metrics.issues ? 'is-alert' : ''}><span>Требуют внимания</span><strong>{hub.metrics.issues}</strong><small>{hub.metrics.issues ? 'нужна проверка' : 'ошибок нет'}</small></article>
     </section>
 
-    {hub.message ? <div className={`integration-hub-message is-${hub.message.type || 'info'}`}><span>{hub.message.text}</span><button type="button" onClick={hub.clearMessage}>×</button></div> : null}
+    {hub.error ? <div className="integration-hub-message is-error"><span>{hub.error}</span><button type="button" onClick={hub.clearError}>×</button></div> : null}
 
     <div className="integration-command-bar">
       <div className="integration-command-bar__filters">{[['all','Все'],['active','Активные'],['issues','С ошибками'],['recommended','Рекомендуемые']].map(([value,label]) => <button type="button" className={filter === value ? 'is-active' : ''} key={value} onClick={() => setFilter(value)}>{label}</button>)}</div>
