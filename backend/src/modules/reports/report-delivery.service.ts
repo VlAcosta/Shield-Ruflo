@@ -38,23 +38,22 @@ function safeHtml(value: string): string {
   }[char] || char));
 }
 
-async function fallbackDestination(
+async function fallbackEmailDestination(
   prisma: PrismaClient,
   organizationId: string,
-  channel: 'email' | 'telegram',
 ): Promise<string> {
   const member = await prisma.organizationMember.findFirst({
     where: {
       organizationId,
       status: 'ACTIVE',
       role: { in: ['OWNER', 'ADMIN'] },
-      user: { status: 'ACTIVE' },
+      user: { status: 'ACTIVE', email: { not: null } },
     },
     orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-    select: { user: { select: { email: true, telegram: true } } },
+    select: { user: { select: { email: true } } },
   });
-  const value = channel === 'email' ? member?.user.email : member?.user.telegram;
-  if (!value) throw new ReportDeliveryError(`REPORT_${channel.toUpperCase()}_DESTINATION_REQUIRED`);
+  const value = String(member?.user.email || '').trim();
+  if (!value) throw new ReportDeliveryError('REPORT_EMAIL_DESTINATION_REQUIRED');
   return value;
 }
 
@@ -143,8 +142,15 @@ export async function processReportDeliveryJob(
     throw new ReportDeliveryError('REPORT_NOT_READY_FOR_DELIVERY', true);
   }
 
-  const destination = String(input.delivery.destination || '').trim()
-    || await fallbackDestination(prisma, input.organizationId, input.delivery.channel);
+  const configuredDestination = String(input.delivery.destination || '').trim();
+  let destination: string;
+  if (input.delivery.channel === 'telegram') {
+    if (!configuredDestination) throw new ReportDeliveryError('REPORT_TELEGRAM_DESTINATION_REQUIRED');
+    destination = configuredDestination;
+  } else {
+    destination = configuredDestination || await fallbackEmailDestination(prisma, input.organizationId);
+  }
+
   const text = reportText(report);
   if (input.delivery.channel === 'email') await sendEmail(destination, report.title, text);
   else await sendTelegram(destination, text);
@@ -159,7 +165,7 @@ export async function processReportDeliveryJob(
         scheduleId: input.delivery.scheduleId,
         channel: input.delivery.channel,
         slot: input.delivery.slot,
-        destinationConfigured: Boolean(destination),
+        destinationConfigured: true,
       },
     },
   });
