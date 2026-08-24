@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type {
   ProviderAdapter,
   ProviderConnectionContext,
@@ -35,12 +36,30 @@ type BridgeReview = {
 type BridgeReviews = { reviews?: BridgeReview[]; nextCursor?: string | null; hasMore?: boolean };
 type BridgeReply = { status?: string; externalReplyId?: string; providerState?: string };
 
+function allowedBridgeHosts(): ReadonlySet<string> {
+  return new Set(
+    String(process.env.REVIEW_BRIDGE_ALLOWED_HOSTS || '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => /^[a-z0-9.-]+$/.test(value) && !value.startsWith('.') && !value.endsWith('.')),
+  );
+}
+
 function normalizeBaseUrl(value: string): string {
   const url = new URL(value);
-  if (url.protocol !== 'https:') {
+  if (url.protocol !== 'https:' || url.username || url.password) {
     throw new ProviderAdapterError({
       code: 'REVIEW_BRIDGE_HTTPS_REQUIRED',
-      message: 'Production review bridge должен использовать HTTPS',
+      message: 'Production review bridge должен использовать HTTPS без credentials в URL',
+      statusCode: 422,
+      retryable: false,
+    });
+  }
+  const allowed = allowedBridgeHosts();
+  if (!allowed.has(url.hostname.toLowerCase())) {
+    throw new ProviderAdapterError({
+      code: 'REVIEW_BRIDGE_HOST_NOT_ALLOWED',
+      message: 'Хост review bridge не входит в серверный allowlist',
       statusCode: 422,
       retryable: false,
     });
@@ -138,6 +157,14 @@ export class ReviewBridgeProviderAdapter implements ProviderAdapter {
   ) {}
 
   availability() {
+    if (allowedBridgeHosts().size === 0) {
+      return {
+        configured: false,
+        connectable: false,
+        reasonCode: 'REVIEW_BRIDGE_ALLOWLIST_NOT_CONFIGURED',
+        reasonMessage: 'Review bridge отключён до настройки REVIEW_BRIDGE_ALLOWED_HOSTS на сервере.',
+      };
+    }
     return { configured: true, connectable: true };
   }
 
@@ -215,7 +242,8 @@ export class ReviewBridgeProviderAdapter implements ProviderAdapter {
   }
 
   async reconcileReply(context: ProviderConnectionContext, input: ProviderReplyInput): Promise<ProviderReplyReconciliationResult> {
-    const query = new URLSearchParams({ externalId: externalId(context), textHashInput: input.text });
+    const textHash = crypto.createHash('sha256').update(input.text, 'utf8').digest('hex');
+    const query = new URLSearchParams({ externalId: externalId(context), textHash });
     const payload = await providerFetchJson<BridgeReply>(`${this.path(context, `/reviews/${encodeURIComponent(input.reviewReference)}/reply`)}?${query}`, {
       method: 'GET',
       headers: bridgeHeaders(context),
