@@ -76,8 +76,7 @@ export const DEFAULT_REPORTS_SNAPSHOT = Object.freeze({
   ],
   schedules: [
     { id: 'weekly', title: 'Еженедельный отчёт', day: 'mon', dayLabel: 'Пн', time: '09:00', channel: 'email', channelLabel: 'Email', enabled: true },
-    { id: 'competitors', title: 'Конкурентный анализ', day: 'fri', dayLabel: 'Пт', time: '18:00', channel: 'telegram', channelLabel: 'Telegram', enabled: true },
-    { id: 'monthly', title: 'Сводка за месяц', day: 'month-start', dayLabel: '1-е число', time: '10:00', channel: 'email', channelLabel: 'Email', enabled: false },
+    { id: 'competitors', title: 'Конкурентный анализ', day: 'fri', dayLabel: 'Пт', time: '18:00', channel: 'telegram', channelLabel: 'Telegram', destination: '', enabled: false },
   ],
 });
 
@@ -111,5 +110,4 @@ export const WEEK_DAYS = Object.freeze([
 export const DELIVERY_CHANNELS = Object.freeze([
   { id: 'email', label: 'Email' },
   { id: 'telegram', label: 'Telegram' },
-  { id: 'whatsapp', label: 'WhatsApp' },
 ]);
