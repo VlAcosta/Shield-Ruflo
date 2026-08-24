@@ -29,7 +29,13 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [app.authenticate],
   }, async (request, reply) => {
     const body = suggestionSchema.parse(request.body);
-    const suggestion = await createProductSuggestion(app, actor(request), body);
+    const suggestion = await createProductSuggestion(app, actor(request), {
+      category: body.category,
+      subject: body.subject,
+      message: body.message,
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.email !== undefined ? { email: body.email } : {}),
+    });
     return reply.code(201).send({
       suggestion: {
         id: suggestion.id,
