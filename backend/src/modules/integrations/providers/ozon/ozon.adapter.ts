@@ -75,6 +75,8 @@ function mapReview(review: OzonReview): ProviderReviewRecord | null {
   const rating = Number(review.score ?? review.rating);
   if (!externalId || !Number.isInteger(rating) || rating < 1 || rating > 5) return null;
   const productId = String(review.sku ?? review.product_id ?? '').trim();
+  const productName = String(review.product_name || '').trim();
+  const locationName = productName || (productId ? `Ozon ${productId}` : '');
   return {
     externalId,
     rating,
@@ -82,9 +84,9 @@ function mapReview(review: OzonReview): ProviderReviewRecord | null {
     authorName: String(review.author_name ?? review.author ?? 'Покупатель Ozon'),
     authorExternalId: `ozon:${externalId}:author`,
     publishedAt: safeDate(review.published_at ?? review.created_at),
-    providerUpdatedAt: review.updated_at ? safeDate(review.updated_at) : undefined,
-    providerLocationId: productId || undefined,
-    providerLocationName: review.product_name || (productId ? `Ozon ${productId}` : undefined),
+    ...(review.updated_at ? { providerUpdatedAt: safeDate(review.updated_at) } : {}),
+    ...(productId ? { providerLocationId: productId } : {}),
+    ...(locationName ? { providerLocationName: locationName } : {}),
     raw: { sku: review.sku ?? null, productId: review.product_id ?? null },
   };
 }
