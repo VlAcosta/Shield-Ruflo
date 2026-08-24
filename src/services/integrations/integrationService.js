@@ -57,9 +57,10 @@ function normalizeItem(value, index = 0) {
     lastErrorAt: value?.lastErrorAt || null,
     lastError: value?.lastError || '',
     syncCursor: value?.syncCursor || null,
+    syncPolicy: value?.syncPolicy || null,
     authorizationUrl: value?.authorizationUrl || value?.authorization_url || '',
     requiresAuthorization: Boolean(value?.requiresAuthorization || value?.requires_authorization),
-    nextSyncAt: value?.nextSyncAt || value?.next_sync_at || null,
+    nextSyncAt: value?.nextSyncAt || value?.next_sync_at || value?.syncPolicy?.nextSyncAt || null,
     lastSyncStats: value?.lastSyncStats || value?.stats || null,
     diagnostics: value?.diagnostics || null,
     updatedAt: value?.updatedAt || nowIso(),
@@ -188,7 +189,14 @@ function normalizeRemote(providerId, payload, fallback = {}) {
   };
 }
 
-export async function configureIntegration(providerId, { link = '', metadata = {} } = {}, options = {}) {
+export async function configureIntegration(providerId, {
+  link = '',
+  metadata = {},
+  configuration = {},
+  credentials = {},
+  syncPolicy,
+  externalAccountId,
+} = {}, options = {}) {
   const trimmedLink = String(link || '').trim();
   const current = readIntegrationConnections().find((item) => item.id === providerId);
   if (!current) throw new Error('Неизвестная интеграция');
@@ -207,7 +215,14 @@ export async function configureIntegration(providerId, { link = '', metadata = {
 
   updateOne(providerId, { enabled: true, link: trimmedLink, status: 'syncing', providerMode: 'backend', lastError: '' }, 'connect-start');
   try {
-    const response = await providerConnect(providerId, { link: trimmedLink, metadata }, options);
+    const response = await providerConnect(providerId, {
+      link: trimmedLink,
+      metadata,
+      configuration,
+      credentials,
+      ...(syncPolicy ? { syncPolicy } : {}),
+      ...(externalAccountId !== undefined ? { externalAccountId } : {}),
+    }, options);
     const remote = normalizeRemote(providerId, response, {});
     const next = updateOne(providerId, {
       ...remote,
@@ -220,6 +235,8 @@ export async function configureIntegration(providerId, { link = '', metadata = {
       lastError: '',
       authorizationUrl: remote.authorizationUrl || '',
       requiresAuthorization: Boolean(remote.requiresAuthorization),
+      syncPolicy: remote.syncPolicy || current.syncPolicy || syncPolicy || null,
+      nextSyncAt: remote.syncPolicy?.nextSyncAt || remote.nextSyncAt || null,
     }, 'connect-success');
     appendActivity({ providerId, providerName: next.name, action: 'connected', level: 'success', message: 'Подключение подтверждено provider backend.' });
     return next;
@@ -271,7 +288,7 @@ export async function syncIntegration(providerId, options = {}) {
     const remote = normalizeRemote(providerId, response, {});
     const finishedAt = remote.lastSyncAt || remote.syncedAt || nowIso();
     const next = updateOne(providerId, { ...remote, status: remote.status || 'connected', providerMode: 'backend', lastSyncAt: finishedAt, lastSuccessAt: finishedAt, lastError: '', lastSyncStats: response?.stats || remote.lastSyncStats || null, nextSyncAt: response?.next_sync_at || response?.nextSyncAt || remote.nextSyncAt || null }, 'sync-success');
-    appendActivity({ providerId, providerName: next.name, action: 'sync', level: 'success', message: 'Синхронизация завершена успешно.', details: response?.stats || null });
+    appendActivity({ providerId, providerName: next.name, action: 'sync', level: 'success', message: 'Синхронизация поставлена в durable очередь.', details: response?.stats || null });
     return next;
   } catch (error) {
     const next = updateOne(providerId, { status: 'degraded', lastError: error.message || 'Ошибка синхронизации', lastErrorAt: nowIso() }, 'sync-error');
