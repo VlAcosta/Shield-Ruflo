@@ -25,8 +25,16 @@ const scheduleSchema = z.object({
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   channel: z.enum(['email', 'telegram']),
   channelLabel: z.string().trim().min(1).max(40),
+  destination: z.string().trim().max(320).optional(),
   enabled: z.boolean(),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if (value.destination && value.channel === 'email' && !z.string().email().safeParse(value.destination).success) {
+    ctx.addIssue({ code: 'custom', path: ['destination'], message: 'Некорректный email для доставки отчёта' });
+  }
+  if (value.destination && value.channel === 'telegram' && !/^(@[A-Za-z0-9_]{5,32}|-?\d{4,32})$/.test(value.destination)) {
+    ctx.addIssue({ code: 'custom', path: ['destination'], message: 'Укажите Telegram chat ID или @channelusername' });
+  }
+});
 const schedulesSchema = z.object({ schedules: z.array(scheduleSchema).max(50) }).strict();
 
 function actor(request: FastifyRequest) {
