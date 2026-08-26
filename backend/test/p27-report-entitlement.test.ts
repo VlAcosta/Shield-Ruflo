@@ -8,18 +8,19 @@ import {
 describe('P27 background report entitlement', () => {
   it('allows an active subscription with reports=true', async () => {
     const organizationId = '11111111-1111-4111-8111-111111111111';
-    const prisma = {
-      subscription: {
-        findMany: vi.fn().mockResolvedValue([{
-          organizationId,
-          status: 'ACTIVE',
-          currentPeriodEnd: null,
-          plan: { entitlements: [{ key: 'reports', value: true }] },
-        }]),
-      },
-    } as unknown as PrismaClient;
+    const findMany = vi.fn().mockResolvedValue([{
+      organizationId,
+      status: 'ACTIVE',
+      currentPeriodEnd: null,
+      plan: { entitlements: [{ key: 'reports', value: true }] },
+    }]);
+    const prisma = { subscription: { findMany } } as unknown as PrismaClient;
 
     await expect(hasReportsEntitlement(prisma, organizationId)).resolves.toBe(true);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ organizationId: { in: [organizationId] } }),
+      orderBy: { createdAt: 'desc' },
+    }));
   });
 
   it('rejects an expired trial even when its plan still contains reports=true', async () => {
