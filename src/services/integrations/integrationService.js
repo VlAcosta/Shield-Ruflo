@@ -1,9 +1,11 @@
 import { getCompanyScope, readScopedJson, writeScopedJson } from '../core/dataScope';
 import { INTEGRATION_BY_ID, INTEGRATION_ITEMS } from '../../features/integrations/model/integrationCatalog';
 import {
+  getClientProviderId,
   getProviderCapabilities,
   getProviderRuntime,
   hasIntegrationBackend,
+  providerAccounts,
   providerConnect,
   providerDiagnostics,
   providerDisconnect,
@@ -125,6 +127,82 @@ function writeIntegrations(values, reason = 'update') {
     }));
   }
   return normalized;
+}
+
+function remoteLink(account, fallback = '') {
+  const configuration = account?.configuration && typeof account.configuration === 'object' && !Array.isArray(account.configuration)
+    ? account.configuration
+    : {};
+  return String(
+    configuration.sourceLink
+    || configuration.externalId
+    || configuration.placeId
+    || configuration.nmId
+    || account?.externalAccountId
+    || fallback
+    || '',
+  ).trim();
+}
+
+function remoteAccountPatch(account, current) {
+  const status = frontendStatus(account?.status);
+  const enabled = status !== 'disconnected';
+  const lastError = String(account?.lastErrorMessage || '');
+  return {
+    enabled,
+    status: enabled ? status : 'disconnected',
+    link: remoteLink(account, current?.link),
+    providerMode: 'backend',
+    connectedAt: current?.connectedAt || (['connected', 'degraded'].includes(status) ? account?.lastValidatedAt || null : null),
+    lastSyncAt: account?.lastSyncedAt || null,
+    lastSuccessAt: account?.lastValidatedAt || account?.lastSyncedAt || null,
+    lastError,
+    lastErrorAt: lastError ? account?.updatedAt || nowIso() : null,
+    syncPolicy: account?.syncPolicy || null,
+    nextSyncAt: account?.syncPolicy?.nextSyncAt || null,
+    updatedAt: account?.updatedAt || nowIso(),
+  };
+}
+
+export function hydrateIntegrationAccounts(accounts = []) {
+  const current = readIntegrationConnections();
+  const remoteByProvider = new Map();
+  for (const account of Array.isArray(accounts) ? accounts : []) {
+    const providerId = getClientProviderId(String(account?.provider || '').trim().toLowerCase());
+    if (!providerId || remoteByProvider.has(providerId)) continue;
+    remoteByProvider.set(providerId, account);
+  }
+
+  const next = current.map((item) => {
+    const account = remoteByProvider.get(item.id);
+    if (account) return { ...item, ...remoteAccountPatch(account, item), id: item.id };
+
+    const runtime = getProviderRuntime(item.id);
+    if (runtime.releaseStage !== 'UNKNOWN') {
+      return {
+        ...item,
+        enabled: false,
+        status: 'disconnected',
+        providerMode: runtime.transport,
+        connectedAt: null,
+        lastSyncAt: null,
+        lastSuccessAt: null,
+        lastError: '',
+        lastErrorAt: null,
+        syncPolicy: null,
+        nextSyncAt: null,
+      };
+    }
+    return item;
+  });
+
+  return writeIntegrations(next, 'backend-hydrate');
+}
+
+export async function refreshIntegrationConnections(options = {}) {
+  if (!hasIntegrationBackend()) return readIntegrationConnections();
+  const payload = await providerAccounts(options);
+  return hydrateIntegrationAccounts(payload?.integrations || []);
 }
 
 export function saveConnectedIntegrations(values = []) {
@@ -281,7 +359,7 @@ export async function configureIntegration(providerId, {
       link: remote.link ?? trimmedLink,
       status: remote.status || (remote.requiresAuthorization ? 'expired' : 'connected'),
       connectedAt: remote.connectedAt || nowIso(),
-      lastSuccessAt: remote.lastSuccessAt || nowIso(),
+      lastSuccessAt: remote.lastSuccessAt || remote.lastValidatedAt || nowIso(),
       lastError: '',
       authorizationUrl: remote.authorizationUrl || '',
       requiresAuthorization: Boolean(remote.requiresAuthorization),
@@ -307,7 +385,7 @@ export async function reconnectIntegration(providerId, options = {}) {
   try {
     const response = await providerReconnect(providerId, { link: current.link }, options);
     const remote = normalizeRemote(providerId, response, {});
-    const next = updateOne(providerId, { ...remote, status: remote.status || (remote.requiresAuthorization ? 'expired' : 'connected'), lastSuccessAt: nowIso(), lastError: '', authorizationUrl: remote.authorizationUrl || '', requiresAuthorization: Boolean(remote.requiresAuthorization) }, 'reconnect-success');
+    const next = updateOne(providerId, { ...remote, status: remote.status || (remote.requiresAuthorization ? 'expired' : 'connected'), lastSuccessAt: remote.lastSuccessAt || remote.lastValidatedAt || nowIso(), lastError: '', authorizationUrl: remote.authorizationUrl || '', requiresAuthorization: Boolean(remote.requiresAuthorization) }, 'reconnect-success');
     appendActivity({ providerId, providerName: next.name, action: 'reconnected', level: 'success', message: 'Доступ к источнику восстановлен.' });
     return next;
   } catch (error) {
