@@ -15,6 +15,7 @@ vi.mock('../src/config/env.js', () => ({
 }));
 
 import {
+  enqueueReportDelivery,
   processReportDeliveryJob,
   reportDeliveryIdempotencyKey,
 } from '../src/modules/reports/report-delivery.service.js';
@@ -58,6 +59,42 @@ describe('P27 delivery idempotency', () => {
     expect(first).toBe(second);
     expect(first).toMatch(/^bs-report-[a-f0-9]{64}$/);
     expect(different).not.toBe(first);
+  });
+
+  it('serializes delivery enqueue and reuses an existing durable job', async () => {
+    const existing = { id: 'existing-delivery-job' };
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ acquired: 1 }]),
+      job: {
+        findFirst: vi.fn().mockResolvedValue(existing),
+        create: vi.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    } as unknown as PrismaClient;
+
+    const result = await enqueueReportDelivery(prisma, {
+      organizationId: '11111111-1111-4111-8111-111111111111',
+      reportId: '22222222-2222-4222-8222-222222222222',
+      delivery: {
+        scheduleId: 'weekly-owner',
+        channel: 'email',
+        destination: 'owner@example.test',
+        slot: '2026-08-26T13:00',
+      },
+    });
+
+    expect(result).toEqual(existing);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.job.findFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: '11111111-1111-4111-8111-111111111111',
+        dedupeKey: 'report-delivery:weekly-owner:2026-08-26T13:00',
+      },
+      select: { id: true },
+    });
+    expect(tx.job.create).not.toHaveBeenCalled();
   });
 
   it('does not retry an already successful report solely because final audit persistence failed', async () => {
@@ -125,6 +162,44 @@ describe('P27 delivery idempotency', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('persists RETRYING when the feedback webhook has a network failure', async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockRejectedValue(new Error('socket reset'));
+    const update = vi.fn().mockResolvedValue({});
+    const suggestionId = '33333333-3333-4333-8333-333333333333';
+    const prisma = {
+      productSuggestion: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: suggestionId,
+          organizationId: '11111111-1111-4111-8111-111111111111',
+          category: 'product',
+          subject: 'Idea',
+          message: 'Please add this',
+          contactName: 'Owner',
+          contactEmail: 'owner@example.test',
+          createdAt: new Date('2026-08-26T12:00:00.000Z'),
+          deliveryStatus: 'QUEUED',
+        }),
+        update,
+      },
+    } as unknown as PrismaClient;
+
+    let thrown: unknown;
+    try {
+      await processSuggestionDeliveryJob(prisma, { suggestionId });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe('SUGGESTION_WEBHOOK_NETWORK_FAILED');
+    expect((thrown as Error & { retryable?: boolean }).retryable).toBe(true);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: suggestionId },
+      data: { deliveryStatus: 'RETRYING', lastError: 'WEBHOOK_NETWORK_FAILED' },
+    });
   });
 
   it('sends feedback webhooks with a stable receiver-dedupe event id', async () => {
