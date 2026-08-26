@@ -21,6 +21,7 @@ const API_RELATIVE_DEFAULTS: Readonly<Record<string, string>> = Object.freeze({
   REPORTS_ENDPOINT: '/reports',
   NOTIFICATIONS_ENDPOINT: '/notifications',
   SUBSCRIPTIONS_ENDPOINT: '/billing/subscription',
+  SUGGESTIONS_ENDPOINT: '/feedback/suggestions',
 });
 
 function normalizeName(name: string): string {

@@ -1,9 +1,11 @@
 import { getCompanyScope, readScopedJson, writeScopedJson } from '../core/dataScope';
 import { INTEGRATION_BY_ID, INTEGRATION_ITEMS } from '../../features/integrations/model/integrationCatalog';
 import {
+  getClientProviderId,
   getProviderCapabilities,
   getProviderRuntime,
   hasIntegrationBackend,
+  providerAccounts,
   providerConnect,
   providerDiagnostics,
   providerDisconnect,
@@ -21,14 +23,29 @@ export const INTEGRATION_ACTIVITY_EVENT = 'business-shield:integrations-activity
 const nowIso = () => new Date().toISOString();
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+function frontendStatus(value, fallback = 'disconnected') {
+  const status = String(value || '').trim().toLowerCase();
+  return status || fallback;
+}
+
 function defaultStatus(value, link) {
-  if (value?.status) return value.status;
+  if (value?.status) return frontendStatus(value.status);
   if (value?.enabled === false) return 'disconnected';
   if (link) return 'configured';
   return value?.enabled ? 'needs_setup' : 'disconnected';
 }
 
-function normalizeItem(value, index = 0) {
+function runtimeProviderMode(value, runtime) {
+  if (runtime.releaseStage === 'UNKNOWN') return value?.providerMode || runtime.transport;
+  return runtime.transport;
+}
+
+function runtimeCapabilities(value, runtime, providerId) {
+  if (runtime.releaseStage === 'UNKNOWN' && Array.isArray(value?.capabilities)) return value.capabilities;
+  return getProviderCapabilities(providerId);
+}
+
+function normalizeItem(value) {
   const id = String(value?.id || '').trim();
   if (!id) return null;
   const meta = INTEGRATION_BY_ID[id] || {};
@@ -49,17 +66,18 @@ function normalizeItem(value, index = 0) {
     link,
     enabled,
     status,
-    providerMode: value?.providerMode || runtime.transport,
-    capabilities: Array.isArray(value?.capabilities) ? value.capabilities : getProviderCapabilities(id),
-    connectedAt: value?.connectedAt || (status === 'connected' ? new Date(Date.now() + index).toISOString() : null),
+    providerMode: runtimeProviderMode(value, runtime),
+    capabilities: runtimeCapabilities(value, runtime, id),
+    connectedAt: value?.connectedAt || null,
     lastSyncAt: value?.lastSyncAt || null,
     lastSuccessAt: value?.lastSuccessAt || null,
     lastErrorAt: value?.lastErrorAt || null,
     lastError: value?.lastError || '',
     syncCursor: value?.syncCursor || null,
+    syncPolicy: value?.syncPolicy || null,
     authorizationUrl: value?.authorizationUrl || value?.authorization_url || '',
     requiresAuthorization: Boolean(value?.requiresAuthorization || value?.requires_authorization),
-    nextSyncAt: value?.nextSyncAt || value?.next_sync_at || null,
+    nextSyncAt: value?.nextSyncAt || value?.next_sync_at || value?.syncPolicy?.nextSyncAt || null,
     lastSyncStats: value?.lastSyncStats || value?.stats || null,
     diagnostics: value?.diagnostics || null,
     updatedAt: value?.updatedAt || nowIso(),
@@ -111,6 +129,82 @@ function writeIntegrations(values, reason = 'update') {
   return normalized;
 }
 
+function remoteLink(account, fallback = '') {
+  const configuration = account?.configuration && typeof account.configuration === 'object' && !Array.isArray(account.configuration)
+    ? account.configuration
+    : {};
+  return String(
+    configuration.sourceLink
+    || configuration.externalId
+    || configuration.placeId
+    || configuration.nmId
+    || account?.externalAccountId
+    || fallback
+    || '',
+  ).trim();
+}
+
+function remoteAccountPatch(account, current) {
+  const status = frontendStatus(account?.status);
+  const enabled = status !== 'disconnected';
+  const lastError = String(account?.lastErrorMessage || '');
+  return {
+    enabled,
+    status: enabled ? status : 'disconnected',
+    link: remoteLink(account, current?.link),
+    providerMode: 'backend',
+    connectedAt: current?.connectedAt || (['connected', 'degraded'].includes(status) ? account?.lastValidatedAt || null : null),
+    lastSyncAt: account?.lastSyncedAt || null,
+    lastSuccessAt: account?.lastValidatedAt || account?.lastSyncedAt || null,
+    lastError,
+    lastErrorAt: lastError ? account?.updatedAt || nowIso() : null,
+    syncPolicy: account?.syncPolicy || null,
+    nextSyncAt: account?.syncPolicy?.nextSyncAt || null,
+    updatedAt: account?.updatedAt || nowIso(),
+  };
+}
+
+export function hydrateIntegrationAccounts(accounts = []) {
+  const current = readIntegrationConnections();
+  const remoteByProvider = new Map();
+  for (const account of Array.isArray(accounts) ? accounts : []) {
+    const providerId = getClientProviderId(String(account?.provider || '').trim().toLowerCase());
+    if (!providerId || remoteByProvider.has(providerId)) continue;
+    remoteByProvider.set(providerId, account);
+  }
+
+  const next = current.map((item) => {
+    const account = remoteByProvider.get(item.id);
+    if (account) return { ...item, ...remoteAccountPatch(account, item), id: item.id };
+
+    const runtime = getProviderRuntime(item.id);
+    if (runtime.releaseStage !== 'UNKNOWN') {
+      return {
+        ...item,
+        enabled: false,
+        status: 'disconnected',
+        providerMode: runtime.transport,
+        connectedAt: null,
+        lastSyncAt: null,
+        lastSuccessAt: null,
+        lastError: '',
+        lastErrorAt: null,
+        syncPolicy: null,
+        nextSyncAt: null,
+      };
+    }
+    return item;
+  });
+
+  return writeIntegrations(next, 'backend-hydrate');
+}
+
+export async function refreshIntegrationConnections(options = {}) {
+  if (!hasIntegrationBackend()) return readIntegrationConnections();
+  const payload = await providerAccounts(options);
+  return hydrateIntegrationAccounts(payload?.integrations || []);
+}
+
 export function saveConnectedIntegrations(values = []) {
   const current = readIntegrationConnections();
   const incoming = new Map(values.map((value) => [value.id, value]));
@@ -133,15 +227,19 @@ export function saveConnectedIntegrations(values = []) {
 export function integrationsFromOnboardingState(state = {}) {
   return INTEGRATION_ITEMS
     .filter((item) => state[item.id]?.enabled)
-    .map((item) => ({
-      ...item,
-      enabled: true,
-      link: String(state[item.id]?.link || '').trim(),
-      status: String(state[item.id]?.link || '').trim() ? 'configured' : 'needs_setup',
-      providerMode: hasIntegrationBackend() ? 'backend' : 'unresolved',
-      connectedAt: null,
-      updatedAt: nowIso(),
-    }));
+    .map((item) => {
+      const runtime = getProviderRuntime(item.id);
+      return {
+        ...item,
+        enabled: true,
+        link: String(state[item.id]?.link || '').trim(),
+        status: String(state[item.id]?.link || '').trim() ? 'configured' : 'needs_setup',
+        providerMode: runtime.releaseStage === 'UNKNOWN' ? 'unresolved' : runtime.transport,
+        capabilities: runtime.releaseStage === 'UNKNOWN' ? [] : runtime.capabilities,
+        connectedAt: null,
+        updatedAt: nowIso(),
+      };
+    });
 }
 
 function readActivity() {
@@ -182,13 +280,48 @@ function normalizeRemote(providerId, payload, fallback = {}) {
     ...connection,
     id: providerId,
     enabled: connection.enabled !== false,
+    status: connection.status ? frontendStatus(connection.status) : fallback.status,
     providerMode: 'backend',
     authorizationUrl,
     requiresAuthorization: Boolean(payload.requires_authorization || payload.requiresAuthorization || connection.requires_authorization || connection.requiresAuthorization || authorizationUrl),
   };
 }
 
-export async function configureIntegration(providerId, { link = '', metadata = {} } = {}, options = {}) {
+function providerUnavailableError(providerId) {
+  const runtime = getProviderRuntime(providerId);
+  const error = new Error(runtime.reasonMessage || 'Production provider adapter пока недоступен');
+  error.code = runtime.reasonCode || 'PROVIDER_ADAPTER_NOT_CONFIGURED';
+  return error;
+}
+
+function recordUnavailableProvider(providerId, current, action) {
+  const runtime = getProviderRuntime(providerId);
+  const error = providerUnavailableError(providerId);
+  const next = updateOne(providerId, {
+    enabled: current.enabled !== false,
+    status: action === 'sync' && current.status === 'connected' ? 'degraded' : 'error',
+    providerMode: runtime.transport,
+    lastError: error.message,
+    lastErrorAt: nowIso(),
+  }, `${action}-provider-unavailable`);
+  appendActivity({
+    providerId,
+    providerName: next.name,
+    action: `${action}_unavailable`,
+    level: 'warning',
+    message: error.message,
+  });
+  throw error;
+}
+
+export async function configureIntegration(providerId, {
+  link = '',
+  metadata = {},
+  configuration = {},
+  credentials = {},
+  syncPolicy,
+  externalAccountId,
+} = {}, options = {}) {
   const trimmedLink = String(link || '').trim();
   const current = readIntegrationConnections().find((item) => item.id === providerId);
   if (!current) throw new Error('Неизвестная интеграция');
@@ -204,27 +337,39 @@ export async function configureIntegration(providerId, { link = '', metadata = {
     appendActivity({ providerId, providerName: next.name, action: 'configured', level: 'info', message: trimmedLink ? 'Источник настроен. Ожидается подключение provider API.' : 'Источник включён и ожидает настройки.' });
     return next;
   }
+  if (!hasIntegrationBackend(providerId)) {
+    const staged = updateOne(providerId, { enabled: true, link: trimmedLink }, 'configure-staged');
+    return recordUnavailableProvider(providerId, staged, 'connect');
+  }
 
-  updateOne(providerId, { enabled: true, link: trimmedLink, status: 'syncing', providerMode: 'backend', lastError: '' }, 'connect-start');
+  updateOne(providerId, { enabled: true, link: trimmedLink, status: 'syncing', lastError: '' }, 'connect-start');
   try {
-    const response = await providerConnect(providerId, { link: trimmedLink, metadata }, options);
+    const response = await providerConnect(providerId, {
+      link: trimmedLink,
+      metadata,
+      configuration,
+      credentials,
+      ...(syncPolicy ? { syncPolicy } : {}),
+      ...(externalAccountId !== undefined ? { externalAccountId } : {}),
+    }, options);
     const remote = normalizeRemote(providerId, response, {});
     const next = updateOne(providerId, {
       ...remote,
       enabled: true,
       link: remote.link ?? trimmedLink,
       status: remote.status || (remote.requiresAuthorization ? 'expired' : 'connected'),
-      providerMode: 'backend',
       connectedAt: remote.connectedAt || nowIso(),
-      lastSuccessAt: remote.lastSuccessAt || nowIso(),
+      lastSuccessAt: remote.lastSuccessAt || remote.lastValidatedAt || nowIso(),
       lastError: '',
       authorizationUrl: remote.authorizationUrl || '',
       requiresAuthorization: Boolean(remote.requiresAuthorization),
+      syncPolicy: remote.syncPolicy || current.syncPolicy || syncPolicy || null,
+      nextSyncAt: remote.syncPolicy?.nextSyncAt || remote.nextSyncAt || null,
     }, 'connect-success');
     appendActivity({ providerId, providerName: next.name, action: 'connected', level: 'success', message: 'Подключение подтверждено provider backend.' });
     return next;
   } catch (error) {
-    const next = updateOne(providerId, { enabled: true, link: trimmedLink, status: 'error', providerMode: 'backend', lastError: error.message || 'Ошибка подключения', lastErrorAt: nowIso() }, 'connect-error');
+    const next = updateOne(providerId, { enabled: true, link: trimmedLink, status: 'error', lastError: error.message || 'Ошибка подключения', lastErrorAt: nowIso() }, 'connect-error');
     appendActivity({ providerId, providerName: next.name, action: 'connect_error', level: 'error', message: next.lastError });
     throw error;
   }
@@ -234,11 +379,13 @@ export async function reconnectIntegration(providerId, options = {}) {
   const current = readIntegrationConnections().find((item) => item.id === providerId);
   if (!current) throw new Error('Интеграция не найдена');
   if (!hasIntegrationBackend()) return configureIntegration(providerId, { link: current.link }, options);
+  if (!hasIntegrationBackend(providerId)) return recordUnavailableProvider(providerId, current, 'reconnect');
+
   updateOne(providerId, { status: 'syncing', lastError: '' }, 'reconnect-start');
   try {
     const response = await providerReconnect(providerId, { link: current.link }, options);
     const remote = normalizeRemote(providerId, response, {});
-    const next = updateOne(providerId, { ...remote, status: remote.status || (remote.requiresAuthorization ? 'expired' : 'connected'), providerMode: 'backend', lastSuccessAt: nowIso(), lastError: '', authorizationUrl: remote.authorizationUrl || '', requiresAuthorization: Boolean(remote.requiresAuthorization) }, 'reconnect-success');
+    const next = updateOne(providerId, { ...remote, status: remote.status || (remote.requiresAuthorization ? 'expired' : 'connected'), lastSuccessAt: remote.lastSuccessAt || remote.lastValidatedAt || nowIso(), lastError: '', authorizationUrl: remote.authorizationUrl || '', requiresAuthorization: Boolean(remote.requiresAuthorization) }, 'reconnect-success');
     appendActivity({ providerId, providerName: next.name, action: 'reconnected', level: 'success', message: 'Доступ к источнику восстановлен.' });
     return next;
   } catch (error) {
@@ -264,14 +411,20 @@ export async function syncIntegration(providerId, options = {}) {
     appendActivity({ providerId, providerName: current.name, action: 'sync_skipped', level: 'warning', message: 'Provider API пока не настроен — реальная синхронизация не запускалась.' });
     return updateOne(providerId, { status: current.link ? 'configured' : 'needs_setup', providerMode: 'unresolved' }, 'sync-local');
   }
+  if (!hasIntegrationBackend(providerId)) return recordUnavailableProvider(providerId, current, 'sync');
 
   updateOne(providerId, { status: 'syncing', lastError: '' }, 'sync-start');
   try {
     const response = await providerSync(providerId, options);
     const remote = normalizeRemote(providerId, response, {});
-    const finishedAt = remote.lastSyncAt || remote.syncedAt || nowIso();
-    const next = updateOne(providerId, { ...remote, status: remote.status || 'connected', providerMode: 'backend', lastSyncAt: finishedAt, lastSuccessAt: finishedAt, lastError: '', lastSyncStats: response?.stats || remote.lastSyncStats || null, nextSyncAt: response?.next_sync_at || response?.nextSyncAt || remote.nextSyncAt || null }, 'sync-success');
-    appendActivity({ providerId, providerName: next.name, action: 'sync', level: 'success', message: 'Синхронизация завершена успешно.', details: response?.stats || null });
+    const next = updateOne(providerId, {
+      ...remote,
+      status: remote.status || 'syncing',
+      lastError: '',
+      lastSyncStats: response?.stats || remote.lastSyncStats || null,
+      nextSyncAt: response?.next_sync_at || response?.nextSyncAt || remote.nextSyncAt || null,
+    }, 'sync-success');
+    appendActivity({ providerId, providerName: next.name, action: 'sync', level: 'success', message: 'Синхронизация поставлена в durable очередь.', details: response?.stats || null });
     return next;
   } catch (error) {
     const next = updateOne(providerId, { status: 'degraded', lastError: error.message || 'Ошибка синхронизации', lastErrorAt: nowIso() }, 'sync-error');
@@ -298,8 +451,13 @@ export async function diagnoseIntegration(providerId, options = {}) {
 
   try {
     const diagnostics = await providerDiagnostics(providerId, options);
-    const ok = diagnostics?.ok !== false;
-    updateOne(providerId, { diagnostics: { ...diagnostics, checkedAt: diagnostics?.checkedAt || nowIso() }, status: ok ? (current.status === 'syncing' ? 'connected' : current.status) : 'degraded' }, 'diagnostics');
+    const ok = diagnostics?.ok !== false && diagnostics?.availability?.connectable !== false;
+    updateOne(providerId, {
+      diagnostics: { ...diagnostics, checkedAt: diagnostics?.checkedAt || nowIso() },
+      status: ok ? (current.status === 'syncing' ? 'connected' : current.status) : 'degraded',
+      lastError: ok ? '' : (diagnostics?.availability?.reasonMessage || current.lastError || 'Provider adapter недоступен'),
+      lastErrorAt: ok ? null : nowIso(),
+    }, 'diagnostics');
     appendActivity({ providerId, providerName: current.name, action: 'diagnostics', level: ok ? 'success' : 'warning', message: ok ? 'Диагностика не обнаружила проблем.' : 'Диагностика обнаружила проблему подключения.' });
     return diagnostics;
   } catch (error) {
@@ -311,10 +469,11 @@ export async function diagnoseIntegration(providerId, options = {}) {
 
 export function getIntegrationHealth(connections = readIntegrationConnections()) {
   const enabled = connections.filter((item) => item.enabled);
-  const connected = enabled.filter((item) => item.status === 'connected').length;
-  const configured = enabled.filter((item) => item.status === 'configured').length;
-  const syncing = enabled.filter((item) => item.status === 'syncing').length;
-  const issues = enabled.filter((item) => ['error', 'expired', 'degraded', 'needs_setup'].includes(item.status)).length;
+  const runtimeUnavailable = (item) => ['planned', 'unavailable'].includes(item.providerMode);
+  const connected = enabled.filter((item) => item.status === 'connected' && !runtimeUnavailable(item)).length;
+  const configured = enabled.filter((item) => item.status === 'configured' && !runtimeUnavailable(item)).length;
+  const syncing = enabled.filter((item) => item.status === 'syncing' && !runtimeUnavailable(item)).length;
+  const issues = enabled.filter((item) => runtimeUnavailable(item) || ['error', 'expired', 'degraded', 'needs_setup'].includes(item.status)).length;
   const operational = connected + configured + syncing;
   const score = enabled.length ? Math.round((operational / enabled.length) * 100) : 0;
   return { total: connections.length, enabled: enabled.length, connected, configured, syncing, issues, score };

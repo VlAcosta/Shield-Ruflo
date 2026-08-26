@@ -21,7 +21,7 @@ export type ProviderTruthItem = {
   };
   sync: {
     supported: boolean;
-    frequency: 'on_demand_job' | 'unavailable';
+    frequency: 'scheduled_and_on_demand' | 'unavailable';
     retryAttempts: number | null;
     dedupe: boolean;
   };
@@ -36,8 +36,6 @@ type PlannedProvider = {
   displayName: string;
 };
 
-// IDs intentionally match the existing client/provider registry so a planned
-// source cannot become a separate shadow identity when a real adapter lands.
 const PLANNED_PROVIDERS: readonly PlannedProvider[] = Object.freeze([
   { id: 'yandex', displayName: 'Яндекс Бизнес' },
   { id: '2gis', displayName: '2GIS' },
@@ -71,14 +69,11 @@ function runtimeTruth(providerId: string): ProviderTruthItem | null {
       reviewIngest,
       reviewRead: has('reviews.read'),
       reviewReply,
-      // There is no delete method in the provider adapter contract today.
       reviewDelete: false,
     },
     sync: {
       supported: reviewIngest,
-      // Current runtime exposes queued on-demand sync jobs; no periodic SLA is
-      // claimed until a scheduler/contract is implemented and monitored.
-      frequency: reviewIngest ? 'on_demand_job' : 'unavailable',
+      frequency: reviewIngest ? 'scheduled_and_on_demand' : 'unavailable',
       retryAttempts: reviewIngest ? 5 : null,
       dedupe: reviewIngest,
     },

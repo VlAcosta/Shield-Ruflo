@@ -7,6 +7,7 @@ import {
   getReport,
   listReports,
   saveReportSchedules,
+  type ReportScheduleInput,
 } from './reports.service.js';
 
 const reportIdParams = z.object({ reportId: z.string().uuid() });
@@ -25,8 +26,19 @@ const scheduleSchema = z.object({
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   channel: z.enum(['email', 'telegram']),
   channelLabel: z.string().trim().min(1).max(40),
+  destination: z.string().trim().max(320).optional(),
   enabled: z.boolean(),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if (value.destination && value.channel === 'email' && !z.string().email().safeParse(value.destination).success) {
+    ctx.addIssue({ code: 'custom', path: ['destination'], message: 'Некорректный email для доставки отчёта' });
+  }
+  if (value.destination && value.channel === 'telegram' && !/^(@[A-Za-z0-9_]{5,32}|-?\d{4,32})$/.test(value.destination)) {
+    ctx.addIssue({ code: 'custom', path: ['destination'], message: 'Укажите Telegram chat ID или @channelusername' });
+  }
+  if (value.enabled && value.channel === 'telegram' && !value.destination) {
+    ctx.addIssue({ code: 'custom', path: ['destination'], message: 'Для включённой Telegram-доставки нужен chat ID или @channelusername' });
+  }
+});
 const schedulesSchema = z.object({ schedules: z.array(scheduleSchema).max(50) }).strict();
 
 function actor(request: FastifyRequest) {
@@ -44,6 +56,22 @@ function actor(request: FastifyRequest) {
 
 async function requireReportsEntitlement(app: Parameters<FastifyPluginAsync>[0], organizationId: string) {
   await assertEntitlement(app, organizationId, 'reports');
+}
+
+function normalizeScheduleInputs(schedules: z.infer<typeof scheduleSchema>[]): ReportScheduleInput[] {
+  return schedules.map((item) => {
+    const base: Omit<ReportScheduleInput, 'destination'> = {
+      id: item.id,
+      title: item.title,
+      day: item.day,
+      dayLabel: item.dayLabel,
+      time: item.time,
+      channel: item.channel,
+      channelLabel: item.channelLabel,
+      enabled: item.enabled,
+    };
+    return item.destination === undefined ? base : { ...base, destination: item.destination };
+  });
 }
 
 export const reportsRoutes: FastifyPluginAsync = async (app) => {
@@ -100,6 +128,6 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     const tenant = actor(request);
     await requireReportsEntitlement(app, tenant.organizationId);
     const { schedules } = schedulesSchema.parse(request.body);
-    return { schedules: await saveReportSchedules(app, tenant, schedules) };
+    return { schedules: await saveReportSchedules(app, tenant, normalizeScheduleInputs(schedules)) };
   });
 };

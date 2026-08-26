@@ -34,13 +34,20 @@ describe('health routes', () => {
     const providers = response.json().providers;
     expect(providers.find((item: any) => item.id === 'google-business-profile')).toMatchObject({
       capabilities: { reviewRead: true, reviewReply: true, reviewDelete: false },
-      sync: { frequency: 'on_demand_job' },
+      sync: { frequency: 'scheduled_and_on_demand' },
     });
     expect(providers.find((item: any) => item.id === 'yandex')).toMatchObject({
-      releaseStage: 'PLANNED',
+      releaseStage: 'ADAPTER_NOT_CONFIGURED',
       configured: false,
       connectable: false,
-      capabilities: { reviewRead: false, reviewReply: false },
+      capabilities: { reviewRead: true, reviewReply: true },
     });
+
+    const publicMetadata = JSON.stringify(providers).toLowerCase();
+    expect(publicMetadata).not.toContain('apikey');
+    expect(publicMetadata).not.toContain('api_key');
+    expect(publicMetadata).not.toContain('refreshtoken');
+    expect(publicMetadata).not.toContain('accesstoken');
+    expect(publicMetadata).not.toContain('bridgetoken');
   });
 });

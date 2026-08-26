@@ -4,9 +4,16 @@ import { AppError } from '../../core/errors/app-error.js';
 import { encryptIntegrationSecret } from './providers/credential-vault.js';
 import { connectProviderAccount, disconnectProviderAccount } from './providers/provider-runtime.js';
 import { providerRegistry } from './providers/provider.registry.js';
+import { nextIntegrationSyncAt } from './integration-scheduler.service.js';
+
+const DEFAULT_SYNC_INTERVAL_MINUTES = 30;
 
 function toJson(value: Record<string, unknown>): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function configObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function publicAccount(account: {
@@ -24,6 +31,12 @@ function publicAccount(account: {
   updatedAt: Date;
   credentials?: Array<{ key: string }>;
 }) {
+  const configuration = configObject(account.configuration);
+  const syncEnabled = configuration.syncEnabled !== false;
+  const requestedInterval = Number(configuration.syncIntervalMinutes);
+  const syncIntervalMinutes = Number.isFinite(requestedInterval)
+    ? Math.max(5, Math.min(1440, Math.round(requestedInterval)))
+    : DEFAULT_SYNC_INTERVAL_MINUTES;
   return {
     id: account.id,
     provider: account.provider,
@@ -38,6 +51,13 @@ function publicAccount(account: {
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
     credentialKeys: account.credentials?.map((item) => item.key) ?? [],
+    syncPolicy: {
+      enabled: syncEnabled,
+      intervalMinutes: syncIntervalMinutes,
+      nextSyncAt: syncEnabled
+        ? nextIntegrationSyncAt(account.lastSyncedAt, configuration, syncIntervalMinutes)?.toISOString() ?? null
+        : null,
+    },
   };
 }
 
@@ -107,6 +127,76 @@ export async function saveIntegrationCredentials(
   return { configured: true, keys: Object.keys(credentials) };
 }
 
+export async function updateIntegrationSetup(
+  app: FastifyInstance,
+  organizationId: string,
+  accountId: string,
+  input: {
+    configuration?: Record<string, unknown>;
+    credentials?: Record<string, string>;
+    externalAccountId?: string;
+    name?: string;
+  },
+) {
+  const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
+  if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
+  const configuration = { ...configObject(account.configuration), ...(input.configuration ?? {}) };
+  await app.prisma.integrationAccount.update({
+    where: { id: account.id },
+    data: {
+      configuration: toJson(configuration),
+      ...(input.externalAccountId !== undefined ? { externalAccountId: input.externalAccountId || null } : {}),
+      ...(input.name ? { name: input.name.slice(0, 180) } : {}),
+      lastErrorCode: null,
+      lastErrorMessage: null,
+    },
+  });
+  if (input.credentials && Object.keys(input.credentials).length) {
+    await saveIntegrationCredentials(app, organizationId, account.id, input.credentials);
+  }
+  return app.prisma.integrationAccount.findFirst({
+    where: { id: account.id, organizationId },
+    include: { credentials: { select: { key: true } } },
+  });
+}
+
+export async function updateIntegrationSyncPolicy(
+  app: FastifyInstance,
+  organizationId: string,
+  accountId: string,
+  input: { enabled: boolean; intervalMinutes: number },
+) {
+  const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
+  if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
+  const adapter = providerRegistry.get(account.provider);
+  if (input.enabled && (!adapter || !adapter.capabilities.includes('reviews.read') || !adapter.syncReviews)) {
+    throw new AppError({
+      code: 'PROVIDER_SCHEDULED_SYNC_UNAVAILABLE',
+      message: 'Для этой площадки автоматический импорт отзывов недоступен через официальный provider contract',
+      statusCode: 422,
+    });
+  }
+  const configuration = {
+    ...configObject(account.configuration),
+    syncEnabled: input.enabled,
+    syncIntervalMinutes: Math.max(5, Math.min(1440, Math.round(input.intervalMinutes))),
+  };
+  const updated = await app.prisma.integrationAccount.update({
+    where: { id: account.id },
+    data: { configuration: toJson(configuration) },
+    include: { credentials: { select: { key: true } } },
+  });
+  await app.prisma.integrationEvent.create({
+    data: {
+      organizationId,
+      accountId: account.id,
+      type: 'sync.policy.updated',
+      payload: { enabled: input.enabled, intervalMinutes: configuration.syncIntervalMinutes },
+    },
+  });
+  return publicAccount(updated);
+}
+
 export async function requestIntegrationConnect(app: FastifyInstance, organizationId: string, accountId: string) {
   const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
   if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
@@ -123,7 +213,12 @@ export async function disconnectIntegration(app: FastifyInstance, organizationId
   return publicAccount(updated);
 }
 
-export async function queueIntegrationSync(app: FastifyInstance, organizationId: string, accountId: string) {
+export async function queueIntegrationSync(
+  app: FastifyInstance,
+  organizationId: string,
+  accountId: string,
+  trigger: 'manual' | 'schedule' = 'manual',
+) {
   const account = await app.prisma.integrationAccount.findFirst({ where: { id: accountId, organizationId } });
   if (!account) throw new AppError({ code: 'INTEGRATION_NOT_FOUND', message: 'Интеграция не найдена', statusCode: 404 });
   if (!['CONNECTED', 'DEGRADED'].includes(account.status)) {
@@ -142,7 +237,7 @@ export async function queueIntegrationSync(app: FastifyInstance, organizationId:
   if (!adapter.capabilities.includes('reviews.read') || !adapter.syncReviews) {
     throw new AppError({
       code: 'PROVIDER_CAPABILITY_UNAVAILABLE',
-      message: 'Провайдер не поддерживает синхронизацию отзывов',
+      message: 'Провайдер не поддерживает синхронизацию текстов отзывов',
       statusCode: 422,
     });
   }
@@ -165,14 +260,36 @@ export async function queueIntegrationSync(app: FastifyInstance, organizationId:
     });
     if (active) return active;
 
+    const activeJob = await tx.job.findFirst({
+      where: {
+        organizationId,
+        type: 'integration.sync.reviews',
+        status: { in: ['QUEUED', 'RUNNING'] },
+        dedupeKey: { startsWith: `integration-sync:${accountId}:` },
+      },
+      select: { id: true },
+    });
+    if (activeJob) {
+      const retryingRun = await tx.integrationSyncRun.findFirst({
+        where: { accountId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (retryingRun) return retryingRun;
+      throw new AppError({
+        code: 'INTEGRATION_SYNC_ALREADY_QUEUED',
+        message: 'Синхронизация уже находится в очереди',
+        statusCode: 409,
+      });
+    }
+
     const run = await tx.integrationSyncRun.create({
-      data: { organizationId, accountId, status: 'QUEUED', trigger: 'manual' },
+      data: { organizationId, accountId, status: 'QUEUED', trigger },
     });
     await tx.job.create({
       data: {
         organizationId,
         type: 'integration.sync.reviews',
-        payload: { accountId, syncRunId: run.id },
+        payload: { accountId, syncRunId: run.id, trigger },
         dedupeKey: `integration-sync:${accountId}:${run.id}`,
         maxAttempts: 5,
       },

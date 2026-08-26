@@ -1,0 +1,20 @@
+model ProductSuggestion {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  category       String   @default("Другое") @db.VarChar(120)
+  subject        String   @default("Предложение по продукту") @db.VarChar(240)
+  message        String   @db.Text
+  contactName    String?  @map("contact_name") @db.VarChar(180)
+  contactEmail   String?  @map("contact_email") @db.VarChar(320)
+  status         String   @default("NEW") @db.VarChar(32)
+  deliveryStatus String   @default("PENDING") @map("delivery_status") @db.VarChar(32)
+  deliveredAt    DateTime? @map("delivered_at")
+  lastError      String?  @map("last_error") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId, createdAt], map: "product_suggestions_org_created_idx")
+  @@index([deliveryStatus, createdAt], map: "product_suggestions_delivery_created_idx")
+  @@map("product_suggestions")
+}
