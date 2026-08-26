@@ -135,19 +135,27 @@ export async function enqueueReportDelivery(
   input: { organizationId: string; reportId: string; delivery: ScheduledReportDelivery },
 ) {
   const dedupeKey = `report-delivery:${input.delivery.scheduleId}:${input.delivery.slot}`;
-  const exists = await prisma.job.findFirst({
-    where: { organizationId: input.organizationId, dedupeKey },
-    select: { id: true },
-  });
-  if (exists) return exists;
-  return prisma.job.create({
-    data: {
-      organizationId: input.organizationId,
-      type: 'report.deliver',
-      payload: { reportId: input.reportId, delivery: input.delivery },
-      dedupeKey,
-      maxAttempts: 5,
-    },
+  const lockKey = `report-delivery:${input.organizationId}:${input.delivery.scheduleId}:${input.delivery.slot}`;
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock
+    `;
+    const exists = await tx.job.findFirst({
+      where: { organizationId: input.organizationId, dedupeKey },
+      select: { id: true },
+    });
+    if (exists) return exists;
+
+    return tx.job.create({
+      data: {
+        organizationId: input.organizationId,
+        type: 'report.deliver',
+        payload: { reportId: input.reportId, delivery: input.delivery },
+        dedupeKey,
+        maxAttempts: 5,
+      },
+    });
   });
 }
 
