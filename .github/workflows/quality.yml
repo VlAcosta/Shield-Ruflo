@@ -6,6 +6,7 @@ on:
       - main
       - feat/autonomous-p0-p12
       - feat/product-v2-p13-p26
+      - ci/p27-content-validation-e2e3a3
   pull_request:
 
 concurrency:
