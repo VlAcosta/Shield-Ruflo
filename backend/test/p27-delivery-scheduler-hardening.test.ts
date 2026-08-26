@@ -117,6 +117,14 @@ describe('P27 delivery idempotency', () => {
           data: { reviewCount: 10, averageRating: 4.6 },
         }),
       },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId: '11111111-1111-4111-8111-111111111111',
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: true }] },
+        }]),
+      },
       auditLog: { create: auditCreate },
     } as unknown as PrismaClient;
 
@@ -141,6 +149,47 @@ describe('P27 delivery idempotency', () => {
     expect(headers['Idempotency-Key']).toBe(expectedEventId);
     expect(headers['X-Business-Shield-Event-Id']).toBe(expectedEventId);
     expect(JSON.parse(String(request?.body))).toMatchObject({ eventId: expectedEventId, to: 'owner@example.test' });
+  });
+
+  it('blocks an already queued external delivery after reports entitlement is removed', async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const auditCreate = vi.fn();
+    const prisma = {
+      report: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: '22222222-2222-4222-8222-222222222222',
+          title: 'Weekly reputation',
+          periodStart: new Date('2026-08-19T12:00:00.000Z'),
+          periodEnd: new Date('2026-08-26T12:00:00.000Z'),
+          status: 'READY',
+          generatedAt: new Date('2026-08-26T12:01:00.000Z'),
+          data: {},
+        }),
+      },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId: '11111111-1111-4111-8111-111111111111',
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: false }] },
+        }]),
+      },
+      auditLog: { create: auditCreate },
+    } as unknown as PrismaClient;
+
+    await expect(processReportDeliveryJob(prisma, {
+      organizationId: '11111111-1111-4111-8111-111111111111',
+      reportId: '22222222-2222-4222-8222-222222222222',
+      delivery: {
+        scheduleId: 'weekly-owner',
+        channel: 'email',
+        destination: 'owner@example.test',
+        slot: '2026-08-26T13:00',
+      },
+    })).rejects.toMatchObject({ message: 'REPORT_ENTITLEMENT_REQUIRED', retryable: false });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(auditCreate).not.toHaveBeenCalled();
   });
 
   it('treats an already delivered product suggestion as a no-op', async () => {
