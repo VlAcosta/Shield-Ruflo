@@ -44,6 +44,14 @@ describe('P27 report scheduler pagination', () => {
       organization: {
         findMany: vi.fn().mockResolvedValue([{ id: validOrganizationId, timezone: 'Europe/Stockholm' }]),
       },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId: validOrganizationId,
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: true }] },
+        }]),
+      },
       job: { findFirst: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (callback: (client: typeof tx) => Promise<boolean>) => callback(tx)),
     } as unknown as PrismaClient;
