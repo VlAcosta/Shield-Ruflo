@@ -21,7 +21,7 @@ export function getBackendProviderId(providerId) {
   return BACKEND_PROVIDER_IDS[providerId] || providerId;
 }
 
-function getClientProviderId(providerId) {
+export function getClientProviderId(providerId) {
   return CLIENT_PROVIDER_IDS[providerId] || providerId;
 }
 
@@ -110,6 +110,11 @@ function assertProviderConnectable(providerId) {
   const error = new Error(runtime.reasonMessage || 'Production provider adapter пока недоступен');
   error.code = runtime.reasonCode || 'PROVIDER_ADAPTER_NOT_CONFIGURED';
   throw error;
+}
+
+export async function providerAccounts({ signal } = {}) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return { integrations: [] };
+  return apiRequest(INTEGRATION_PROVIDER_ENDPOINT, { signal, retries: 0 });
 }
 
 export async function providerConnect(providerId, payload, { signal } = {}) {
