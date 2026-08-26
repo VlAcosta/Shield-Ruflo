@@ -92,16 +92,15 @@ export async function scheduleDueIntegrationSyncs(
       });
       if (active) return false;
 
-      // A provider call may mark its IntegrationSyncRun failed before the worker
-      // has decided whether the durable Job should retry. The queue is therefore
-      // the authoritative dedupe boundary for retry wait windows: as long as a
-      // sync job for this account is QUEUED/RUNNING, do not create another run.
+      // The durable queue is the authoritative dedupe boundary during retry
+      // windows. Every review-sync job uses this account-scoped key prefix, so
+      // this remains type-safe and queryable without inspecting JSON payloads.
       const activeJob = await tx.job.findFirst({
         where: {
           organizationId: account.organizationId,
           type: 'integration.sync.reviews',
           status: { in: ['QUEUED', 'RUNNING'] },
-          payload: { path: ['accountId'], equals: account.id },
+          dedupeKey: { startsWith: `integration-sync:${account.id}:` },
         },
         select: { id: true },
       });
