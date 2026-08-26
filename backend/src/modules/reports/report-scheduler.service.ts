@@ -1,9 +1,9 @@
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
+import { reportEntitledOrganizationIds } from './report-entitlement.service.js';
 
 const REPORT_SCHEDULE_KEY_PREFIX = 'reports:schedules:';
 const REPORT_SCHEDULE_PAGE_SIZE = 500;
 const DAY_MS = 86_400_000;
-const ACTIVE_SUBSCRIPTION_STATUSES = ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] as const;
 const ORGANIZATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEGRAM_DESTINATION_RE = /^(@[A-Za-z0-9_]{5,32}|-?\d{4,32})$/;
@@ -78,50 +78,6 @@ function validSchedule(schedule: StoredSchedule): boolean {
   return !destination || EMAIL_RE.test(destination);
 }
 
-async function reportEntitledOrganizations(
-  prisma: PrismaClient,
-  organizationIds: string[],
-  now: Date,
-): Promise<Set<string>> {
-  if (!organizationIds.length) return new Set();
-  const subscriptions = await prisma.subscription.findMany({
-    where: {
-      organizationId: { in: organizationIds },
-      status: { in: [...ACTIVE_SUBSCRIPTION_STATUSES] },
-    },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      organizationId: true,
-      status: true,
-      currentPeriodEnd: true,
-      plan: {
-        select: {
-          entitlements: {
-            where: { key: 'reports' },
-            select: { key: true, value: true },
-          },
-        },
-      },
-    },
-  });
-
-  const resolved = new Set<string>();
-  const entitled = new Set<string>();
-  for (const subscription of subscriptions) {
-    if (resolved.has(subscription.organizationId)) continue;
-    resolved.add(subscription.organizationId);
-    if (
-      subscription.status === 'TRIALING'
-      && subscription.currentPeriodEnd
-      && subscription.currentPeriodEnd <= now
-    ) continue;
-    if (subscription.plan.entitlements.some((item) => item.key === 'reports' && item.value === true)) {
-      entitled.add(subscription.organizationId);
-    }
-  }
-  return entitled;
-}
-
 async function scheduleMetadataBatch(
   prisma: PrismaClient,
   now: Date,
@@ -137,7 +93,7 @@ async function scheduleMetadataBatch(
           select: { id: true, timezone: true },
         })
       : Promise.resolve([]),
-    reportEntitledOrganizations(prisma, organizationIds, now),
+    reportEntitledOrganizationIds(prisma, organizationIds, now),
   ]);
   const organizationById = new Map(organizations.map((organization) => [organization.id, organization]));
 
