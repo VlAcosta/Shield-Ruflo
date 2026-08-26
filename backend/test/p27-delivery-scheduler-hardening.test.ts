@@ -281,6 +281,22 @@ describe('P27 report scheduler tenant isolation', () => {
           { id: validOrganizationId, timezone: 'Europe/Stockholm' },
         ]),
       },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            organizationId: invalidOrganizationId,
+            status: 'ACTIVE',
+            currentPeriodEnd: null,
+            plan: { entitlements: [{ key: 'reports', value: true }] },
+          },
+          {
+            organizationId: validOrganizationId,
+            status: 'ACTIVE',
+            currentPeriodEnd: null,
+            plan: { entitlements: [{ key: 'reports', value: true }] },
+          },
+        ]),
+      },
       job: {
         findFirst: vi.fn().mockResolvedValue(null),
       },
@@ -294,5 +310,44 @@ describe('P27 report scheduler tenant isolation', () => {
     expect(tx.report.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ organizationId: validOrganizationId, status: 'QUEUED' }),
     });
+  });
+
+  it('does not create background reports after the reports entitlement is removed', async () => {
+    const organizationId = '22222222-2222-4222-8222-222222222222';
+    const now = new Date('2026-08-26T12:00:00.000Z');
+    const schedule = {
+      id: 'weekly-owner',
+      title: 'Weekly reputation',
+      day: 'wed',
+      time: '13:00',
+      channel: 'email',
+      enabled: true,
+      destination: 'owner@example.test',
+    };
+    const transaction = vi.fn();
+    const prisma = {
+      serviceMetadata: {
+        findMany: vi.fn().mockResolvedValue([{ key: `reports:schedules:${organizationId}`, value: [schedule] }]),
+      },
+      organization: {
+        findMany: vi.fn().mockResolvedValue([{ id: organizationId, timezone: 'Europe/Stockholm' }]),
+      },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId,
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: false }] },
+        }]),
+      },
+      job: { findFirst: vi.fn() },
+      $transaction: transaction,
+    } as unknown as PrismaClient;
+
+    const result = await scheduleDueReports(prisma, { now });
+
+    expect(result).toEqual({ scheduled: 0, skipped: 1 });
+    expect(prisma.job.findFirst).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
   });
 });
