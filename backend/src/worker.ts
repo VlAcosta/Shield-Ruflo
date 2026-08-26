@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.js';
 import { env } from './config/env.js';
+import { AppError } from './core/errors/app-error.js';
 import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
 import { registerIntegrationProviders } from './modules/integrations/providers/index.js';
 import { scheduleDueIntegrationSyncs } from './modules/integrations/integration-scheduler.service.js';
@@ -39,6 +40,44 @@ function webhookDeliveryId(job: any): string | null {
   if (job?.type !== 'webhook.deliver') return null;
   const value = String(job?.payload?.deliveryId || '');
   return value || null;
+}
+
+function integrationSyncRunId(job: any): string | null {
+  if (job?.type !== 'integration.sync.reviews') return null;
+  const value = String(job?.payload?.syncRunId || '');
+  return value || null;
+}
+
+function jobErrorCode(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string') {
+    return String((error as { code: string }).code).slice(0, 120);
+  }
+  return 'JOB_EXECUTION_FAILED';
+}
+
+async function syncIntegrationRunJobFailure(
+  job: any,
+  input: { exhausted: boolean; error: string; errorCode: string },
+) {
+  const syncRunId = integrationSyncRunId(job);
+  if (!syncRunId) return;
+  const message = input.error.slice(0, 4000);
+  await prisma.integrationSyncRun.updateMany({
+    where: { id: syncRunId },
+    data: input.exhausted
+      ? {
+          status: 'FAILED',
+          finishedAt: new Date(),
+          errorCode: input.errorCode,
+          errorMessage: message,
+        }
+      : {
+          status: 'QUEUED',
+          finishedAt: null,
+          errorCode: input.errorCode,
+          errorMessage: message,
+        },
+  });
 }
 
 async function processIntegrationSync(payload: any) {
@@ -209,7 +248,7 @@ async function claimNextJob() {
   for (const candidate of candidates) {
     if (candidate.attempts >= candidate.maxAttempts) {
       const message = candidate.lastError || 'MAX_ATTEMPTS_EXHAUSTED';
-      await prisma.job.updateMany({
+      const dead = await prisma.job.updateMany({
         where: { id: candidate.id, status: 'QUEUED', attempts: candidate.attempts },
         data: {
           status: 'DEAD',
@@ -218,6 +257,12 @@ async function claimNextJob() {
           lockedAt: null,
           lockToken: null,
         },
+      });
+      if (dead.count !== 1) continue;
+      await syncIntegrationRunJobFailure(candidate, {
+        exhausted: true,
+        error: message,
+        errorCode: 'JOB_MAX_ATTEMPTS_EXHAUSTED',
       });
       const deliveryId = webhookDeliveryId(candidate);
       if (deliveryId) {
@@ -251,7 +296,14 @@ async function finishSuccess(id: string) {
 
 async function finishFailure(job: any, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  const explicitlyNonRetryable = Boolean(error && typeof error === 'object' && 'retryable' in error && (error as { retryable?: boolean }).retryable === false);
+  const providerMarkedNonRetryable = Boolean(
+    error
+    && typeof error === 'object'
+    && 'retryable' in error
+    && (error as { retryable?: boolean }).retryable === false,
+  );
+  const integrationAppError = job.type === 'integration.sync.reviews' && error instanceof AppError;
+  const explicitlyNonRetryable = providerMarkedNonRetryable || integrationAppError;
   const exhausted = explicitlyNonRetryable || job.attempts >= job.maxAttempts;
   const delaySeconds = Math.min(3600, 5 * 2 ** Math.max(0, job.attempts - 1));
   const nextRunAt = exhausted ? null : new Date(Date.now() + delaySeconds * 1000);
@@ -273,6 +325,12 @@ async function finishFailure(job: any, error: unknown) {
           lockToken: null,
           runAt: nextRunAt!,
         },
+  });
+
+  await syncIntegrationRunJobFailure(job, {
+    exhausted,
+    error: message,
+    errorCode: jobErrorCode(error),
   });
 
   const deliveryId = webhookDeliveryId(job);
