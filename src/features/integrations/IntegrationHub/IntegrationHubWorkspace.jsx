@@ -70,6 +70,37 @@ function StatusBadge({ status }) {
   return <span className={`integration-status is-${meta.tone}`}><i />{meta.label}</span>;
 }
 
+function providerAvailabilityCopy(runtime) {
+  if (!runtime.endpointConfigured) {
+    return {
+      title: 'Provider endpoint не настроен',
+      message: 'Конфигурацию можно сохранить, но реальный импорт не имитируется до подключения backend endpoint.',
+    };
+  }
+  if (runtime.connectable) {
+    return {
+      title: 'Provider adapter готов',
+      message: 'Секреты отправляются только backend и сохраняются в зашифрованном credential vault. В браузер они не возвращаются.',
+    };
+  }
+  if (runtime.releaseStage === 'UNKNOWN') {
+    return {
+      title: 'Проверяем provider adapter',
+      message: 'Server capability truth ещё не загружена. Подключение временно заблокировано fail-closed.',
+    };
+  }
+  if (runtime.releaseStage === 'PLANNED') {
+    return {
+      title: 'Production adapter ещё не готов',
+      message: runtime.reasonMessage || 'Провайдер пока не имеет production adapter и не может быть подключён.',
+    };
+  }
+  return {
+    title: 'Provider adapter установлен, но недоступен',
+    message: runtime.reasonMessage || 'Нужна операторская настройка provider adapter перед подключением организации.',
+  };
+}
+
 function CapabilityList({ providerId }) {
   const runtime = getProviderRuntime(providerId);
   const labels = {
@@ -84,7 +115,7 @@ function CapabilityList({ providerId }) {
     'crm.read': 'Данные CRM',
     'crm.write': 'Запись в CRM',
   };
-  return <div className="integration-capabilities"><small>Фактические возможности</small>{runtime.capabilities.map((item) => <span key={item}>{labels[item] || item}</span>)}</div>;
+  return <div className="integration-capabilities"><small>Фактические возможности</small>{runtime.capabilities.length ? runtime.capabilities.map((item) => <span key={item}>{labels[item] || item}</span>) : <span>Не заявлены server capability truth</span>}</div>;
 }
 
 function ConnectionModal({ integration, open, busy, onClose, onSave }) {
@@ -115,7 +146,10 @@ function ConnectionModal({ integration, open, busy, onClose, onSave }) {
   }, [onClose, open]);
 
   if (!open || !integration || typeof document === 'undefined') return null;
-  const providerReady = hasIntegrationBackend();
+  const runtime = getProviderRuntime(integration.id);
+  const providerReady = runtime.endpointConfigured && runtime.connectable;
+  const availability = providerAvailabilityCopy(runtime);
+  const providerBlocked = runtime.endpointConfigured && !runtime.connectable;
   const submit = () => {
     const configuration = {};
     const credentials = {};
@@ -151,14 +185,14 @@ function ConnectionModal({ integration, open, busy, onClose, onSave }) {
           <label><span>Ссылка или идентификатор</span><input autoFocus value={link} onChange={(event) => setLink(event.target.value)} placeholder={integration.placeholder || 'https://...'} /></label>
           {(setup?.fields || []).map((field) => <label key={field.key}><span>{field.label}{field.required ? ' *' : ''}</span><input type={field.secret ? 'password' : 'text'} autoComplete="off" value={fields[field.key] || ''} onChange={(event) => setFields((state) => ({ ...state, [field.key]: event.target.value }))} placeholder={field.placeholder} /></label>)}
           {setup?.note ? <div className="integration-connect-modal__truth"><strong>Источник данных</strong><span>{setup.note}</span></div> : null}
-          {setup?.supportsScheduledSync ? <div className="integration-connect-modal__sync-policy"><label><input type="checkbox" checked={autoSync} onChange={(event) => setAutoSync(event.target.checked)} /><span>Автоматическая синхронизация</span></label><label><span>Интервал, минут</span><input type="number" min="5" max="1440" step="5" value={intervalMinutes} onChange={(event) => setIntervalMinutes(event.target.value)} disabled={!autoSync} /></label></div> : null}
+          {setup?.supportsScheduledSync ? <div className="integration-connect-modal__sync-policy"><label><input type="checkbox" checked={autoSync} onChange={(event) => setAutoSync(event.target.checked)} disabled={providerBlocked} /><span>Автоматическая синхронизация</span></label><label><span>Интервал, минут</span><input type="number" min="5" max="1440" step="5" value={intervalMinutes} onChange={(event) => setIntervalMinutes(event.target.value)} disabled={!autoSync || providerBlocked} /></label></div> : null}
           <div className={`integration-connect-modal__provider ${providerReady ? 'is-ready' : 'is-pending'}`}>
             <i />
-            <div><strong>{providerReady ? 'Provider backend подключён' : 'Provider API ещё не выбран'}</strong><span>{providerReady ? 'Секреты отправляются только backend и сохраняются в зашифрованном credential vault. В браузер они не возвращаются.' : 'Сейчас мы сохраняем конфигурацию источника. Реальный импорт не имитируется.'}</span></div>
+            <div><strong>{availability.title}</strong><span>{availability.message}</span></div>
           </div>
           <CapabilityList providerId={integration.id} />
         </div>
-        <footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={Boolean(busy)} onClick={submit}>{busy ? 'Проверяем доступ…' : providerReady ? 'Проверить и подключить' : 'Сохранить конфигурацию'}</button></footer>
+        <footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={Boolean(busy) || providerBlocked} onClick={submit}>{busy ? 'Проверяем доступ…' : providerReady ? 'Проверить и подключить' : providerBlocked ? 'Provider недоступен' : 'Сохранить конфигурацию'}</button></footer>
       </section>
     </div>,
     document.body,
@@ -178,7 +212,9 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
   useEffect(() => { setDiagnostics(null); }, [integration?.id]);
   if (!integration) return <aside className="integration-inspector is-empty"><div><span>INTEGRATION INSPECTOR</span><strong>Выберите источник</strong><p>Здесь появятся состояние подключения, диагностика и история синхронизации.</p></div></aside>;
   const meta = INTEGRATION_STATUS_META[integration.status] || INTEGRATION_STATUS_META.disconnected;
-  const remoteReady = integration.providerMode === 'backend';
+  const runtime = getProviderRuntime(integration.id);
+  const remoteReady = integration.providerMode === 'backend' && runtime.connectable;
+  const unavailableReason = runtime.reasonMessage || 'Доступно после подключения production provider adapter';
   const handleDiagnose = async () => {
     try { setDiagnostics(await onDiagnose(integration.id)); } catch { return; }
   };
@@ -190,7 +226,7 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
     <p className="integration-inspector__description">{integration.description}</p>
     <div className="integration-inspector__facts">
       <div><span>Последняя синхронизация</span><strong>{formatRelative(integration.lastSyncAt)}</strong></div>
-      <div><span>Канал</span><strong>{remoteReady ? 'Backend provider' : 'Ожидает provider API'}</strong></div>
+      <div><span>Канал</span><strong>{remoteReady ? 'Backend provider' : runtime.releaseStage === 'PLANNED' ? 'Production adapter не готов' : runtime.releaseStage === 'ADAPTER_NOT_CONFIGURED' ? 'Adapter требует настройки' : 'Ожидает provider truth'}</strong></div>
       <div><span>Источник</span><strong>{integration.link ? 'Идентификатор задан' : 'Не настроен'}</strong></div>
       <div><span>Состояние</span><strong>{meta.label}</strong></div>
       {integration.lastSyncStats?.reviews !== undefined ? <div><span>Последний импорт</span><strong>{integration.lastSyncStats.reviews} отзывов</strong></div> : null}
@@ -203,8 +239,8 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
     {integration.authorizationUrl ? <a className="integration-inspector__authorize" href={integration.authorizationUrl}>Продолжить авторизацию →</a> : null}
     {canManage ? <div className="integration-inspector__actions">
       {!integration.enabled || integration.status === 'needs_setup' || integration.status === 'disconnected' ? <button type="button" className="is-primary" onClick={onConfigure}>Настроить источник</button> : null}
-      {integration.enabled && ['expired', 'error', 'degraded'].includes(integration.status) ? <button type="button" className="is-primary" disabled={Boolean(busy)} onClick={() => onReconnect(integration.id)}>{busy === 'reconnect' ? 'Восстанавливаем…' : 'Переподключить'}</button> : null}
-      {integration.enabled ? <button type="button" disabled={Boolean(busy) || !remoteReady} title={!remoteReady ? 'Доступно после подключения provider backend' : ''} onClick={() => onSync(integration.id)}>{busy === 'sync' ? 'Синхронизация…' : 'Синхронизировать'}</button> : null}
+      {integration.enabled && ['expired', 'error', 'degraded'].includes(integration.status) ? <button type="button" className="is-primary" disabled={Boolean(busy) || !remoteReady} title={!remoteReady ? unavailableReason : ''} onClick={() => onReconnect(integration.id)}>{busy === 'reconnect' ? 'Восстанавливаем…' : 'Переподключить'}</button> : null}
+      {integration.enabled ? <button type="button" disabled={Boolean(busy) || !remoteReady || !runtime.sync?.supported} title={!remoteReady ? unavailableReason : !runtime.sync?.supported ? 'Provider не поддерживает импорт отзывов' : ''} onClick={() => onSync(integration.id)}>{busy === 'sync' ? 'Синхронизация…' : 'Синхронизировать'}</button> : null}
       {integration.enabled ? <button type="button" className="is-danger" disabled={Boolean(busy)} onClick={() => onDisconnect(integration.id)}>Отключить</button> : null}
     </div> : null}
   </aside>;
@@ -216,7 +252,8 @@ function ActivityFeed({ items }) {
 
 function ProviderCard({ integration, selected, busy, canManage, onSelect, onConfigure, onSync }) {
   const meta = INTEGRATION_STATUS_META[integration.status] || INTEGRATION_STATUS_META.disconnected;
-  const canSync = integration.enabled && integration.providerMode === 'backend' && ['connected', 'configured', 'degraded'].includes(integration.status) && getProviderRuntime(integration.id).capabilities.includes('reviews.read');
+  const runtime = getProviderRuntime(integration.id);
+  const canSync = integration.enabled && integration.providerMode === 'backend' && runtime.connectable && runtime.sync?.supported && ['connected', 'configured', 'degraded'].includes(integration.status) && runtime.capabilities.includes('reviews.read');
   return <article className={`integration-provider-card is-${integration.tone || 'violet'} ${selected ? 'is-selected' : ''}`}>
     <button type="button" className="integration-provider-card__main" onClick={onSelect}>
       <div className="integration-provider-card__head"><ProviderMark integration={integration} /><StatusBadge status={integration.status} /></div>
@@ -242,14 +279,16 @@ function IntegrationHubWorkspace() {
 
   const selected = hub.connections.find((item) => item.id === selectedId) || hub.connections[0] || null;
   const connectTarget = hub.connections.find((item) => item.id === connectId) || null;
-  const backendReady = hasIntegrationBackend();
+  const providerEndpointReady = hasIntegrationBackend();
+  const liveProviders = hub.connections.filter((item) => getProviderRuntime(item.id).connectable).length;
+  const backendReady = providerEndpointReady && liveProviders > 0;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return [...hub.connections]
       .filter((item) => {
         if (filter === 'active') return item.enabled;
-        if (filter === 'issues') return item.enabled && ['error', 'expired', 'degraded', 'needs_setup'].includes(item.status);
+        if (filter === 'issues') return item.enabled && (['planned', 'unavailable'].includes(item.providerMode) || ['error', 'expired', 'degraded', 'needs_setup'].includes(item.status));
         if (filter === 'recommended') return item.recommended;
         return true;
       })
@@ -268,11 +307,14 @@ function IntegrationHubWorkspace() {
       setSelectedId(connectTarget.id);
     } catch { return; }
   };
+  const syncProvider = (id) => { void hub.sync(id).catch(() => undefined); };
+  const reconnectProvider = (id) => { void hub.reconnect(id).catch(() => undefined); };
+  const disconnectProvider = (id) => { void hub.disconnect(id).catch(() => undefined); };
 
   return <div className="integration-hub-page">
     <section className="integration-hub-hero">
       <div className="integration-hub-hero__copy"><span className="integration-hub-eyebrow"><i /> INTEGRATION OPERATIONS</span><h1>Все источники.<br/><em>Один контрольный центр.</em></h1><p>Подключения, синхронизация и диагностика Яндекс, 2GIS, Ozon, Отзовика и Wildberries — без скрытой имитации provider API.</p><div className="integration-hub-hero__actions">{canManage ? <button type="button" onClick={() => setConnectId(hub.connections.find((item) => !item.enabled)?.id || selectedId)}>+ Подключить источник</button> : null}<button type="button" className="is-secondary" onClick={hub.refresh}>Обновить состояние</button></div></div>
-      <div className="integration-health-orbit" aria-label={`Состояние подключений ${hub.metrics.score}%`}><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="68" pathLength="100" className="integration-health-orbit__track"/><circle cx="90" cy="90" r="68" pathLength="100" strokeDasharray={`${hub.metrics.score} 100`} className="integration-health-orbit__value"/></svg><div><strong>{hub.metrics.score}%</strong><span>готовность</span></div><i className="is-one"/><i className="is-two"/><b>{backendReady ? 'PROVIDER LIVE' : 'PROVIDER READY'}</b></div>
+      <div className="integration-health-orbit" aria-label={`Состояние подключений ${hub.metrics.score}%`}><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="68" pathLength="100" className="integration-health-orbit__track"/><circle cx="90" cy="90" r="68" pathLength="100" strokeDasharray={`${hub.metrics.score} 100`} className="integration-health-orbit__value"/></svg><div><strong>{hub.metrics.score}%</strong><span>готовность</span></div><i className="is-one"/><i className="is-two"/><b>{backendReady ? `${liveProviders} PROVIDERS LIVE` : providerEndpointReady ? 'PROVIDERS LIMITED' : 'PROVIDER ENDPOINT OFF'}</b></div>
     </section>
 
     <section className="integration-hub-kpis">
@@ -290,8 +332,8 @@ function IntegrationHubWorkspace() {
     </div>
 
     <div className="integration-hub-layout">
-      <section className="integration-provider-grid">{visible.map((integration) => <ProviderCard key={integration.id} integration={integration} selected={selected?.id === integration.id} busy={hub.busy[integration.id]} canManage={canManage} onSelect={() => setSelectedId(integration.id)} onConfigure={() => setConnectId(integration.id)} onSync={(event) => { event.stopPropagation(); hub.sync(integration.id); }} />)}{!visible.length ? <div className="integration-provider-grid__empty"><span>0</span><strong>Источники не найдены</strong><p>Измените фильтр или поисковый запрос.</p></div> : null}</section>
-      <ProviderInspector integration={selected} busy={selected ? hub.busy[selected.id] : null} canManage={canManage} onConfigure={() => selected && setConnectId(selected.id)} onSync={hub.sync} onReconnect={hub.reconnect} onDisconnect={hub.disconnect} onDiagnose={hub.diagnose} />
+      <section className="integration-provider-grid">{visible.map((integration) => <ProviderCard key={integration.id} integration={integration} selected={selected?.id === integration.id} busy={hub.busy[integration.id]} canManage={canManage} onSelect={() => setSelectedId(integration.id)} onConfigure={() => setConnectId(integration.id)} onSync={(event) => { event.stopPropagation(); syncProvider(integration.id); }} />)}{!visible.length ? <div className="integration-provider-grid__empty"><span>0</span><strong>Источники не найдены</strong><p>Измените фильтр или поисковый запрос.</p></div> : null}</section>
+      <ProviderInspector integration={selected} busy={selected ? hub.busy[selected.id] : null} canManage={canManage} onConfigure={() => selected && setConnectId(selected.id)} onSync={syncProvider} onReconnect={reconnectProvider} onDisconnect={disconnectProvider} onDiagnose={hub.diagnose} />
     </div>
 
     <ActivityFeed items={hub.activity} />
