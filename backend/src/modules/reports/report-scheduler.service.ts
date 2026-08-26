@@ -2,6 +2,9 @@ import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 
 const REPORT_SCHEDULE_KEY_PREFIX = 'reports:schedules:';
 const DAY_MS = 86_400_000;
+const ORGANIZATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TELEGRAM_DESTINATION_RE = /^(@[A-Za-z0-9_]{5,32}|-?\d{4,32})$/;
 const DAY_MAP: Readonly<Record<string, string>> = Object.freeze({
   Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun',
 });
@@ -55,10 +58,17 @@ function localClock(now: Date, timezone: string): { day: string; date: string; t
   };
 }
 
+function normalizedDestination(schedule: StoredSchedule): string {
+  return String(schedule.destination || '').trim();
+}
+
 function validSchedule(schedule: StoredSchedule): boolean {
-  return /^[a-zA-Z0-9._:-]{1,120}$/.test(schedule.id)
-    && /^(mon|tue|wed|thu|fri|sat|sun)$/.test(schedule.day)
-    && /^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time);
+  const destination = normalizedDestination(schedule);
+  if (!/^[a-zA-Z0-9._:-]{1,120}$/.test(schedule.id)) return false;
+  if (!/^(mon|tue|wed|thu|fri|sat|sun)$/.test(schedule.day)) return false;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time)) return false;
+  if (schedule.channel === 'telegram') return TELEGRAM_DESTINATION_RE.test(destination);
+  return !destination || EMAIL_RE.test(destination);
 }
 
 export async function scheduleDueReports(
@@ -70,20 +80,43 @@ export async function scheduleDueReports(
     where: { key: { startsWith: REPORT_SCHEDULE_KEY_PREFIX } },
     take: 5_000,
   });
+
+  const organizationIds = [...new Set(metadataRows
+    .map((metadata) => metadata.key.slice(REPORT_SCHEDULE_KEY_PREFIX.length))
+    .filter((organizationId) => ORGANIZATION_ID_RE.test(organizationId)))];
+  const organizations = organizationIds.length
+    ? await prisma.organization.findMany({
+        where: { id: { in: organizationIds }, status: 'ACTIVE' },
+        select: { id: true, timezone: true },
+      })
+    : [];
+  const organizationById = new Map(organizations.map((organization) => [organization.id, organization]));
+
   let scheduled = 0;
   let skipped = 0;
 
   for (const metadata of metadataRows) {
     const organizationId = metadata.key.slice(REPORT_SCHEDULE_KEY_PREFIX.length);
-    if (!organizationId) continue;
-    const organization = await prisma.organization.findFirst({
-      where: { id: organizationId, status: 'ACTIVE' },
-      select: { id: true, timezone: true },
-    });
-    if (!organization) continue;
-    const local = localClock(now, organization.timezone);
+    const schedules = readSchedules(metadata.value);
+    if (!ORGANIZATION_ID_RE.test(organizationId)) {
+      skipped += schedules.length;
+      continue;
+    }
+    const organization = organizationById.get(organizationId);
+    if (!organization) {
+      skipped += schedules.length;
+      continue;
+    }
 
-    for (const schedule of readSchedules(metadata.value)) {
+    let local: { day: string; date: string; time: string };
+    try {
+      local = localClock(now, organization.timezone);
+    } catch {
+      skipped += schedules.length;
+      continue;
+    }
+
+    for (const schedule of schedules) {
       if (!schedule.enabled || !validSchedule(schedule) || local.day !== schedule.day || local.time < schedule.time) {
         skipped += 1;
         continue;
@@ -119,10 +152,11 @@ export async function scheduleDueReports(
             status: 'QUEUED',
           },
         });
+        const destination = normalizedDestination(schedule);
         const delivery: ScheduledReportDelivery = {
           scheduleId: schedule.id,
           channel: schedule.channel,
-          ...(schedule.destination ? { destination: schedule.destination } : {}),
+          ...(destination ? { destination } : {}),
           slot,
         };
         await tx.job.create({
