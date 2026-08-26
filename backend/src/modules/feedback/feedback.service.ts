@@ -98,26 +98,37 @@ export async function processSuggestionDeliveryJob(
   }
 
   const eventId = suggestionDeliveryEventId(suggestion.id);
-  const response = await fetch(env.SUGGESTION_WEBHOOK_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Idempotency-Key': eventId,
-      'X-Business-Shield-Event-Id': eventId,
-      ...(env.SUGGESTION_WEBHOOK_TOKEN ? { Authorization: `Bearer ${env.SUGGESTION_WEBHOOK_TOKEN}` } : {}),
-    },
-    body: JSON.stringify({
-      eventId,
-      id: suggestion.id,
-      organizationId: suggestion.organizationId,
-      category: suggestion.category,
-      subject: suggestion.subject,
-      message: suggestion.message,
-      contactName: suggestion.contactName,
-      contactEmail: suggestion.contactEmail,
-      createdAt: suggestion.createdAt.toISOString(),
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(env.SUGGESTION_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': eventId,
+        'X-Business-Shield-Event-Id': eventId,
+        ...(env.SUGGESTION_WEBHOOK_TOKEN ? { Authorization: `Bearer ${env.SUGGESTION_WEBHOOK_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({
+        eventId,
+        id: suggestion.id,
+        organizationId: suggestion.organizationId,
+        category: suggestion.category,
+        subject: suggestion.subject,
+        message: suggestion.message,
+        contactName: suggestion.contactName,
+        contactEmail: suggestion.contactEmail,
+        createdAt: suggestion.createdAt.toISOString(),
+      }),
+    });
+  } catch {
+    await prisma.productSuggestion.update({
+      where: { id: suggestion.id },
+      data: { deliveryStatus: 'RETRYING', lastError: 'WEBHOOK_NETWORK_FAILED' },
+    });
+    const error = new Error('SUGGESTION_WEBHOOK_NETWORK_FAILED') as Error & { retryable?: boolean };
+    error.retryable = true;
+    throw error;
+  }
 
   if (!response.ok) {
     const retryable = response.status === 429 || response.status >= 500;
