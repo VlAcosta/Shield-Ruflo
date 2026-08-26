@@ -20,6 +20,7 @@ import {
 } from './modules/webhooks/webhook-delivery.service.js';
 import { scheduleDueReports, type ScheduledReportDelivery } from './modules/reports/report-scheduler.service.js';
 import { enqueueReportDelivery, processReportDeliveryJob } from './modules/reports/report-delivery.service.js';
+import { hasReportsEntitlement } from './modules/reports/report-entitlement.service.js';
 import { processSuggestionDeliveryJob } from './modules/feedback/feedback.service.js';
 
 registerIntegrationProviders();
@@ -138,6 +139,13 @@ async function processReport(payload: any) {
   if (!reportId) throw new Error('INVALID_REPORT_JOB');
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw new Error('REPORT_NOT_FOUND');
+
+  if (!await hasReportsEntitlement(prisma, report.organizationId)) {
+    const error = new Error('REPORT_ENTITLEMENT_REQUIRED') as Error & { retryable?: boolean; code?: string };
+    error.retryable = false;
+    error.code = 'REPORT_ENTITLEMENT_REQUIRED';
+    throw error;
+  }
 
   const delivery = scheduledDelivery(payload?.delivery);
   if (report.status === 'READY' && report.generatedAt) {
