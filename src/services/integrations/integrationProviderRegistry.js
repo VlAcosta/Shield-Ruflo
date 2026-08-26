@@ -70,8 +70,10 @@ export function clearProviderTruthCache() {
   providerTruthCache = new Map();
 }
 
-export function hasIntegrationBackend() {
-  return Boolean(INTEGRATION_PROVIDER_ENDPOINT);
+export function hasIntegrationBackend(providerId) {
+  if (!INTEGRATION_PROVIDER_ENDPOINT) return false;
+  if (!providerId) return true;
+  return getProviderRuntime(providerId).connectable;
 }
 
 export function getProviderTruth(providerId) {
@@ -102,8 +104,17 @@ export function getProviderRuntime(providerId) {
   };
 }
 
+function assertProviderConnectable(providerId) {
+  const runtime = getProviderRuntime(providerId);
+  if (runtime.connectable) return runtime;
+  const error = new Error(runtime.reasonMessage || 'Production provider adapter пока недоступен');
+  error.code = runtime.reasonCode || 'PROVIDER_ADAPTER_NOT_CONFIGURED';
+  throw error;
+}
+
 export async function providerConnect(providerId, payload, { signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  assertProviderConnectable(providerId);
   return apiRequest(providerPath(providerId, 'connect'), {
     method: 'POST',
     body: payload,
@@ -114,6 +125,7 @@ export async function providerConnect(providerId, payload, { signal } = {}) {
 
 export async function providerReconnect(providerId, payload = {}, { signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  assertProviderConnectable(providerId);
   return apiRequest(providerPath(providerId, 'reconnect'), {
     method: 'POST',
     body: payload,
@@ -133,6 +145,7 @@ export async function providerDisconnect(providerId, { signal } = {}) {
 
 export async function providerSync(providerId, { signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  assertProviderConnectable(providerId);
   return apiRequest(providerPath(providerId, 'sync'), {
     method: 'POST',
     signal,
@@ -152,6 +165,7 @@ export async function providerDiagnostics(providerId, { signal } = {}) {
 
 export async function googleBusinessOAuthStart({ signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  assertProviderConnectable('google');
   return apiRequest(providerPath('google', 'oauth/start'), {
     method: 'POST',
     signal,
@@ -161,11 +175,13 @@ export async function googleBusinessOAuthStart({ signal } = {}) {
 
 export async function googleBusinessAccounts({ signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return { accounts: [] };
+  assertProviderConnectable('google');
   return apiRequest(providerPath('google', 'accounts'), { signal, retries: 0 });
 }
 
 export async function googleBusinessLocations(accountName, { signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return { locations: [] };
+  assertProviderConnectable('google');
   const match = /^accounts\/([A-Za-z0-9_-]+)$/.exec(String(accountName || ''));
   if (!match) throw new Error('Некорректный Google Business account');
   return apiRequest(providerPath('google', `accounts/${encodeURIComponent(match[1])}/locations`), { signal, retries: 0 });
@@ -173,6 +189,7 @@ export async function googleBusinessLocations(accountName, { signal } = {}) {
 
 export async function googleBusinessSelect(selection, { signal } = {}) {
   if (!INTEGRATION_PROVIDER_ENDPOINT) return null;
+  assertProviderConnectable('google');
   return apiRequest(providerPath('google', 'selection'), {
     method: 'PUT',
     body: selection,
