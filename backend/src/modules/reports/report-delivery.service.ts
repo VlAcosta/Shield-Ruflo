@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { env } from '../../config/env.js';
 import type { ScheduledReportDelivery } from './report-scheduler.service.js';
+import { hasReportsEntitlement } from './report-entitlement.service.js';
 
 export class ReportDeliveryError extends Error {
   readonly retryable: boolean;
@@ -167,6 +168,9 @@ export async function processReportDeliveryJob(
     where: { id: input.reportId, organizationId: input.organizationId },
   });
   if (!report) throw new ReportDeliveryError('REPORT_NOT_FOUND');
+  if (!await hasReportsEntitlement(prisma, input.organizationId)) {
+    throw new ReportDeliveryError('REPORT_ENTITLEMENT_REQUIRED');
+  }
   if (report.status !== 'READY' || !report.generatedAt) {
     throw new ReportDeliveryError('REPORT_NOT_READY_FOR_DELIVERY', true);
   }
