@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { env } from '../../config/env.js';
 import type { ScheduledReportDelivery } from './report-scheduler.service.js';
@@ -38,6 +39,23 @@ function safeHtml(value: string): string {
   }[char] || char));
 }
 
+export function reportDeliveryIdempotencyKey(input: {
+  organizationId: string;
+  reportId: string;
+  delivery: ScheduledReportDelivery;
+}): string {
+  const digest = createHash('sha256')
+    .update([
+      input.organizationId,
+      input.reportId,
+      input.delivery.scheduleId,
+      input.delivery.slot,
+      input.delivery.channel,
+    ].join('\n'))
+    .digest('hex');
+  return `bs-report-${digest}`;
+}
+
 async function fallbackEmailDestination(
   prisma: PrismaClient,
   organizationId: string,
@@ -57,7 +75,7 @@ async function fallbackEmailDestination(
   return value;
 }
 
-async function sendEmail(to: string, subject: string, text: string) {
+async function sendEmail(to: string, subject: string, text: string, eventId: string) {
   if (env.REPORT_EMAIL_PROVIDER === 'disabled') {
     throw new ReportDeliveryError('REPORT_EMAIL_PROVIDER_NOT_CONFIGURED');
   }
@@ -67,6 +85,7 @@ async function sendEmail(to: string, subject: string, text: string) {
       headers: {
         Authorization: `Bearer ${env.REPORT_EMAIL_API_KEY}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': eventId,
       },
       body: JSON.stringify({
         from: env.REPORT_EMAIL_FROM,
@@ -86,9 +105,11 @@ async function sendEmail(to: string, subject: string, text: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Idempotency-Key': eventId,
+      'X-Business-Shield-Event-Id': eventId,
       ...(env.REPORT_EMAIL_WEBHOOK_TOKEN ? { Authorization: `Bearer ${env.REPORT_EMAIL_WEBHOOK_TOKEN}` } : {}),
     },
-    body: JSON.stringify({ to, subject, text }),
+    body: JSON.stringify({ eventId, to, subject, text }),
   });
   if (!response.ok) {
     throw new ReportDeliveryError(`REPORT_EMAIL_WEBHOOK_HTTP_${response.status}`, response.status === 429 || response.status >= 500);
@@ -151,8 +172,29 @@ export async function processReportDeliveryJob(
     destination = configuredDestination || await fallbackEmailDestination(prisma, input.organizationId);
   }
 
+  const eventId = reportDeliveryIdempotencyKey(input);
   const text = reportText(report);
-  if (input.delivery.channel === 'email') await sendEmail(destination, report.title, text);
+
+  // Persist the attempt before the external side effect. If the post-send audit
+  // fails, the already successful delivery must not be retried solely because
+  // our audit storage was temporarily unavailable.
+  await prisma.auditLog.create({
+    data: {
+      organizationId: input.organizationId,
+      action: 'report.schedule.delivery_attempted',
+      entityType: 'Report',
+      entityId: report.id,
+      metadata: {
+        scheduleId: input.delivery.scheduleId,
+        channel: input.delivery.channel,
+        slot: input.delivery.slot,
+        eventId,
+        destinationConfigured: true,
+      },
+    },
+  });
+
+  if (input.delivery.channel === 'email') await sendEmail(destination, report.title, text, eventId);
   else await sendTelegram(destination, text);
 
   await prisma.auditLog.create({
@@ -165,8 +207,9 @@ export async function processReportDeliveryJob(
         scheduleId: input.delivery.scheduleId,
         channel: input.delivery.channel,
         slot: input.delivery.slot,
+        eventId,
         destinationConfigured: true,
       },
     },
-  });
+  }).catch(() => null);
 }
