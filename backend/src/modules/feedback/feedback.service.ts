@@ -10,6 +10,10 @@ export type ProductSuggestionInput = {
   email?: string;
 };
 
+export function suggestionDeliveryEventId(suggestionId: string): string {
+  return `bs-feedback-${suggestionId}`;
+}
+
 export async function createProductSuggestion(
   app: FastifyInstance,
   actor: { organizationId: string; userId: string },
@@ -79,6 +83,12 @@ export async function processSuggestionDeliveryJob(
     error.retryable = false;
     throw error;
   }
+
+  // A duplicate durable job or a manual replay after a confirmed delivery is a
+  // no-op. This is the local exactly-once boundary; remote retries use the same
+  // stable event id so a webhook receiver can deduplicate as well.
+  if (suggestion.deliveryStatus === 'DELIVERED') return;
+
   if (!env.SUGGESTION_WEBHOOK_URL) {
     await prisma.productSuggestion.update({
       where: { id: suggestion.id },
@@ -87,13 +97,17 @@ export async function processSuggestionDeliveryJob(
     return;
   }
 
+  const eventId = suggestionDeliveryEventId(suggestion.id);
   const response = await fetch(env.SUGGESTION_WEBHOOK_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Idempotency-Key': eventId,
+      'X-Business-Shield-Event-Id': eventId,
       ...(env.SUGGESTION_WEBHOOK_TOKEN ? { Authorization: `Bearer ${env.SUGGESTION_WEBHOOK_TOKEN}` } : {}),
     },
     body: JSON.stringify({
+      eventId,
       id: suggestion.id,
       organizationId: suggestion.organizationId,
       category: suggestion.category,
