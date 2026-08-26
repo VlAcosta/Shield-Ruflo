@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 
 const REPORT_SCHEDULE_KEY_PREFIX = 'reports:schedules:';
+const REPORT_SCHEDULE_PAGE_SIZE = 500;
 const DAY_MS = 86_400_000;
 const ORGANIZATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +25,11 @@ type StoredSchedule = {
   channel: 'email' | 'telegram';
   enabled: boolean;
   destination?: string;
+};
+
+type ScheduleMetadataRow = {
+  key: string;
+  value: Prisma.JsonValue;
 };
 
 function readSchedules(value: Prisma.JsonValue | null | undefined): StoredSchedule[] {
@@ -71,16 +77,11 @@ function validSchedule(schedule: StoredSchedule): boolean {
   return !destination || EMAIL_RE.test(destination);
 }
 
-export async function scheduleDueReports(
+async function scheduleMetadataBatch(
   prisma: PrismaClient,
-  input: { now?: Date },
+  now: Date,
+  metadataRows: ScheduleMetadataRow[],
 ): Promise<{ scheduled: number; skipped: number }> {
-  const now = input.now ?? new Date();
-  const metadataRows = await prisma.serviceMetadata.findMany({
-    where: { key: { startsWith: REPORT_SCHEDULE_KEY_PREFIX } },
-    take: 5_000,
-  });
-
   const organizationIds = [...new Set(metadataRows
     .map((metadata) => metadata.key.slice(REPORT_SCHEDULE_KEY_PREFIX.length))
     .filter((organizationId) => ORGANIZATION_ID_RE.test(organizationId)))];
@@ -183,5 +184,43 @@ export async function scheduleDueReports(
       else skipped += 1;
     }
   }
+
+  return { scheduled, skipped };
+}
+
+export async function scheduleDueReports(
+  prisma: PrismaClient,
+  input: { now?: Date },
+): Promise<{ scheduled: number; skipped: number }> {
+  const now = input.now ?? new Date();
+  let scheduled = 0;
+  let skipped = 0;
+  let cursorKey: string | null = null;
+
+  while (true) {
+    const metadataRows: ScheduleMetadataRow[] = cursorKey
+      ? await prisma.serviceMetadata.findMany({
+          where: { key: { startsWith: REPORT_SCHEDULE_KEY_PREFIX } },
+          orderBy: { key: 'asc' },
+          take: REPORT_SCHEDULE_PAGE_SIZE,
+          cursor: { key: cursorKey },
+          skip: 1,
+        })
+      : await prisma.serviceMetadata.findMany({
+          where: { key: { startsWith: REPORT_SCHEDULE_KEY_PREFIX } },
+          orderBy: { key: 'asc' },
+          take: REPORT_SCHEDULE_PAGE_SIZE,
+        });
+
+    if (!metadataRows.length) break;
+
+    const page = await scheduleMetadataBatch(prisma, now, metadataRows);
+    scheduled += page.scheduled;
+    skipped += page.skipped;
+
+    if (metadataRows.length < REPORT_SCHEDULE_PAGE_SIZE) break;
+    cursorKey = metadataRows[metadataRows.length - 1]!.key;
+  }
+
   return { scheduled, skipped };
 }
