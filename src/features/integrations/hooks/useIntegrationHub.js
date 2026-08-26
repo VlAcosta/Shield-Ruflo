@@ -9,6 +9,7 @@ import {
   readIntegrationActivity,
   readIntegrationConnections,
   reconnectIntegration,
+  refreshIntegrationConnections,
   saveConnectedIntegrations,
   syncIntegration,
 } from '../../../services/integrations/integrationService';
@@ -35,13 +36,14 @@ function applyGoogleRemote(current, payload) {
     enabled: remote.status !== 'DISCONNECTED',
     status: frontendStatus(remote.status),
     providerMode: 'backend',
-    externalAccountId: remote.externalAccountId || null,
-    configuration: remote.configuration || {},
+    link: remote.configuration?.sourceLink || item.link || '',
     lastSyncAt: remote.lastSyncedAt || item.lastSyncAt || null,
-    lastSuccessAt: remote.lastValidatedAt || now,
+    lastSuccessAt: remote.lastValidatedAt || item.lastSuccessAt || now,
     lastError: remote.lastErrorMessage || '',
     lastErrorAt: remote.lastErrorMessage ? now : null,
-    updatedAt: now,
+    syncPolicy: remote.syncPolicy || item.syncPolicy || null,
+    nextSyncAt: remote.syncPolicy?.nextSyncAt || item.nextSyncAt || null,
+    updatedAt: remote.updatedAt || now,
   } : item);
 }
 
@@ -51,39 +53,61 @@ export default function useIntegrationHub() {
   const [busy, setBusy] = useState({});
   const [error, setError] = useState('');
 
-  const refresh = useCallback(() => {
+  const refreshLocal = useCallback(() => {
     setConnections(readIntegrationConnections());
     setActivity(readIntegrationActivity());
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    refreshProviderTruth({ signal: controller.signal }).then(refresh).catch((requestError) => {
-      if (requestError?.name !== 'AbortError') refresh();
-    });
-    return () => controller.abort();
-  }, [refresh]);
+  const refresh = useCallback(async () => {
+    setError('');
+    try {
+      await refreshProviderTruth();
+      await refreshIntegrationConnections();
+    } catch (requestError) {
+      if (requestError?.name !== 'AbortError') {
+        setError(requestError?.message || 'Не удалось обновить состояние интеграций');
+      }
+    } finally {
+      refreshLocal();
+    }
+  }, [refreshLocal]);
 
   useEffect(() => {
-    const onStorage = () => refresh();
-    window.addEventListener(INTEGRATIONS_CHANGED_EVENT, refresh);
-    window.addEventListener(INTEGRATION_ACTIVITY_EVENT, refresh);
-    window.addEventListener(PROVIDER_TRUTH_CHANGED_EVENT, refresh);
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        await refreshProviderTruth({ signal: controller.signal });
+        await refreshIntegrationConnections({ signal: controller.signal });
+      } catch (requestError) {
+        if (requestError?.name !== 'AbortError') refreshLocal();
+        return;
+      }
+      refreshLocal();
+    };
+    load();
+    return () => controller.abort();
+  }, [refreshLocal]);
+
+  useEffect(() => {
+    const onStorage = () => refreshLocal();
+    window.addEventListener(INTEGRATIONS_CHANGED_EVENT, refreshLocal);
+    window.addEventListener(INTEGRATION_ACTIVITY_EVENT, refreshLocal);
+    window.addEventListener(PROVIDER_TRUTH_CHANGED_EVENT, refreshLocal);
     window.addEventListener('storage', onStorage);
     return () => {
-      window.removeEventListener(INTEGRATIONS_CHANGED_EVENT, refresh);
-      window.removeEventListener(INTEGRATION_ACTIVITY_EVENT, refresh);
-      window.removeEventListener(PROVIDER_TRUTH_CHANGED_EVENT, refresh);
+      window.removeEventListener(INTEGRATIONS_CHANGED_EVENT, refreshLocal);
+      window.removeEventListener(INTEGRATION_ACTIVITY_EVENT, refreshLocal);
+      window.removeEventListener(PROVIDER_TRUTH_CHANGED_EVENT, refreshLocal);
       window.removeEventListener('storage', onStorage);
     };
-  }, [refresh]);
+  }, [refreshLocal]);
 
   const run = useCallback(async (id, action, callback) => {
     setError('');
     setBusy((state) => ({ ...state, [id]: action }));
     try {
       const result = await callback();
-      refresh();
+      refreshLocal();
       return result;
     } catch (requestError) {
       setError(requestError?.message || 'Не удалось выполнить действие');
@@ -95,7 +119,7 @@ export default function useIntegrationHub() {
         return next;
       });
     }
-  }, [refresh]);
+  }, [refreshLocal]);
 
   const configure = useCallback((id, payload) => run(id, 'configure', () => configureIntegration(id, payload)), [run]);
   const startGoogleOAuth = useCallback(() => run('google', 'oauth', () => googleBusinessOAuthStart()), [run]);
