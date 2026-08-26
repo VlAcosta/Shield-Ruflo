@@ -48,6 +48,12 @@ function integrationSyncRunId(job: any): string | null {
   return value || null;
 }
 
+function reportGenerationId(job: any): string | null {
+  if (job?.type !== 'report.generate') return null;
+  const value = String(job?.payload?.reportId || '');
+  return value || null;
+}
+
 function jobErrorCode(error: unknown): string {
   if (error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string') {
     return String((error as { code: string }).code).slice(0, 120);
@@ -80,6 +86,34 @@ async function syncIntegrationRunJobFailure(
   });
 }
 
+async function syncReportGenerationJobFailure(
+  job: any,
+  input: { exhausted: boolean; error: string },
+) {
+  const reportId = reportGenerationId(job);
+  if (!reportId) return;
+  const message = input.error.slice(0, 4000);
+  await prisma.report.updateMany({
+    where: {
+      id: reportId,
+      status: { in: input.exhausted ? ['QUEUED', 'GENERATING'] : ['GENERATING'] },
+    },
+    data: input.exhausted
+      ? { status: 'FAILED', errorMessage: message }
+      : { status: 'QUEUED', errorMessage: message },
+  });
+}
+
+async function syncFeedbackDeliveryJobFailure(job: any, input: { exhausted: boolean; error: string }) {
+  if (job?.type !== 'feedback.suggestion.deliver' || !input.exhausted) return;
+  const suggestionId = String(job.payload?.suggestionId || '');
+  if (!suggestionId) return;
+  await prisma.productSuggestion.updateMany({
+    where: { id: suggestionId, deliveryStatus: { not: 'DELIVERED' } },
+    data: { deliveryStatus: 'FAILED', lastError: input.error.slice(0, 4000) },
+  });
+}
+
 async function processIntegrationSync(payload: any) {
   const syncRunId = String(payload?.syncRunId || '');
   const accountId = String(payload?.accountId || '');
@@ -104,6 +138,18 @@ async function processReport(payload: any) {
   if (!reportId) throw new Error('INVALID_REPORT_JOB');
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw new Error('REPORT_NOT_FOUND');
+
+  const delivery = scheduledDelivery(payload?.delivery);
+  if (report.status === 'READY' && report.generatedAt) {
+    if (delivery) {
+      await enqueueReportDelivery(prisma, {
+        organizationId: report.organizationId,
+        reportId: report.id,
+        delivery,
+      });
+    }
+    return;
+  }
 
   await prisma.report.update({ where: { id: report.id }, data: { status: 'GENERATING', errorMessage: null } });
   const [aggregate, positive, negative, answered] = await Promise.all([
@@ -136,7 +182,6 @@ async function processReport(payload: any) {
     data: { status: 'READY', data, generatedAt: new Date(), errorMessage: null },
   });
 
-  const delivery = scheduledDelivery(payload?.delivery);
   if (delivery) {
     await enqueueReportDelivery(prisma, {
       organizationId: report.organizationId,
@@ -264,6 +309,8 @@ async function claimNextJob() {
         error: message,
         errorCode: 'JOB_MAX_ATTEMPTS_EXHAUSTED',
       });
+      await syncReportGenerationJobFailure(candidate, { exhausted: true, error: message });
+      await syncFeedbackDeliveryJobFailure(candidate, { exhausted: true, error: message });
       const deliveryId = webhookDeliveryId(candidate);
       if (deliveryId) {
         await syncWebhookDeliveryJobFailure(prisma, {
@@ -332,6 +379,8 @@ async function finishFailure(job: any, error: unknown) {
     error: message,
     errorCode: jobErrorCode(error),
   });
+  await syncReportGenerationJobFailure(job, { exhausted, error: message });
+  await syncFeedbackDeliveryJobFailure(job, { exhausted, error: message });
 
   const deliveryId = webhookDeliveryId(job);
   if (deliveryId) {
@@ -342,15 +391,6 @@ async function finishFailure(job: any, error: unknown) {
       nextRunAt,
       error: message,
     });
-  }
-  if (job.type === 'feedback.suggestion.deliver' && exhausted) {
-    const suggestionId = String(job.payload?.suggestionId || '');
-    if (suggestionId) {
-      await prisma.productSuggestion.updateMany({
-        where: { id: suggestionId },
-        data: { deliveryStatus: 'FAILED', lastError: message.slice(0, 4000) },
-      });
-    }
   }
 }
 
