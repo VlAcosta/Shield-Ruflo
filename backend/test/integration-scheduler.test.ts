@@ -69,7 +69,7 @@ describe('integration sync scheduler retry dedupe', () => {
         organizationId: account.organizationId,
         type: 'integration.sync.reviews',
         status: { in: ['QUEUED', 'RUNNING'] },
-        payload: { path: ['accountId'], equals: account.id },
+        dedupeKey: { startsWith: `integration-sync:${account.id}:` },
       },
       select: { id: true },
     });
