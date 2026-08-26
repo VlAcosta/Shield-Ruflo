@@ -260,6 +260,28 @@ export async function queueIntegrationSync(
     });
     if (active) return active;
 
+    const activeJob = await tx.job.findFirst({
+      where: {
+        organizationId,
+        type: 'integration.sync.reviews',
+        status: { in: ['QUEUED', 'RUNNING'] },
+        dedupeKey: { startsWith: `integration-sync:${accountId}:` },
+      },
+      select: { id: true },
+    });
+    if (activeJob) {
+      const retryingRun = await tx.integrationSyncRun.findFirst({
+        where: { accountId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (retryingRun) return retryingRun;
+      throw new AppError({
+        code: 'INTEGRATION_SYNC_ALREADY_QUEUED',
+        message: 'Синхронизация уже находится в очереди',
+        statusCode: 409,
+      });
+    }
+
     const run = await tx.integrationSyncRun.create({
       data: { organizationId, accountId, status: 'QUEUED', trigger },
     });
