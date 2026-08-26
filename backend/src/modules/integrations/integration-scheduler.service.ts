@@ -3,8 +3,17 @@ import { providerRegistry } from './providers/provider.registry.js';
 
 const MIN_INTERVAL_MINUTES = 5;
 const MAX_INTERVAL_MINUTES = 24 * 60;
+const INTEGRATION_SCHEDULER_PAGE_SIZE = 500;
 
 type Configuration = Record<string, unknown>;
+
+type SchedulableIntegrationAccount = {
+  id: string;
+  organizationId: string;
+  provider: string;
+  configuration: unknown;
+  lastSyncedAt: Date | null;
+};
 
 function config(value: unknown): Configuration {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Configuration : {};
@@ -31,27 +40,14 @@ export function nextIntegrationSyncAt(
   return new Date((lastSyncedAt?.getTime() ?? 0) + interval * 60_000);
 }
 
-export async function scheduleDueIntegrationSyncs(
+async function scheduleIntegrationAccountBatch(
   prisma: PrismaClient,
-  input: { now?: Date; defaultIntervalMinutes: number },
+  accounts: SchedulableIntegrationAccount[],
+  input: { now: Date; defaultIntervalMinutes: number },
 ): Promise<{ scheduled: number; skipped: number }> {
-  const now = input.now ?? new Date();
-  const accounts = await prisma.integrationAccount.findMany({
-    where: { status: { in: ['CONNECTED', 'DEGRADED'] } },
-    select: {
-      id: true,
-      organizationId: true,
-      provider: true,
-      status: true,
-      configuration: true,
-      lastSyncedAt: true,
-    },
-    orderBy: { updatedAt: 'asc' },
-    take: 2_000,
-  });
-
   let scheduled = 0;
   let skipped = 0;
+
   for (const account of accounts) {
     const adapter = providerRegistry.get(account.provider);
     const availability = adapter?.availability();
@@ -66,7 +62,7 @@ export async function scheduleDueIntegrationSyncs(
     }
     const interval = intervalMinutes(settings.syncIntervalMinutes, input.defaultIntervalMinutes);
     const dueAt = nextIntegrationSyncAt(account.lastSyncedAt, settings, interval);
-    if (dueAt && dueAt > now) {
+    if (dueAt && dueAt > input.now) {
       skipped += 1;
       continue;
     }
@@ -84,7 +80,7 @@ export async function scheduleDueIntegrationSyncs(
       if (!syncEnabled(freshSettings.syncEnabled)) return false;
       const freshInterval = intervalMinutes(freshSettings.syncIntervalMinutes, input.defaultIntervalMinutes);
       const freshDueAt = nextIntegrationSyncAt(fresh.lastSyncedAt, freshSettings, freshInterval);
-      if (freshDueAt && freshDueAt > now) return false;
+      if (freshDueAt && freshDueAt > input.now) return false;
 
       const active = await tx.integrationSyncRun.findFirst({
         where: { accountId: account.id, status: { in: ['QUEUED', 'RUNNING'] } },
@@ -130,6 +126,60 @@ export async function scheduleDueIntegrationSyncs(
     });
     if (created) scheduled += 1;
     else skipped += 1;
+  }
+
+  return { scheduled, skipped };
+}
+
+export async function scheduleDueIntegrationSyncs(
+  prisma: PrismaClient,
+  input: { now?: Date; defaultIntervalMinutes: number },
+): Promise<{ scheduled: number; skipped: number }> {
+  const now = input.now ?? new Date();
+  let scheduled = 0;
+  let skipped = 0;
+  let cursorId: string | null = null;
+
+  while (true) {
+    const accounts: SchedulableIntegrationAccount[] = cursorId
+      ? await prisma.integrationAccount.findMany({
+          where: { status: { in: ['CONNECTED', 'DEGRADED'] } },
+          select: {
+            id: true,
+            organizationId: true,
+            provider: true,
+            configuration: true,
+            lastSyncedAt: true,
+          },
+          orderBy: { id: 'asc' },
+          take: INTEGRATION_SCHEDULER_PAGE_SIZE,
+          cursor: { id: cursorId },
+          skip: 1,
+        })
+      : await prisma.integrationAccount.findMany({
+          where: { status: { in: ['CONNECTED', 'DEGRADED'] } },
+          select: {
+            id: true,
+            organizationId: true,
+            provider: true,
+            configuration: true,
+            lastSyncedAt: true,
+          },
+          orderBy: { id: 'asc' },
+          take: INTEGRATION_SCHEDULER_PAGE_SIZE,
+        });
+
+    if (!accounts.length) break;
+
+    const page = await scheduleIntegrationAccountBatch(prisma, accounts, {
+      now,
+      defaultIntervalMinutes: input.defaultIntervalMinutes,
+    });
+    scheduled += page.scheduled;
+    skipped += page.skipped;
+
+    if (accounts.length < INTEGRATION_SCHEDULER_PAGE_SIZE) break;
+    cursorId = accounts[accounts.length - 1]!.id;
   }
 
   return { scheduled, skipped };
