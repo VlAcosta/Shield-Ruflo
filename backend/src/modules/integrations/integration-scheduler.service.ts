@@ -85,11 +85,27 @@ export async function scheduleDueIntegrationSyncs(
       const freshInterval = intervalMinutes(freshSettings.syncIntervalMinutes, input.defaultIntervalMinutes);
       const freshDueAt = nextIntegrationSyncAt(fresh.lastSyncedAt, freshSettings, freshInterval);
       if (freshDueAt && freshDueAt > now) return false;
+
       const active = await tx.integrationSyncRun.findFirst({
         where: { accountId: account.id, status: { in: ['QUEUED', 'RUNNING'] } },
         select: { id: true },
       });
       if (active) return false;
+
+      // A provider call may mark its IntegrationSyncRun failed before the worker
+      // has decided whether the durable Job should retry. The queue is therefore
+      // the authoritative dedupe boundary for retry wait windows: as long as a
+      // sync job for this account is QUEUED/RUNNING, do not create another run.
+      const activeJob = await tx.job.findFirst({
+        where: {
+          organizationId: account.organizationId,
+          type: 'integration.sync.reviews',
+          status: { in: ['QUEUED', 'RUNNING'] },
+          payload: { path: ['accountId'], equals: account.id },
+        },
+        select: { id: true },
+      });
+      if (activeJob) return false;
 
       const run = await tx.integrationSyncRun.create({
         data: { organizationId: account.organizationId, accountId: account.id, status: 'QUEUED', trigger: 'schedule' },
