@@ -34,7 +34,7 @@ describe('health routes', () => {
     const providers = response.json().providers;
     expect(providers.find((item: any) => item.id === 'google-business-profile')).toMatchObject({
       capabilities: { reviewRead: true, reviewReply: true, reviewDelete: false },
-      sync: { frequency: 'on_demand_job' },
+      sync: { frequency: 'scheduled_and_on_demand' },
     });
     expect(providers.find((item: any) => item.id === 'yandex')).toMatchObject({
       releaseStage: 'PLANNED',
