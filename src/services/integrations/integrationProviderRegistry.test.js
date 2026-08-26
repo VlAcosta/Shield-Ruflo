@@ -7,6 +7,8 @@ import {
   googleBusinessLocations,
   googleBusinessOAuthStart,
   googleBusinessSelect,
+  hasIntegrationBackend,
+  providerConnect,
   providerSync,
   providerSyncStatus,
   refreshProviderTruth,
@@ -27,6 +29,32 @@ vi.mock('../core/apiClient', () => ({
   joinEndpoint: (base, path) => `${String(base).replace(/\/$/, '')}/${String(path).replace(/^\//, '')}`,
 }));
 
+const googleTruth = {
+  id: 'google-business-profile',
+  displayName: 'Google Business Profile',
+  releaseStage: 'PRODUCTION_ADAPTER',
+  configured: true,
+  connectable: true,
+  capabilities: {
+    oauth: true,
+    accountsRead: true,
+    locationsRead: true,
+    profileRead: true,
+    reviewIngest: true,
+    reviewRead: true,
+    reviewReply: true,
+    reviewDelete: false,
+  },
+  sync: { supported: true, frequency: 'scheduled_and_on_demand', retryAttempts: 5, dedupe: true },
+  availability: { reasonCode: null, reasonMessage: null },
+};
+
+async function loadGoogleTruth(extraProviders = []) {
+  apiRequest.mockResolvedValueOnce({ providers: [googleTruth, ...extraProviders] });
+  await refreshProviderTruth();
+  apiRequest.mockClear();
+}
+
 describe('provider truth frontend contract', () => {
   beforeEach(() => {
     apiRequest.mockReset();
@@ -37,6 +65,8 @@ describe('provider truth frontend contract', () => {
     expect(getBackendProviderId('google')).toBe('google-business-profile');
     expect(getProviderCapabilities('google')).toEqual([]);
     expect(getProviderCapabilities('yandex')).toEqual([]);
+    expect(hasIntegrationBackend()).toBe(true);
+    expect(hasIntegrationBackend('google')).toBe(false);
     expect(getProviderRuntime('google')).toMatchObject({
       transport: 'unavailable',
       releaseStage: 'UNKNOWN',
@@ -47,25 +77,7 @@ describe('provider truth frontend contract', () => {
   test('claims Google read/reply only from the registered adapter and keeps planned providers disabled', async () => {
     apiRequest.mockResolvedValue({
       providers: [
-        {
-          id: 'google-business-profile',
-          displayName: 'Google Business Profile',
-          releaseStage: 'PRODUCTION_ADAPTER',
-          configured: true,
-          connectable: true,
-          capabilities: {
-            oauth: true,
-            accountsRead: true,
-            locationsRead: true,
-            profileRead: true,
-            reviewIngest: true,
-            reviewRead: true,
-            reviewReply: true,
-            reviewDelete: false,
-          },
-          sync: { supported: true, frequency: 'on_demand_job', retryAttempts: 5, dedupe: true },
-          availability: { reasonCode: null, reasonMessage: null },
-        },
+        googleTruth,
         {
           id: 'yandex',
           displayName: 'Яндекс Бизнес',
@@ -85,11 +97,50 @@ describe('provider truth frontend contract', () => {
       'oauth', 'accounts.read', 'locations.read', 'profile.read', 'reviews.read', 'rating.read', 'replies.write',
     ]);
     expect(getProviderRuntime('google')).toMatchObject({ transport: 'backend', connectable: true, releaseStage: 'PRODUCTION_ADAPTER' });
+    expect(hasIntegrationBackend('google')).toBe(true);
     expect(getProviderCapabilities('yandex')).toEqual([]);
     expect(getProviderRuntime('yandex')).toMatchObject({ transport: 'planned', connectable: false, releaseStage: 'PLANNED' });
   });
 
-  test('starts OAuth on the dedicated GBP route', async () => {
+  test('exposes installed bridge capabilities without claiming that an unconfigured bridge is connectable', async () => {
+    await loadGoogleTruth([{
+      id: 'yandex',
+      displayName: 'Яндекс Бизнес',
+      releaseStage: 'ADAPTER_NOT_CONFIGURED',
+      configured: false,
+      connectable: false,
+      capabilities: {
+        oauth: false,
+        accountsRead: false,
+        locationsRead: false,
+        profileRead: false,
+        reviewIngest: true,
+        reviewRead: true,
+        reviewReply: true,
+        reviewDelete: false,
+      },
+      sync: { supported: true, frequency: 'scheduled_and_on_demand', retryAttempts: 5, dedupe: true },
+      availability: { reasonCode: 'REVIEW_BRIDGE_NOT_CONFIGURED', reasonMessage: 'Bridge host is not configured' },
+    }]);
+
+    expect(getProviderCapabilities('yandex')).toEqual(['reviews.read', 'rating.read', 'replies.write']);
+    expect(getProviderRuntime('yandex')).toMatchObject({
+      transport: 'unavailable',
+      adapterInstalled: true,
+      configured: false,
+      connectable: false,
+      releaseStage: 'ADAPTER_NOT_CONFIGURED',
+      reasonCode: 'REVIEW_BRIDGE_NOT_CONFIGURED',
+    });
+    expect(hasIntegrationBackend('yandex')).toBe(false);
+
+    await expect(providerConnect('yandex', { credentials: { bridgeToken: 'never-sent' } }))
+      .rejects.toMatchObject({ message: 'Bridge host is not configured', code: 'REVIEW_BRIDGE_NOT_CONFIGURED' });
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+
+  test('starts OAuth on the dedicated GBP route only after provider truth is loaded', async () => {
+    await loadGoogleTruth();
     apiRequest.mockResolvedValue({ authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth?state=test' });
     await googleBusinessOAuthStart();
     expect(apiRequest).toHaveBeenCalledWith(
@@ -99,6 +150,7 @@ describe('provider truth frontend contract', () => {
   });
 
   test('uses dedicated account location and selection routes', async () => {
+    await loadGoogleTruth();
     apiRequest.mockResolvedValue({ accounts: [] });
     await googleBusinessAccounts();
     expect(apiRequest).toHaveBeenLastCalledWith(
@@ -123,6 +175,7 @@ describe('provider truth frontend contract', () => {
   });
 
   test('queues review sync and reads authoritative worker status from dedicated endpoints', async () => {
+    await loadGoogleTruth();
     apiRequest.mockResolvedValueOnce({ providerId: 'google-business-profile', run: { id: 'run-1', status: 'QUEUED' } });
     await providerSync('google');
     expect(apiRequest).toHaveBeenLastCalledWith(
