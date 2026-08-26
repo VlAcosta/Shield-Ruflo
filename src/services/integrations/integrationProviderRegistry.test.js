@@ -1,6 +1,7 @@
 import {
   clearProviderTruthCache,
   getBackendProviderId,
+  getClientProviderId,
   getProviderCapabilities,
   getProviderRuntime,
   googleBusinessAccounts,
@@ -8,6 +9,7 @@ import {
   googleBusinessOAuthStart,
   googleBusinessSelect,
   hasIntegrationBackend,
+  providerAccounts,
   providerConnect,
   providerSync,
   providerSyncStatus,
@@ -63,6 +65,8 @@ describe('provider truth frontend contract', () => {
 
   test('fails closed until server capability truth is loaded', () => {
     expect(getBackendProviderId('google')).toBe('google-business-profile');
+    expect(getClientProviderId('google-business-profile')).toBe('google');
+    expect(getClientProviderId('2gis')).toBe('gis');
     expect(getProviderCapabilities('google')).toEqual([]);
     expect(getProviderCapabilities('yandex')).toEqual([]);
     expect(hasIntegrationBackend()).toBe(true);
@@ -137,6 +141,21 @@ describe('provider truth frontend contract', () => {
     await expect(providerConnect('yandex', { credentials: { bridgeToken: 'never-sent' } }))
       .rejects.toMatchObject({ message: 'Bridge host is not configured', code: 'REVIEW_BRIDGE_NOT_CONFIGURED' });
     expect(apiRequest).not.toHaveBeenCalled();
+  });
+
+  test('loads authoritative integration accounts from the configured backend endpoint', async () => {
+    const payload = {
+      integrations: [{
+        id: 'account-1',
+        provider: 'google-business-profile',
+        status: 'CONNECTED',
+        credentialKeys: ['refreshToken'],
+      }],
+    };
+    apiRequest.mockResolvedValue(payload);
+
+    await expect(providerAccounts()).resolves.toEqual(payload);
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/integrations', expect.objectContaining({ retries: 0 }));
   });
 
   test('starts OAuth on the dedicated GBP route only after provider truth is loaded', async () => {
