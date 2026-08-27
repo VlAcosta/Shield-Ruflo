@@ -1,0 +1,48 @@
+name: Business Shield Dependency Security
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: business-shield-dependency-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Frontend full-tree high/critical gate
+        run: npm audit --audit-level=high
+      - name: Frontend production moderate+ gate
+        run: npm audit --omit=dev --audit-level=moderate
+
+  backend-audit:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+      - name: Backend full-tree high/critical gate
+        run: npm audit --audit-level=high
+      - name: Backend production moderate+ gate
+        run: npm audit --omit=dev --audit-level=moderate
