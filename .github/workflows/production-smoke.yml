@@ -1,4 +1,5 @@
 name: Business Shield Production Smoke
+# Exact-SHA verification trigger for P27 + dependency-security release (2026-08-28).
 
 on:
   workflow_dispatch:
