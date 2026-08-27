@@ -26,22 +26,7 @@ jobs:
           providers_code="$(curl -sS -o "$tmp" -w '%{http_code}' --connect-timeout 5 --max-time 15 "$base/api/v1/meta/providers")"
           [[ "$providers_code" == '200' ]] || { echo "providers_code=$providers_code"; exit 10; }
 
-          node - "$tmp" <<'NODE'
-          const fs = require('node:fs');
-          const body = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          if (!Array.isArray(body.providers)) throw new Error('providers array missing');
-          const forbidden = /(credential|secret|token|api.?key)/i;
-          const walk = (value, path = []) => {
-            if (Array.isArray(value)) return value.forEach((item, i) => walk(item, [...path, i]));
-            if (!value || typeof value !== 'object') return;
-            for (const [key, child] of Object.entries(value)) {
-              if (forbidden.test(key)) throw new Error(`public provider truth exposes forbidden key: ${[...path, key].join('.')}`);
-              walk(child, [...path, key]);
-            }
-          };
-          walk(body);
-          console.log(`providers=${body.providers.length}`);
-NODE
+          node -e 'const fs=require("node:fs"); const body=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!Array.isArray(body.providers)) throw new Error("providers array missing"); const forbidden=/(credential|secret|token|api.?key)/i; const walk=(value,path=[])=>{ if(Array.isArray(value)){value.forEach((item,i)=>walk(item,[...path,i])); return;} if(!value||typeof value!=="object") return; for(const [key,child] of Object.entries(value)){ if(forbidden.test(key)) throw new Error("public provider truth exposes forbidden key: "+[...path,key].join(".")); walk(child,[...path,key]); }}; walk(body); console.log("providers="+body.providers.length);' "$tmp"
 
           code() {
             curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 15 "$@"
