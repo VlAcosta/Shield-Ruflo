@@ -1,0 +1,61 @@
+name: Business Shield P27 Production Functional Smoke
+
+on:
+  push:
+    branches:
+      - ops/production-deploy
+    paths:
+      - .github/workflows/production-p27-functional-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  p27-functional-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify provider truth and unauthenticated boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://bis-shield.ru'
+          tmp="$(mktemp)"
+
+          providers_code="$(curl -sS -o "$tmp" -w '%{http_code}' --connect-timeout 5 --max-time 15 "$base/api/v1/meta/providers")"
+          [[ "$providers_code" == '200' ]] || { echo "providers_code=$providers_code"; exit 10; }
+
+          node - "$tmp" <<'NODE'
+          const fs = require('node:fs');
+          const body = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (!Array.isArray(body.providers)) throw new Error('providers array missing');
+          const forbidden = /(credential|secret|token|api.?key)/i;
+          const walk = (value, path = []) => {
+            if (Array.isArray(value)) return value.forEach((item, i) => walk(item, [...path, i]));
+            if (!value || typeof value !== 'object') return;
+            for (const [key, child] of Object.entries(value)) {
+              if (forbidden.test(key)) throw new Error(`public provider truth exposes forbidden key: ${[...path, key].join('.')}`);
+              walk(child, [...path, key]);
+            }
+          };
+          walk(body);
+          console.log(`providers=${body.providers.length}`);
+NODE
+
+          code() {
+            curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 15 "$@"
+          }
+          integrations_code="$(code "$base/api/v1/integrations")"
+          reports_code="$(code "$base/api/v1/reports")"
+          feedback_code="$(code -X POST -H 'content-type: application/json' --data '{"message":"production-boundary-smoke"}' "$base/api/v1/feedback/suggestions")"
+
+          [[ "$integrations_code" == '401' ]] || { echo "integrations_code=$integrations_code"; exit 11; }
+          [[ "$reports_code" == '401' ]] || { echo "reports_code=$reports_code"; exit 12; }
+          [[ "$feedback_code" == '401' ]] || { echo "feedback_code=$feedback_code"; exit 13; }
+
+          echo "providers_code=$providers_code"
+          echo "integrations_unauth=$integrations_code"
+          echo "reports_unauth=$reports_code"
+          echo "feedback_unauth=$feedback_code"
+          echo 'P27 production functional smoke passed.'
