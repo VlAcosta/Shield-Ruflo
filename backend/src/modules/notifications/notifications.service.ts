@@ -15,12 +15,16 @@ export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   activeType: 'all' as const,
 });
 
+export const NOTIFICATION_CHANNEL_CAPABILITIES = Object.freeze({
+  email: false,
+  telegram: false,
+  push: false,
+  sms: false,
+});
+
 export const DEFAULT_NOTIFICATION_SETTINGS = Object.freeze({
   channels: {
-    email: false,
-    telegram: false,
-    push: false,
-    sms: false,
+    ...NOTIFICATION_CHANNEL_CAPABILITIES,
   },
   events: {
     review: true,
@@ -101,7 +105,10 @@ export function normalizeNotificationConfig(value: unknown): NotificationConfig 
   return {
     preferences: { activeTab, activeType },
     settings: {
-      channels: booleanRecord(storedSettings.channels, DEFAULT_NOTIFICATION_SETTINGS.channels) as NotificationSettings['channels'],
+      channels: Object.fromEntries(
+        Object.entries(booleanRecord(storedSettings.channels, DEFAULT_NOTIFICATION_SETTINGS.channels))
+          .map(([key, enabled]) => [key, Boolean(enabled) && Boolean(NOTIFICATION_CHANNEL_CAPABILITIES[key as keyof typeof NOTIFICATION_CHANNEL_CAPABILITIES])]),
+      ) as NotificationSettings['channels'],
       events: booleanRecord(storedSettings.events, DEFAULT_NOTIFICATION_SETTINGS.events) as NotificationSettings['events'],
       quietHours: {
         enabled: typeof storedQuietHours.enabled === 'boolean'
