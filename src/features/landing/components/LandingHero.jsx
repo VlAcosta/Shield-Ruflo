@@ -5,27 +5,27 @@ import { STRATEGY_STATS } from '../model/landingStrategyData';
 
 function ReputationConsole() {
   return (
-    <div className="landing-console" aria-label="Демонстрационный пример интерфейса Reputation Operations">
+    <div className="landing-console" aria-label="Пример работы с отзывами — демонстрационные данные">
       <div className="landing-console__topbar">
         <div>
           <span className="landing-console__eyebrow">ДЕМО ИНТЕРФЕЙСА</span>
-          <strong>Очередь репутационных событий</strong>
+          <strong>Отзывы под контролем</strong>
         </div>
-        <span className="landing-console__online"><i /> workflow</span>
+        <span className="landing-console__online"><i /> пример</span>
       </div>
 
       <div className="landing-console__scoreRow">
         <div className="landing-console__score">
-          <span>SLA по негативу</span>
+          <span>Срок ответа</span>
           <strong>2ч</strong>
-          <em>пример настройки, не публичная статистика</em>
+          <em>пример срока, который задаёт команда</em>
         </div>
         <div className="landing-console__ring" aria-hidden="true">
           <svg viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="31" className="landing-console__ringTrack" />
             <circle cx="40" cy="40" r="31" className="landing-console__ringValue" pathLength="100" />
           </svg>
-          <span>SLA</span>
+          <span>Срок</span>
         </div>
       </div>
 
@@ -46,13 +46,13 @@ function ReputationConsole() {
       <div className="landing-console__feed">
         <div className="landing-console__event is-review">
           <span className="landing-console__eventIcon"><LandingIcon name="star" size={17} /></span>
-          <div><strong>Негативный отзыв</strong><small>SLA запущен · нужен ответ</small></div>
-          <b>Risk</b>
+          <div><strong>Негативный отзыв</strong><small>Ожидает ответа команды</small></div>
+          <b>Важно</b>
         </div>
         <div className="landing-console__event is-growth">
           <span className="landing-console__eventIcon"><LandingIcon name="check" size={17} /></span>
-          <div><strong>Причина переведена в задачу</strong><small>владелец назначен · история сохранена</small></div>
-          <b>Task</b>
+          <div><strong>Задача по жалобе создана</strong><small>Ответственный назначен</small></div>
+          <b>Задача</b>
         </div>
       </div>
     </div>
@@ -71,33 +71,33 @@ export default function LandingHero() {
         <div className="landing-hero__content" data-landing-reveal>
           <div className="landing-kicker landing-kicker--hero">
             <span className="landing-kicker__dot" />
-            REPUTATION OPERATIONS SYSTEM
+            УПРАВЛЕНИЕ РЕПУТАЦИЕЙ БИЗНЕСА
             <span className="landing-kicker__line" />
           </div>
 
           <h1>
-            От репутационного сигнала —
-            <span>к реакции, задаче и результату.</span>
+            Ваша репутация —
+            <span>в надёжных руках.</span>
           </h1>
 
           <p className="landing-hero__lead">
-            Бизнес Щит собирает отзывы из фактически подключённых источников, помогает команде отвечать в SLA, согласовывать сложные реакции, превращать негатив в задачи и показывать руководителю причины и результат.
+            Собирайте отзывы с подключённых площадок в одном кабинете. Отвечайте клиентам, поручайте задачи команде и следите за репутацией вашего бизнеса.
           </p>
 
           <div className="landing-hero__buttons">
             <button className="landing-btn landing-btn--gradient landing-btn--large" type="button" onClick={() => navigate('/pricing')}>
-              Начать 14-дневный trial
+              Начать защиту
               <LandingIcon name="arrow" size={19} />
             </button>
             <a className="landing-btn landing-btn--soft landing-btn--large" href="#process">
               <span className="landing-btn__play"><LandingIcon name="play" size={15} /></span>
-              Показать workflow
+              Как это работает
             </a>
           </div>
 
           <div className="landing-hero__proof">
-            <span><i /> SLA · approval · audit · tasks</span>
-            <span>Capabilities показываются по фактической готовности provider</span>
+            <span><i /> Отзывы · ответы · задачи · отчёты</span>
+            <span>Возможности подключения зависят от площадки</span>
           </div>
         </div>
 
@@ -106,11 +106,11 @@ export default function LandingHero() {
           <ReputationConsole />
           <div className="landing-floatingCard landing-floatingCard--left">
             <span className="landing-floatingCard__icon is-pink"><LandingIcon name="message" size={18} /></span>
-            <div><small>Detect → Prioritize</small><strong>Событие попало в SLA</strong></div>
+            <div><small>Новый отзыв</small><strong>Команда видит, кому ответить</strong></div>
           </div>
           <div className="landing-floatingCard landing-floatingCard--right">
             <span className="landing-floatingCard__icon is-green"><LandingIcon name="checkCircle" size={18} /></span>
-            <div><small>Operate → Measure</small><strong>Причина связана с задачей</strong></div>
+            <div><small>Работа над ошибками</small><strong>У каждой задачи есть ответственный</strong></div>
           </div>
         </div>
       </div>

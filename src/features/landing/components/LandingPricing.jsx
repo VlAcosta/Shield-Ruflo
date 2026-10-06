@@ -17,9 +17,9 @@ export default function LandingPricing() {
     <section className="landing-section landing-pricing landing-pricing--strategy" id="pricing">
       <div className="landing-shell">
         <div className="landing-sectionHead landing-sectionHead--center" data-landing-reveal>
-          <span className="landing-kicker">4 SaaS-тарифа</span>
-          <h2>Цена растёт вместе с <span>locations, usage и governance.</span></h2>
-          <p>Start — вход в систему. Growth — основной outcome-пакет. Pro — governance для сетей. Business — multi-location/agency и индивидуальный integration scope. Человеческие услуги подключаются отдельно.</p>
+          <span className="landing-kicker">Тарифы</span>
+          <h2>Выберите защиту <span>под задачи вашего бизнеса.</span></h2>
+          <p>От одной точки до сети: сравните количество отзывов, доступы для сотрудников и инструменты работы. Услуги специалистов оплачиваются отдельно.</p>
         </div>
 
         <div className="landing-pricing__grid">
@@ -34,11 +34,11 @@ export default function LandingPricing() {
               <div className="landing-priceCard__price"><strong>{plan.price}</strong><span>/ мес</span></div>
               <ul>
                 <li><LandingIcon name="checkCircle" size={17} /><span>−15% при годовой предоплате</span></li>
-                <li><LandingIcon name="checkCircle" size={17} /><span>Явные лимиты locations / reviews / users / AI</span></li>
-                <li><LandingIcon name="checkCircle" size={17} /><span>Managed services — отдельный add-on</span></li>
+                <li><LandingIcon name="checkCircle" size={17} /><span>Лимиты точек, отзывов, сотрудников и ИИ</span></li>
+                <li><LandingIcon name="checkCircle" size={17} /><span>Услуги специалистов — отдельно</span></li>
               </ul>
               <button className={`landing-btn ${plan.recommended ? 'landing-btn--gradient' : 'landing-btn--soft'} landing-priceCard__button`} type="button" onClick={() => navigate('/pricing')}>
-                {plan.id === 'BUSINESS' ? 'Обсудить условия' : 'Посмотреть лимиты'}
+                Подробнее о тарифе
                 <LandingIcon name="arrow" size={17} />
               </button>
             </article>
