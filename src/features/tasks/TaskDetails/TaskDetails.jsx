@@ -225,23 +225,23 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCh
               <span>{task.status === 'done' ? 'Задача завершена' : 'Завершить'}</span>
             </button>
             <button type="button" className="task-details__revise" onClick={() => onUpdate(task.id, { status: 'progress' }, 'Задача возвращена в работу')} disabled={busy}>На доработку</button>
-            {canDelete ? (
-              <button
-                type="button"
-                className="task-details__delete"
-                onClick={() => {
-                  if (!confirmDelete) {
-                    setConfirmDelete(true);
-                    return;
-                  }
-                  onDelete(task.id);
-                }}
-                disabled={busy}
-              >
-                {confirmDelete ? 'Подтвердить удаление задачи' : 'Удалить задачу'}
-              </button>
-            ) : null}
           </>}
+          {canDelete ? (
+            <button
+              type="button"
+              className="task-details__delete"
+              onClick={() => {
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
+                onDelete(task.id);
+              }}
+              disabled={busy}
+            >
+              {confirmDelete ? 'Подтвердить удаление задачи' : 'Удалить задачу'}
+            </button>
+          ) : null}
         </footer>
       </section>
     </div>
