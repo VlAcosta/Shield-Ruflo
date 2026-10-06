@@ -6,7 +6,6 @@ import { assertEntitlement } from '../billing/billing.service.js';
 import { dispatchAutomationEvent } from './automation-engine.js';
 
 const automationIdParams = z.object({ automationId: z.string().uuid() });
-const notificationIdParams = z.object({ notificationId: z.string().uuid() });
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 const automationActionSchema = z.union([
   z.string().trim().min(1).max(120),
@@ -21,7 +20,6 @@ const automationSchema = z.object({
   enabled: z.boolean().default(true),
 });
 const automationPatchSchema = automationSchema.partial();
-const notificationPreferencesSchema = z.record(z.string(), z.unknown());
 const AUTOMATION_DESCRIPTION_KEY = '__description';
 
 function authContext(request: FastifyRequest) {
@@ -162,59 +160,5 @@ export const operationsRoutes: FastifyPluginAsync = async (app) => {
     return { evaluated: reviews.length, runs };
   });
 
-  app.get('/notifications', { preHandler: [app.authenticate] }, async (request) => {
-    const { organizationId, userId } = authContext(request);
-    const [notifications, user] = await Promise.all([
-      app.prisma.notification.findMany({
-        where: { organizationId, OR: [{ userId }, { userId: null }] },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      }),
-      app.prisma.user.findUnique({ where: { id: userId }, select: { notificationPreferences: true } }),
-    ]);
-    const stored = asRecord(user?.notificationPreferences);
-    return { notifications, preferences: stored.preferences ?? {}, settings: stored.settings ?? {} };
-  });
 
-  app.patch('/notifications/:notificationId/read', { preHandler: [app.authenticate] }, async (request) => {
-    const { organizationId, userId } = authContext(request);
-    const { notificationId } = notificationIdParams.parse(request.params);
-    const notification = await app.prisma.notification.findFirst({
-      where: { id: notificationId, organizationId, OR: [{ userId }, { userId: null }] },
-      select: { id: true },
-    });
-    if (!notification) throw new AppError({ code: 'NOTIFICATION_NOT_FOUND', message: 'Уведомление не найдено', statusCode: 404 });
-    return {
-      notification: await app.prisma.notification.update({ where: { id: notification.id }, data: { status: 'READ', readAt: new Date() } }),
-    };
-  });
-
-  app.patch('/notifications/read-all', { preHandler: [app.authenticate] }, async (request) => {
-    const { organizationId, userId } = authContext(request);
-    const result = await app.prisma.notification.updateMany({
-      where: { organizationId, status: 'UNREAD', OR: [{ userId }, { userId: null }] },
-      data: { status: 'READ', readAt: new Date() },
-    });
-    return { ok: true, updated: result.count };
-  });
-
-  async function updateNotificationConfig(userId: string, section: 'preferences' | 'settings', value: Record<string, unknown>) {
-    const user = await app.prisma.user.findUnique({ where: { id: userId }, select: { notificationPreferences: true } });
-    const current = asRecord(user?.notificationPreferences);
-    const next = { ...current, [section]: value };
-    await app.prisma.user.update({ where: { id: userId }, data: { notificationPreferences: toJson(next) } });
-    return value;
-  }
-
-  app.patch('/notifications/preferences', { preHandler: [app.authenticate] }, async (request) => {
-    const { userId } = authContext(request);
-    const preferences = notificationPreferencesSchema.parse(request.body);
-    return { preferences: await updateNotificationConfig(userId, 'preferences', preferences) };
-  });
-
-  app.patch('/notifications/settings', { preHandler: [app.authenticate] }, async (request) => {
-    const { userId } = authContext(request);
-    const settings = notificationPreferencesSchema.parse(request.body);
-    return { settings: await updateNotificationConfig(userId, 'settings', settings) };
-  });
 };
