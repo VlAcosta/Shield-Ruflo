@@ -48,19 +48,19 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     return listTasks(app, tenant.organizationId, tenant.userId);
   });
 
-  app.post('/tasks', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request, reply) => {
+  app.post('/tasks', { preHandler: [app.authenticate, app.authorize('tasks.create')] }, async (request, reply) => {
     const body = createSchema.parse(request.body);
     const task = await createTask(app, context(request), body);
     return reply.code(201).send({ task });
   });
 
-  app.patch('/tasks/:taskId', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request) => {
+  app.patch('/tasks/:taskId', { preHandler: [app.authenticate, app.authorize('tasks.edit')] }, async (request) => {
     const { taskId } = taskIdParams.parse(request.params);
     const task = await updateTask(app, context(request), taskId, updateSchema.parse(request.body));
     return { task };
   });
 
-  app.patch('/tasks/:taskId/move', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request) => {
+  app.patch('/tasks/:taskId/move', { preHandler: [app.authenticate, app.authorize('tasks.edit')] }, async (request) => {
     const { taskId } = taskIdParams.parse(request.params);
     const body = moveSchema.parse(request.body);
     const tenant = context(request);
@@ -74,21 +74,21 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     return { task };
   });
 
-  app.post('/tasks/:taskId/comments', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request, reply) => {
+  app.post('/tasks/:taskId/comments', { preHandler: [app.authenticate, app.authorize('tasks.edit')] }, async (request, reply) => {
     const { taskId } = taskIdParams.parse(request.params);
     const { text } = commentSchema.parse(request.body);
     const comment = await addTaskComment(app, context(request), taskId, text);
     return reply.code(201).send({ comment });
   });
 
-  app.post('/tasks/:taskId/checklist', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request, reply) => {
+  app.post('/tasks/:taskId/checklist', { preHandler: [app.authenticate, app.authorize('tasks.create')] }, async (request, reply) => {
     const { taskId } = taskIdParams.parse(request.params);
     const { text } = checklistCreateSchema.parse(request.body);
     const item = await addChecklistItem(app, context(request).organizationId, taskId, text);
     return reply.code(201).send({ item });
   });
 
-  app.patch('/tasks/:taskId/checklist/:itemId', { preHandler: [app.authenticate, app.authorize('tasks.manage')] }, async (request) => {
+  app.patch('/tasks/:taskId/checklist/:itemId', { preHandler: [app.authenticate, app.authorize('tasks.edit')] }, async (request) => {
     const { taskId, itemId } = checklistParams.parse(request.params);
     const { completed } = checklistUpdateSchema.parse(request.body);
     const item = await updateChecklistItem(app, context(request).organizationId, taskId, itemId, completed);
