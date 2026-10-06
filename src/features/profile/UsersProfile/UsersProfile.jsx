@@ -114,7 +114,7 @@ function MemberInspector({
   const effective = new Set(permissionsForMember(user));
   const group = PERMISSION_GROUPS.find((item) => item.id === permissionGroup) || PERMISSION_GROUPS[0];
   const memberRoleId = canonicalRoleId(user.accessRoleId || user.role);
-  const owner = memberRoleId === 'OWNER' || user.syntheticOwner;
+  const owner = memberRoleId === 'OWNER';
   const status = getSecurityStatusLabel(user, security);
   const liveSessions = sessions.filter((session) => !session.revokedAt);
 
@@ -326,10 +326,11 @@ export default function UsersProfile({
     const security = securityApi.getSecurity(user);
     return security.status === 'frozen' || isAccessExpired(security.accessExpiresAt);
   }).length;
-  const canInvite = access.can('team.invite');
-  const canManageRoles = access.can('team.manage_roles');
-  const canManageSecurity = access.can('team.manage_security');
-  const canRemove = access.can('team.remove');
+  const canManageTeam = access.can('team.manage');
+  const canInvite = canManageTeam && access.can('team.invite');
+  const canManageRoles = canManageTeam && access.can('team.manage_roles');
+  const canManageSecurity = canManageTeam && access.can('team.manage_security');
+  const canRemove = canManageTeam && access.can('team.remove');
 
   return (
     <section className="users-profile">
