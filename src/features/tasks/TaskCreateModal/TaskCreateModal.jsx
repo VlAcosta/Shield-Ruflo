@@ -1,16 +1,14 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { CalendarIcon, CloseIcon, PaperclipIcon, PlusIcon } from '../model/icons';
-import { TASK_PRIORITIES, TASK_STATUS_ORDER, TASK_TYPES, getStatusMeta } from '../model/taskData';
+import { CalendarIcon, CloseIcon } from '../model/icons';
+import { TASK_PRIORITIES, TASK_STATUS_ORDER, getStatusMeta } from '../model/taskData';
 import './TaskCreateModal.scss';
 
 const EMPTY_FORM = Object.freeze({
   title: '',
-  type: 'Отзывы',
   priority: 'medium',
   status: 'new',
   dueDate: '',
   description: '',
-  files: [],
 });
 
 function TaskCreateModal({ open, initialStatus = 'new', busy, onClose, onCreate }) {
@@ -36,30 +34,16 @@ function TaskCreateModal({ open, initialStatus = 'new', busy, onClose, onCreate 
 
   if (!open) return null;
 
-  const formatDueDate = (value) => {
-    if (!value) return new Date().toLocaleDateString('ru-RU');
-    const [year, month, day] = value.split('-');
-    return [day, month, year].filter(Boolean).join('.');
-  };
-
   const submit = () => {
     setSubmitted(true);
     if (!valid || busy) return;
 
     onCreate({
       title: form.title.trim(),
-      type: form.type,
       priority: form.priority,
       status: form.status,
-      dueDate: formatDueDate(form.dueDate),
+      dueDate: form.dueDate || null,
       description: form.description.trim(),
-      checklist: [],
-      comments: [],
-      attachments: form.files.map((file, index) => ({
-        id: `file-${Date.now()}-${index}`,
-        name: file.name,
-        kind: file.name.split('.').pop()?.toLowerCase() || 'file',
-      })),
     });
   };
 
@@ -86,13 +70,6 @@ function TaskCreateModal({ open, initialStatus = 'new', busy, onClose, onCreate 
           </label>
 
           <div className="task-create__grid">
-            <label className="task-create__field">
-              <span>Тип</span>
-              <select value={form.type} onChange={(event) => setField('type', event.target.value)}>
-                {TASK_TYPES.map((item) => <option key={item}>{item}</option>)}
-              </select>
-            </label>
-
             <label className="task-create__field">
               <span>Приоритет</span>
               <select value={form.priority} onChange={(event) => setField('priority', event.target.value)}>
@@ -123,15 +100,12 @@ function TaskCreateModal({ open, initialStatus = 'new', busy, onClose, onCreate 
             <textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="Контекст, ожидаемый результат, важные детали..." />
           </label>
 
-          <label className="task-create__upload">
-            <span className="task-create__upload-icon"><PaperclipIcon /></span>
+          <div className="task-create__upload task-create__upload--disabled" aria-disabled="true">
             <span className="task-create__upload-copy">
-              <strong>{form.files.length ? `Выбрано файлов: ${form.files.length}` : 'Прикрепить файлы'}</strong>
-              <small>PNG, JPG, PDF, XLSX и другие рабочие материалы</small>
+              <strong>Вложения пока недоступны</strong>
+              <small>Хранилище файлов ещё не подключено. После создания задачи можно работать с описанием, комментариями и чек-листом.</small>
             </span>
-            <span className="task-create__upload-action"><PlusIcon /></span>
-            <input type="file" multiple hidden onChange={(event) => setField('files', Array.from(event.target.files || []))} />
-          </label>
+          </div>
         </div>
 
         <footer className="task-create__actions">

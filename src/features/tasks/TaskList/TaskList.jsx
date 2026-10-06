@@ -78,7 +78,7 @@ function TaskList({ tasks, onOpen }) {
               <span className="task-list__type">{task.type}</span>
               <span><i className={`task-list__priority task-list__priority--${priority.tone}`}>{priority.label}</i></span>
               <span><i className={`task-list__status task-list__status--${status.tone}`}><b />{status.label}</i></span>
-              <span className="task-list__date"><CalendarIcon />{task.dueDate}</span>
+              <span className="task-list__date"><CalendarIcon />{task.dueDate || 'Без срока'}</span>
 
               <button type="button" className="task-list__open" onClick={() => onOpen(task.id)} aria-label={`Открыть ${task.title}`}>
                 <ArrowIcon />

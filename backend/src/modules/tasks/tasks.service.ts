@@ -338,6 +338,34 @@ export async function updateTask(
   return serializeTask(updated);
 }
 
+export async function deleteTask(
+  app: FastifyInstance,
+  context: { organizationId: string; userId: string },
+  taskId: string,
+) {
+  const existing = await app.prisma.task.findFirst({
+    where: { id: taskId, organizationId: context.organizationId },
+    select: { id: true, title: true },
+  });
+  if (!existing) throw new AppError({ code: 'TASK_NOT_FOUND', message: 'Задача не найдена', statusCode: 404 });
+
+  await app.prisma.$transaction(async (tx) => {
+    await tx.task.delete({ where: { id: existing.id } });
+    await tx.auditLog.create({
+      data: {
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        action: 'task.deleted',
+        entityType: 'task',
+        entityId: existing.id,
+        metadata: toJson({ title: existing.title }),
+      },
+    });
+  });
+
+  return { id: existing.id, title: existing.title };
+}
+
 export async function addTaskComment(
   app: FastifyInstance,
   context: { organizationId: string; userId: string },

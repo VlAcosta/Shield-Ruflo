@@ -1,15 +1,19 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { CalendarIcon, CheckIcon, CloseIcon, FileIcon, MessageIcon, PaperclipIcon, PlusIcon } from '../model/icons';
-import { getPriorityMeta, getStatusMeta, TASK_STATUS_ORDER } from '../model/taskData';
+import { getPriorityMeta, getStatusMeta, TASK_PRIORITIES, TASK_STATUS_ORDER } from '../model/taskData';
 import './TaskDetails.scss';
 
-function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddComment, onAddAttachments, readOnly = false }) {
+function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddChecklist, onAddComment, onDelete, canDelete = false, readOnly = false }) {
   const [description, setDescription] = useState('');
   const [comment, setComment] = useState('');
+  const [checklistText, setChecklistText] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     setDescription(task?.description || '');
     setComment('');
+    setChecklistText('');
+    setConfirmDelete(false);
   }, [task?.id, task?.description]);
 
   useEffect(() => {
@@ -32,6 +36,21 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCo
   const priority = getPriorityMeta(task.priority);
   const status = getStatusMeta(task.status);
 
+  const dueDateInputValue = (value) => {
+    if (!value) return '';
+    const match = String(value).match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+  };
+
+  const submitChecklist = () => {
+    const text = checklistText.trim();
+    if (!text || readOnly) return;
+    onAddChecklist(task.id, text);
+    setChecklistText('');
+  };
+
   const submitComment = () => {
     if (!comment.trim()) return;
     if (readOnly) return;
@@ -50,7 +69,7 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCo
             </div>
             <h2 id="task-details-title">{task.title}</h2>
             <div className="task-details__meta">
-              <span><CalendarIcon />{task.dueDate}</span>
+              <span><CalendarIcon />{task.dueDate || 'Без срока'}</span>
               <span><MessageIcon />{task.comments?.length || 0} комм.</span>
               {task.attachments?.length ? <span><PaperclipIcon />{task.attachments.length} файла</span> : null}
             </div>
@@ -67,10 +86,20 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCo
             <span className={`task-details__status task-details__status--${status.tone}`}><i />{status.label}</span>
           </div>
           <label>
-            <span>Переместить</span>
+            <span>Статус</span>
             <select value={task.status} onChange={(event) => onUpdate(task.id, { status: event.target.value }, 'Статус обновлён')} disabled={busy || readOnly}>
               {TASK_STATUS_ORDER.map((statusId) => <option value={statusId} key={statusId}>{getStatusMeta(statusId).label}</option>)}
             </select>
+          </label>
+          <label>
+            <span>Приоритет</span>
+            <select value={task.priority} onChange={(event) => onUpdate(task.id, { priority: event.target.value }, 'Приоритет обновлён')} disabled={busy || readOnly}>
+              {TASK_PRIORITIES.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Срок</span>
+            <input type="date" value={dueDateInputValue(task.dueDate)} onChange={(event) => onUpdate(task.id, { dueDate: event.target.value || null }, 'Срок обновлён')} disabled={busy || readOnly} />
           </label>
         </div>
 
@@ -109,6 +138,25 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCo
                 </label>
               ))}
             </div>
+            {!readOnly ? (
+              <div className="task-details__check-add">
+                <input
+                  value={checklistText}
+                  onChange={(event) => setChecklistText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      submitChecklist();
+                    }
+                  }}
+                  placeholder="Добавить пункт чек-листа"
+                  disabled={busy}
+                />
+                <button type="button" onClick={submitChecklist} disabled={busy || !checklistText.trim()} aria-label="Добавить пункт">
+                  <PlusIcon />
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <section className="task-details__section">
@@ -125,20 +173,10 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCo
                 </span>
               ))}
 
-              {!readOnly ? <label className="task-details__file-add">
-                <PlusIcon />
-                <span>Добавить</span>
-                <input
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(event) => {
-                    const files = Array.from(event.target.files || []);
-                    if (files.length) onAddAttachments(task.id, files);
-                    event.target.value = '';
-                  }}
-                />
-              </label> : null}
+              {!readOnly ? <span className="task-details__file-add task-details__file-add--disabled" title="Хранилище файлов ещё не подключено">
+                <PaperclipIcon />
+                <span>Загрузка файлов пока недоступна</span>
+              </span> : null}
             </div>
           </section>
 
@@ -184,10 +222,26 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCo
           {readOnly ? <span className="task-details__readonly">Только просмотр · роль не разрешает изменения</span> : <>
             <button type="button" className="task-details__accept" onClick={() => onUpdate(task.id, { status: 'done' }, 'Задача завершена')} disabled={busy || task.status === 'done'}>
               <CheckIcon />
-              <span>{task.status === 'done' ? 'Задача завершена' : 'Принять'}</span>
+              <span>{task.status === 'done' ? 'Задача завершена' : 'Завершить'}</span>
             </button>
             <button type="button" className="task-details__revise" onClick={() => onUpdate(task.id, { status: 'progress' }, 'Задача возвращена в работу')} disabled={busy}>На доработку</button>
           </>}
+          {canDelete ? (
+            <button
+              type="button"
+              className="task-details__delete"
+              onClick={() => {
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
+                onDelete(task.id);
+              }}
+              disabled={busy}
+            >
+              {confirmDelete ? 'Подтвердить удаление задачи' : 'Удалить задачу'}
+            </button>
+          ) : null}
         </footer>
       </section>
     </div>
