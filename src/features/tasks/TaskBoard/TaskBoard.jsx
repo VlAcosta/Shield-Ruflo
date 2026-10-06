@@ -43,7 +43,7 @@ function TaskCard({ task, index, onOpen, onDragStart, onDragEnd, onDragOver, onD
         ) : null}
 
         <span className="task-board__meta">
-          <span><CalendarIcon />{task.dueDate}</span>
+          <span><CalendarIcon />{task.dueDate || 'Без срока'}</span>
           <span><MessageIcon />{task.comments?.length || 0}</span>
           {task.attachments?.length ? <span><PaperclipIcon />{task.attachments.length}</span> : null}
         </span>
