@@ -100,11 +100,13 @@ function MemberInspector({
   const [view, setView] = useState('access');
   const [freezeReason, setFreezeReason] = useState('');
   const [expiry, setExpiry] = useState('');
+  const [confirmAction, setConfirmAction] = useState('');
 
   useEffect(() => {
     setFreezeReason(security?.frozenReason || '');
     setExpiry(dateInputValue(security?.accessExpiresAt));
     setView('access');
+    setConfirmAction('');
   }, [security?.accessExpiresAt, security?.frozenReason, user?.id]);
 
   if (!user) return null;
@@ -121,6 +123,24 @@ function MemberInspector({
     const state = permissionStateForMember(user, permissionId);
     const nextState = state === 'inherit' ? (effective.has(permissionId) ? 'deny' : 'allow') : state === 'deny' ? 'allow' : 'inherit';
     onUpdateUser(user.id, { permissionOverrides: buildPermissionOverride(user, permissionId, nextState) });
+  };
+
+  const confirmForceLogout = () => {
+    if (confirmAction !== 'logout') {
+      setConfirmAction('logout');
+      return;
+    }
+    setConfirmAction('');
+    onForceLogout(user.id);
+  };
+
+  const confirmRemoveUser = () => {
+    if (confirmAction !== 'remove') {
+      setConfirmAction('remove');
+      return;
+    }
+    setConfirmAction('');
+    onRemoveUser(user.id);
   };
 
   const toggleFrozen = () => {
@@ -193,7 +213,7 @@ function MemberInspector({
       </> : null}
 
       {view === 'sessions' ? <section className="users-profile__device-center">
-        <header><div><span>УСТРОЙСТВА</span><h4>Активные устройства</h4></div>{!owner && canManageSecurity && liveSessions.length ? <button type="button" className="users-profile__logout-all" disabled={busy.securityUserId === user.id} onClick={() => onForceLogout(user.id)}><ExitIcon/> Завершить все</button> : null}</header>
+        <header><div><span>УСТРОЙСТВА</span><h4>Активные устройства</h4></div>{!owner && canManageSecurity && liveSessions.length ? <button type="button" className="users-profile__logout-all" disabled={busy.securityUserId === user.id} onClick={confirmForceLogout}><ExitIcon/> {confirmAction === 'logout' ? 'Подтвердить' : 'Завершить все'}</button> : null}</header>
         <p>Здесь отображаются устройства, которые использовали доступ к компании. IP показывается, если он доступен в данных сессии.</p>
         <div className="users-profile__device-list">
           {sessions.length ? sessions.map((session, index) => <article key={session.id} className={`${session.revokedAt ? 'is-revoked' : ''} ${session.current ? 'is-current' : ''}`} style={{ '--device-index': index }}>
@@ -222,7 +242,7 @@ function MemberInspector({
           <div><button type="button" onClick={() => { const date = new Date(); date.setDate(date.getDate() + 7); setExpiry(date.toISOString().slice(0,10)); }} disabled={!canManageSecurity}>+7 дней</button><button type="button" onClick={() => { const date = new Date(); date.setDate(date.getDate() + 30); setExpiry(date.toISOString().slice(0,10)); }} disabled={!canManageSecurity}>+30 дней</button><button type="button" onClick={() => setExpiry('')} disabled={!canManageSecurity}>Постоянный</button><button type="button" className="is-save" onClick={saveExpiry} disabled={!canManageSecurity || busy.securityUserId === user.id}>Сохранить</button></div>
         </div> : null}
 
-        {!owner ? <button type="button" className="users-profile__force-logout" onClick={() => onForceLogout(user.id)} disabled={!canManageSecurity || busy.securityUserId === user.id}><ExitIcon/><span><strong>Завершить все сессии</strong><small>Потребуется новый вход на каждом устройстве</small></span></button> : null}
+        {!owner ? <button type="button" className="users-profile__force-logout" onClick={confirmForceLogout} disabled={!canManageSecurity || busy.securityUserId === user.id}><ExitIcon/><span><strong>{confirmAction === 'logout' ? 'Подтвердить завершение сессий' : 'Завершить все сессии'}</strong><small>{confirmAction === 'logout' ? 'Нажмите ещё раз — все устройства потеряют доступ' : 'Потребуется новый вход на каждом устройстве'}</small></span></button> : null}
 
         <div className="users-profile__security-mini-log">
           <header><span>Журнал безопасности</span><strong>{securityActivity.length}</strong></header>
@@ -237,7 +257,7 @@ function MemberInspector({
         {!activity.length ? <p>История появится после первого входа пользователя.</p> : null}
       </section> : null}
 
-      {!owner && canRemove ? <button type="button" className="users-profile__danger" onClick={() => onRemoveUser(user.id)} disabled={busy.userId === user.id}>Удалить пользователя из компании</button> : null}
+      {!owner && canRemove ? <button type="button" className="users-profile__danger" onClick={confirmRemoveUser} disabled={busy.userId === user.id}>{confirmAction === 'remove' ? 'Подтвердить удаление пользователя' : 'Удалить пользователя из компании'}</button> : null}
     </aside>
   );
 }
