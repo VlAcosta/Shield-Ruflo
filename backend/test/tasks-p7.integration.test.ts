@@ -30,7 +30,9 @@ describeWithPostgres('Tasks API tenant isolation and durable preferences', () =>
   let memberBId = '';
   let businessAId = '';
   const sessionToken = `p7-integration-${randomUUID()}`;
+  const teammateToken = `p7-teammate-${randomUUID()}`;
   const cookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(sessionToken)}`;
+  const teammateCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(teammateToken)}`;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -88,13 +90,21 @@ describeWithPostgres('Tasks API tenant isolation and durable preferences', () =>
       ],
     });
 
-    await app.prisma.session.create({
-      data: {
-        userId: userAId,
-        activeOrganizationId: organizationAId,
-        tokenHash: hashSessionToken(sessionToken),
-        expiresAt: new Date(Date.now() + 10 * 60_000),
-      },
+    await app.prisma.session.createMany({
+      data: [
+        {
+          userId: userAId,
+          activeOrganizationId: organizationAId,
+          tokenHash: hashSessionToken(sessionToken),
+          expiresAt: new Date(Date.now() + 10 * 60_000),
+        },
+        {
+          userId: teammateAId,
+          activeOrganizationId: organizationAId,
+          tokenHash: hashSessionToken(teammateToken),
+          expiresAt: new Date(Date.now() + 10 * 60_000),
+        },
+      ],
     });
   });
 
@@ -153,6 +163,52 @@ describeWithPostgres('Tasks API tenant isolation and durable preferences', () =>
     await expect(app.prisma.task.findUniqueOrThrow({ where: { id: taskAId } }))
       .resolves.toMatchObject({ businessId: businessAId, priority: 'HIGH' });
     await expect(app.prisma.taskAssignee.count({ where: { taskId: taskAId } })).resolves.toBe(2);
+  });
+
+  it('uses granular task permissions for create, edit, and delete', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: { cookie: teammateCookie },
+      payload: {
+        title: 'Granular member task',
+        priority: 'medium',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdId = created.json().task.id as string;
+
+    const edited = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${createdId}`,
+      headers: { cookie: teammateCookie },
+      payload: { description: 'Edited with tasks.edit only' },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().task).toMatchObject({
+      id: createdId,
+      description: 'Edited with tasks.edit only',
+    });
+
+    const deniedDelete = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/tasks/${createdId}`,
+      headers: { cookie: teammateCookie },
+    });
+    expect(deniedDelete.statusCode).toBe(403);
+    expect(deniedDelete.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+
+    const ownerDelete = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/tasks/${createdId}`,
+      headers: { cookie },
+    });
+    expect(ownerDelete.statusCode).toBe(200);
+    expect(ownerDelete.json()).toMatchObject({ task: { id: createdId } });
+    await expect(app.prisma.task.findUnique({ where: { id: createdId } })).resolves.toBeNull();
+    await expect(app.prisma.auditLog.findFirst({
+      where: { organizationId: organizationAId, action: 'task.deleted', entityId: createdId },
+    })).resolves.toBeTruthy();
   });
 
   it('returns 404 and performs no write for cross-tenant task and member identifiers', async () => {
