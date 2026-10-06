@@ -64,7 +64,8 @@ describe('pricing checkout continuity', () => {
     renderPricing('/pricing?checkout=START&billing=annual');
 
     const checkout = await screen.findByRole('dialog');
-    expect(within(checkout).getByText(/Оплата за год:/)).toBeInTheDocument();
+    expect(within(checkout).getByText('За год')).toBeInTheDocument();
+    expect(within(checkout).getByText('за 12 месяцев')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /За год/ })).toHaveClass('is-active');
   });
 
