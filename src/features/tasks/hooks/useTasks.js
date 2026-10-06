@@ -3,6 +3,7 @@ import {
   addTaskChecklistItem,
   addTaskComment,
   createTask as createTaskRequest,
+  deleteTask as deleteTaskRequest,
   getTasksSnapshot,
   moveTask as moveTaskRequest,
   saveTaskPreferences,
@@ -172,6 +173,26 @@ export default function useTasks() {
     }
   }, [load, showNotice, snapshot]);
 
+  const deleteTask = useCallback(async (taskId) => {
+    if (!snapshot || busy.taskId) return false;
+    setBusy((current) => ({ ...current, taskId }));
+    try {
+      const result = await deleteTaskRequest(taskId, snapshot);
+      if (mountedRef.current && result?.snapshot) {
+        setSnapshot(result.snapshot);
+        setSelectedTaskId((current) => current === taskId ? null : current);
+      }
+      showNotice('Задача удалена', 'neutral');
+      recordCompanyActivity({ type: 'task_deleted', title: 'Удалена задача', route: '/tasks', targetId: taskId, tone: 'danger' });
+      return true;
+    } catch {
+      showNotice('Не удалось удалить задачу', 'error');
+      return false;
+    } finally {
+      if (mountedRef.current) setBusy((current) => ({ ...current, taskId: null }));
+    }
+  }, [busy.taskId, showNotice, snapshot]);
+
   const addComment = useCallback(async (taskId, text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -221,6 +242,7 @@ export default function useTasks() {
     createTask,
     updateTask,
     moveTask,
+    deleteTask,
     toggleChecklist,
     addChecklist,
     addComment,
