@@ -63,7 +63,7 @@ export const supportRoutes: FastifyPluginAsync = async (app) => {
     const body = messageSchema.parse(request.body);
     const result = await addClientSupportMessage(app, actor(request), channelId, {
       text: body.text,
-      attachments: body.attachments,
+      ...(body.attachments !== undefined ? { attachments: body.attachments } : {}),
       idempotencyKey: idempotencyKey(request),
     });
 
