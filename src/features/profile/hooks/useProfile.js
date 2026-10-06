@@ -180,7 +180,7 @@ export default function useProfile() {
       const result = await inviteProfileUser(payload, snapshot);
       const nextSnapshot = result?.snapshot || result;
       if (mountedRef.current) setSnapshot(nextSnapshot);
-      showNotice(result?.invitation?.demo ? 'Ссылка приглашения создана' : 'Приглашение отправлено');
+      showNotice('Приглашение создано');
       return { ok: true, invitation: result?.invitation || null };
     } catch (requestError) {
       showNotice(requestError?.message || 'Не удалось пригласить пользователя', 'error');

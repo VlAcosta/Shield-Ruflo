@@ -113,7 +113,6 @@ export default function ProfileWorkspace() {
         {activeTab === 'users' ? (
           <UsersProfile
             users={profile.snapshot.users}
-            owner={profile.snapshot.personal}
             busy={profile.busy}
             onInvite={() => setInviteOpen(true)}
             onUpdateUser={profile.updateUser}
