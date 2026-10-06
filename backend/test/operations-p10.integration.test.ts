@@ -195,11 +195,73 @@ describeWithPostgres('Operations P10 tenant isolation and permissions', () => {
     expect(foreign.json()).toMatchObject({ error: { code: 'REPORT_NOT_FOUND' } });
   });
 
-  it('keeps notifications tenant and recipient scoped', async () => {
+  it('keeps notifications tenant and recipient scoped with independent read state', async () => {
+    const ownerNotification = await app.prisma.notification.create({
+      data: {
+        organizationId: organizationAId,
+        userId: ownerAId,
+        type: 'tasks',
+        title: 'Owner only notification',
+        body: 'Visible only to owner A',
+      },
+    });
+    const analystNotification = await app.prisma.notification.create({
+      data: {
+        organizationId: organizationAId,
+        userId: analystAId,
+        type: 'tasks',
+        title: 'Analyst only notification',
+        body: 'Visible only to analyst A',
+      },
+    });
+    const legacyGlobal = await app.prisma.notification.create({
+      data: {
+        organizationId: organizationAId,
+        userId: null,
+        type: 'system',
+        title: 'Legacy global notification',
+        body: 'Must not use shared read state',
+      },
+    });
+
     const list = await app.inject({ method: 'GET', url: '/api/v1/notifications', headers: { cookie: ownerCookie } });
     expect(list.statusCode).toBe(200);
-    expect(JSON.stringify(list.json())).not.toContain(foreignNotificationId);
-    expect(JSON.stringify(list.json())).not.toContain('Foreign notification');
+    expect(list.json()).toMatchObject({
+      version: 1,
+      source: 'api',
+      preferences: { activeTab: 'unread', activeType: 'all' },
+      settings: {
+        channels: { email: false, telegram: false, push: false, sms: false },
+        events: {
+          review: true,
+          overdueTask: true,
+          completedTask: true,
+          reportReady: true,
+          message: true,
+          subscription: true,
+        },
+        quietHours: { enabled: false, from: '22:00', to: '09:00' },
+      },
+    });
+    const serialized = JSON.stringify(list.json());
+    expect(serialized).toContain(ownerNotification.id);
+    expect(serialized).not.toContain(analystNotification.id);
+    expect(serialized).not.toContain(legacyGlobal.id);
+    expect(serialized).not.toContain(foreignNotificationId);
+    expect(serialized).not.toContain('Foreign notification');
+
+    const read = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/notifications/${ownerNotification.id}/read`,
+      headers: { cookie: ownerCookie },
+    });
+    expect(read.statusCode).toBe(200);
+    await expect(app.prisma.notification.findUniqueOrThrow({ where: { id: ownerNotification.id } }))
+      .resolves.toMatchObject({ status: 'READ' });
+    await expect(app.prisma.notification.findUniqueOrThrow({ where: { id: analystNotification.id } }))
+      .resolves.toMatchObject({ status: 'UNREAD', readAt: null });
+    await expect(app.prisma.notification.findUniqueOrThrow({ where: { id: legacyGlobal.id } }))
+      .resolves.toMatchObject({ status: 'UNREAD', readAt: null });
 
     const markForeign = await app.inject({
       method: 'PATCH',
@@ -210,5 +272,72 @@ describeWithPostgres('Operations P10 tenant isolation and permissions', () => {
     expect(markForeign.json()).toMatchObject({ error: { code: 'NOTIFICATION_NOT_FOUND' } });
     await expect(app.prisma.notification.findUniqueOrThrow({ where: { id: foreignNotificationId } }))
       .resolves.toMatchObject({ status: 'UNREAD', readAt: null });
+  });
+
+  it('deep-merges strict notification preferences and refuses fake delivery channels', async () => {
+    const typePreference = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/preferences',
+      headers: { cookie: ownerCookie },
+      payload: { activeType: 'tasks' },
+    });
+    expect(typePreference.statusCode).toBe(200);
+    expect(typePreference.json().preferences).toEqual({ activeTab: 'unread', activeType: 'tasks' });
+
+    const eventSettings = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/settings',
+      headers: { cookie: ownerCookie },
+      payload: { events: { review: false }, quietHours: { enabled: true } },
+    });
+    expect(eventSettings.statusCode).toBe(200);
+    expect(eventSettings.json().settings).toMatchObject({
+      channels: { email: false, telegram: false, push: false, sms: false },
+      events: { review: false, completedTask: true, reportReady: true, message: true },
+      quietHours: { enabled: true, from: '22:00', to: '09:00' },
+    });
+
+    const quietHours = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/settings',
+      headers: { cookie: ownerCookie },
+      payload: { quietHours: { from: '23:15' } },
+    });
+    expect(quietHours.statusCode).toBe(200);
+    expect(quietHours.json().settings.quietHours).toEqual({ enabled: true, from: '23:15', to: '09:00' });
+
+    const unsupportedChannel = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/settings',
+      headers: { cookie: ownerCookie },
+      payload: { channels: { email: true } },
+    });
+    expect(unsupportedChannel.statusCode).toBe(409);
+    expect(unsupportedChannel.json()).toMatchObject({
+      error: { code: 'NOTIFICATION_CHANNEL_NOT_CONFIGURED' },
+    });
+
+    const malformed = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/notifications/settings',
+      headers: { cookie: ownerCookie },
+      payload: { quietHours: { from: '99:99' }, unexpected: true },
+    });
+    expect(malformed.statusCode).toBe(400);
+
+    const persisted = await app.inject({
+      method: 'GET',
+      url: '/api/v1/notifications',
+      headers: { cookie: ownerCookie },
+    });
+    expect(persisted.statusCode).toBe(200);
+    expect(persisted.json()).toMatchObject({
+      preferences: { activeTab: 'unread', activeType: 'tasks' },
+      settings: {
+        channels: { email: false, telegram: false, push: false, sms: false },
+        events: { review: false, completedTask: true },
+        quietHours: { enabled: true, from: '23:15', to: '09:00' },
+      },
+    });
   });
 });
