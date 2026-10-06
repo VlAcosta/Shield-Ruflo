@@ -12,7 +12,7 @@ import Competitors from '../Competitors';
 import QuickActions from '../QuickActions';
 import Integrations from '../Integrations';
 
-export const DASHBOARD_LAYOUT_VERSION = 7;
+export const DASHBOARD_LAYOUT_VERSION = 8;
 
 export const DASHBOARD_DENSITIES = Object.freeze({
   comfortable: 'comfortable',
@@ -131,7 +131,7 @@ export const WIDGET_REGISTRY = Object.freeze({
   competitors: {
     id: 'competitors',
     title: 'Конкуренты',
-    description: 'Benchmark рейтинга, негатива и активности рынка',
+    description: 'Сравнение рейтинга, негатива и активности конкурентов',
     component: Competitors,
     permission: 'competitive.view',
     defaultSpan: 5,
@@ -165,12 +165,7 @@ export const DEFAULT_WIDGET_ORDER = Object.freeze([
   'quick',
 ]);
 
-export const DEFAULT_VISIBLE_WIDGET_IDS = Object.freeze([
-  'reviews',
-  'tasks',
-  'rating',
-  'quick',
-]);
+export const DEFAULT_VISIBLE_WIDGET_IDS = Object.freeze([]);
 
 export function createDefaultDashboardLayout() {
   return {

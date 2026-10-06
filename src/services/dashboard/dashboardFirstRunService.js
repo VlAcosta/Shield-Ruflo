@@ -129,7 +129,7 @@ export function saveDashboardSourceLink(integrationId, link) {
   const current = readConnectedIntegrations();
   const found = current.some((item) => item.id === integrationId);
   if (!found) {
-    throw new Error('Площадка больше не подключена');
+    throw new Error('Площадка больше не выбрана для настройки');
   }
 
   saveConnectedIntegrations(current.map((item) => (

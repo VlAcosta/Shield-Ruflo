@@ -7,7 +7,7 @@ import {
 } from './widgetRegistry';
 
 describe('dashboard widget registry', () => {
-  test('default layout contains every registered widget but starts with a focused visible set', () => {
+  test('default layout contains every registered widget but lets the user choose what to show', () => {
     const layout = createDefaultDashboardLayout();
 
     expect(layout.order).toEqual(DEFAULT_WIDGET_ORDER);
@@ -38,7 +38,7 @@ describe('dashboard widget registry', () => {
       );
     });
 
-    expect(DEFAULT_VISIBLE_WIDGET_IDS).toEqual(['reviews', 'tasks', 'rating', 'quick']);
+    expect(DEFAULT_VISIBLE_WIDGET_IDS).toEqual([]);
   });
 
   test('normalization removes unknown widgets and restores missing registered widgets', () => {

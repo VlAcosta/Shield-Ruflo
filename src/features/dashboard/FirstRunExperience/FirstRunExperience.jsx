@@ -89,9 +89,9 @@ function SourceConnector({ integrations, onSave, ready }) {
       <div className="first-run-source__head">
         <div>
           <span>Источник данных</span>
-          <strong>{ready ? 'Первый источник активирован' : 'Добавьте ссылку на площадку'}</strong>
+          <strong>{ready ? 'Ссылка на источник сохранена' : 'Добавьте ссылку на площадку'}</strong>
         </div>
-        <span className="first-run-source__state"><i />{ready ? 'готово' : '1 действие'}</span>
+        <span className="first-run-source__state"><i />{ready ? 'ссылка сохранена' : '1 действие'}</span>
       </div>
 
       <div className="first-run-source__platforms">
@@ -137,7 +137,7 @@ function SourceConnector({ integrations, onSave, ready }) {
         </button>
       </form>
       {error ? <p className="first-run-source__message is-error">{error}</p> : null}
-      {saved ? <p className="first-run-source__message is-success">Площадка готова к сбору данных.</p> : null}
+      {saved ? <p className="first-run-source__message is-success">Ссылка сохранена для последующей настройки подключения.</p> : null}
     </div>
   );
 }
@@ -168,7 +168,7 @@ function Radar({ integrations, sourceReady }) {
         />
       ))}
       <span className={`first-run-radar__label ${sourceReady ? 'is-live' : ''}`}>
-        {sourceReady ? 'MONITORING LIVE' : 'READY TO SCAN'}
+        {sourceReady ? 'ССЫЛКА СОХРАНЕНА' : 'ГОТОВО К НАСТРОЙКЕ'}
       </span>
     </div>
   );
@@ -224,11 +224,11 @@ function FirstRunExperience({ onWorkspaceOpen }) {
 
         <div className="first-run-hero__copy">
           <span className="first-run-hero__eyebrow"><Icon name="spark" size={15} /> Первый запуск</span>
-          <h1>{complete ? 'Всё готово к работе' : 'Щит настроен. Теперь запускаем данные.'}</h1>
+          <h1>{complete ? 'Основная настройка завершена' : 'Основная настройка готова. Подключим данные.'}</h1>
           <p>
             {complete
-              ? `${title} полностью готова к работе в Бизнес Щит. Можно переходить к основной доске.`
-              : `${title} уже защищена базовыми настройками. Осталось два коротких действия, чтобы рабочая доска начала наполняться данными.`}
+              ? `Рабочее пространство «${title}» настроено. Можно переходить к основной доске и добавлять нужные блоки.`
+              : `Основная настройка для «${title}» завершена. Осталось два коротких действия, чтобы подготовить источники и рабочую доску.`}
           </p>
 
           <div className="first-run-hero__chips" aria-label="Статус первого запуска">
@@ -283,17 +283,17 @@ function FirstRunExperience({ onWorkspaceOpen }) {
         <article className="first-run-card first-run-card--checklist">
           <header className="first-run-card__head">
             <div>
-              <span>Launch checklist</span>
-              <h2>Пять шагов до полностью живой доски</h2>
+              <span>Стартовый чек-лист</span>
+              <h2>Пять шагов до рабочей доски</h2>
             </div>
             <strong>{completedCount}/{totalCount}</strong>
           </header>
 
           <div className="first-run-milestones">
             <Milestone index={0} done={milestones.companyReady} icon="building" title="Организация" text="Реквизиты подтверждены и добавлены в профиль" />
-            <Milestone index={1} done={milestones.integrationsReady} icon="layers" title="Интеграции" text={`${integrations.length || 0} источника подключено к кабинету`} />
+            <Milestone index={1} done={milestones.integrationsReady} icon="layers" title="Интеграции" text={`Выбрано для настройки: ${integrations.length || 0}`} />
             <Milestone index={2} done={milestones.securityReady} icon="lock" title="Безопасность" text={`PIN создан · автоблокировка ${security.autoLock ? 'включена' : 'отключена'}`} />
-            <Milestone index={3} done={milestones.sourceReady} icon="link" title="Первый источник" text={sourceReady ? `${linkedCount} площадка готова к мониторингу` : 'Добавьте ссылку хотя бы к одной площадке'} />
+            <Milestone index={3} done={milestones.sourceReady} icon="link" title="Первый источник" text={sourceReady ? (linkedCount === 1 ? 'Ссылка на площадку сохранена' : `Сохранено ссылок: ${linkedCount}`) : 'Добавьте ссылку хотя бы к одной площадке'} />
             <Milestone index={4} done={milestones.workspaceReady} icon="grid" title="Рабочая доска" text={workspaceReady ? 'Стартовая доска уже открыта' : 'Посмотрите, где будут появляться основные показатели'} />
           </div>
 
@@ -306,17 +306,17 @@ function FirstRunExperience({ onWorkspaceOpen }) {
 
         <article className="first-run-card first-run-card--monitor">
           <div className="first-run-card__monitor-copy">
-            <span className="first-run-card__live"><i /> {sourceReady ? 'Сбор данных запущен' : 'Мониторинг готов'}</span>
-            <h2>{sourceReady ? 'Щит уже сканирует подключённые площадки' : 'Один адрес — и начнём собирать первые сигналы'}</h2>
+            <span className="first-run-card__live"><i /> {sourceReady ? 'Ссылка на источник сохранена' : 'Источник можно подготовить'}</span>
+            <h2>{sourceReady ? 'Источник подготовлен к подключению' : 'Добавьте адрес площадки для настройки источника'}</h2>
             <p>
               {sourceReady
-                ? 'Первые отзывы, изменения рейтинга и сигналы появятся в блоках автоматически после получения данных.'
-                : 'Мы уже сохранили ваши площадки. Добавьте ссылку на карточку компании, чтобы начать мониторинг.'}
+                ? 'Ссылка сохранена. Реальный сбор отзывов начнётся только после успешного подключения и синхронизации площадки.'
+                : 'Выбранные площадки сохранены. Добавьте ссылку на карточку компании, чтобы подготовить источник к подключению.'}
             </p>
             <div className="first-run-card__monitor-status">
               <span><i className="is-done" /> Профиль компании <b>готов</b></span>
               <span><i className={integrations.length ? 'is-done' : ''} /> Площадки <b>{integrations.length || 0}</b></span>
-              <span><i className={sourceReady ? 'is-live' : ''} /> Отзывы <b>{sourceReady ? 'ожидаем данные' : 'не запущено'}</b></span>
+              <span><i className={sourceReady ? 'is-live' : ''} /> Отзывы <b>{sourceReady ? 'ожидают подключения' : 'не настроены'}</b></span>
             </div>
           </div>
           <Radar integrations={integrations} sourceReady={sourceReady} />
@@ -344,7 +344,7 @@ function FirstRunExperience({ onWorkspaceOpen }) {
             </button>
             <button type="button" onClick={() => navigate('/chat?channel=manager')}>
               <span className="is-cyan"><Icon name="message" size={18} /></span>
-              <div><strong>Познакомиться с поддержкой</strong><small>Менеджер поможет настроить первый сценарий</small></div>
+              <div><strong>Познакомиться с поддержкой</strong><small>Поддержка поможет настроить первый сценарий</small></div>
               <Icon name="arrow" size={16} />
             </button>
           </div>

@@ -10,7 +10,7 @@ import {
 } from './icons';
 
 const dashboard = { to: '/dashboard', label: 'Главная', Icon: HomeIcon, permission: 'dashboard.view' };
-const askShield = { to: '/ask-shield', label: 'Ask Shield', Icon: ReputationIcon, permission: 'analytics.view', accent: true };
+const askShield = { to: '/ask-shield', label: 'Спросить у Щита', Icon: ReputationIcon, permission: 'analytics.view', accent: true };
 
 export const navigationGroups = Object.freeze([
   {
@@ -22,7 +22,7 @@ export const navigationGroups = Object.freeze([
       { to: '/cases', label: 'Кейсы', Icon: ReputationIcon, permission: 'cases.view' },
       { to: '/reputation', label: 'Аналитика', Icon: ReputationIcon, permission: 'analytics.view' },
       { to: '/competitive', label: 'Конкуренты', Icon: ReputationIcon, permission: 'competitive.view' },
-      { to: '/ai-visibility', label: 'AI Visibility', Icon: ReputationIcon, permission: 'ai_visibility.view' },
+      { to: '/ai-visibility', label: 'Видимость в ИИ', Icon: ReputationIcon, permission: 'ai_visibility.view' },
     ],
   },
   {

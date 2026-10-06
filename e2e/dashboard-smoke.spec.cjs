@@ -257,6 +257,24 @@ test('Dashboard supports backend aggregate, keyboard actions and 480px mobile la
     expect(sessionCookie, 'dashboard must use the backend HttpOnly session').toBeTruthy();
     expect(sessionCookie.httpOnly).toBe(true);
 
+    // A new workspace intentionally starts empty. Add one real widget before
+    // exercising widget-level keyboard and mobile interactions.
+    await page.getByRole('button', { name: /Добавить блок/ }).click();
+    const reviewsOption = page.locator('.dashboard-workspace__catalog-item')
+      .filter({ hasText: 'Динамика отзывов' });
+    const reviewsCheckbox = reviewsOption.locator('input[type="checkbox"]');
+    await expect(reviewsCheckbox).not.toBeChecked();
+
+    const initialLayoutPut = page.waitForResponse((response) => (
+      response.url() === `${apiBase}/dashboard/layout`
+      && response.request().method() === 'PUT'
+    ));
+    await reviewsOption.click();
+    await expect(reviewsCheckbox).toBeChecked();
+    expect((await initialLayoutPut).ok()).toBe(true);
+    await page.getByRole('button', { name: 'Закрыть настройки доски' }).click();
+    await page.getByRole('button', { name: 'Готово' }).click();
+
     const widgetMenuTrigger = page.getByRole('button', { name: /Действия с блоком/ }).first();
     await expect(widgetMenuTrigger).toBeVisible();
     await widgetMenuTrigger.focus();
