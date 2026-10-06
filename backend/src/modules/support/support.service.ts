@@ -64,6 +64,12 @@ const CHANNEL_META = Object.freeze({
   },
 } as const);
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 function channelFromClient(value: string): SupportChannel {
   if (value === 'manager') return 'MANAGER';
   if (value === 'technical') return 'TECHNICAL';
@@ -177,9 +183,7 @@ export async function getSupportSnapshot(app: FastifyInstance, actor: SupportAct
     getOrganizationTimezone(app, actor.organizationId),
   ]);
 
-  const preferences = user?.supportPreferences && typeof user.supportPreferences === 'object' && !Array.isArray(user.supportPreferences)
-    ? user.supportPreferences as Record<string, unknown>
-    : {};
+  const preferences = asRecord(user?.supportPreferences);
   const activeChannel = preferences.activeChannel === 'technical' ? 'technical' : 'manager';
 
   const byChannel = new Map(tickets.map((ticket) => [ticket.channel, ticket]));
@@ -200,9 +204,7 @@ export async function saveSupportPreference(app: FastifyInstance, actor: Support
     where: { id: actor.userId },
     select: { supportPreferences: true },
   });
-  const current = user?.supportPreferences && typeof user.supportPreferences === 'object' && !Array.isArray(user.supportPreferences)
-    ? user.supportPreferences as Record<string, unknown>
-    : {};
+  const current = asRecord(user?.supportPreferences);
   await app.prisma.user.update({
     where: { id: actor.userId },
     data: { supportPreferences: { ...current, activeChannel } },
@@ -501,7 +503,8 @@ export async function addAdminSupportMessage(
         clientUnreadCount: { increment: 1 },
         firstResponseAt: current.firstResponseAt || now,
         lastAgentMessageAt: now,
-        status: current.status === 'OPEN' ? 'IN_PROGRESS' : current.status,
+        status: ['OPEN', 'CLOSED'].includes(current.status) ? 'IN_PROGRESS' : current.status,
+        closedAt: current.status === 'CLOSED' ? null : current.closedAt,
       },
     });
     await tx.auditLog.create({
