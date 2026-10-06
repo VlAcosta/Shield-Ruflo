@@ -55,9 +55,14 @@ export default function useTasks() {
   useEffect(() => { load(); }, [load]);
 
   const view = snapshot?.preferences?.view || 'board';
+  const serverConfirmed = Boolean(snapshot && !snapshot.stale);
 
   const setView = useCallback(async (nextView) => {
     if (!snapshot || nextView === view) return;
+    if (!serverConfirmed) {
+      showNotice('Сначала восстановите соединение с сервером', 'warning');
+      return;
+    }
     const optimistic = { ...snapshot, preferences: { ...(snapshot.preferences || {}), view: nextView } };
     setSnapshot(optimistic);
     try {
@@ -67,7 +72,7 @@ export default function useTasks() {
       setSnapshot(snapshot);
       showNotice('Не удалось сохранить вид отображения', 'error');
     }
-  }, [showNotice, snapshot, view]);
+  }, [serverConfirmed, showNotice, snapshot, view]);
 
   const filteredTasks = useMemo(() => {
     if (!snapshot) return [];
@@ -94,6 +99,10 @@ export default function useTasks() {
 
   const createTask = useCallback(async (payload) => {
     if (!snapshot || busy.create) return null;
+    if (!serverConfirmed) {
+      showNotice('Нельзя создавать задачи по неподтверждённым данным', 'warning');
+      return null;
+    }
     setBusy((current) => ({ ...current, create: true }));
     try {
       const result = await createTaskRequest(payload, snapshot);
@@ -108,10 +117,14 @@ export default function useTasks() {
     } finally {
       if (mountedRef.current) setBusy((current) => ({ ...current, create: false }));
     }
-  }, [busy.create, showNotice, snapshot]);
+  }, [busy.create, serverConfirmed, showNotice, snapshot]);
 
   const updateTask = useCallback(async (taskId, patch, successMessage = '') => {
     if (!snapshot || busy.taskId) return null;
+    if (!serverConfirmed) {
+      showNotice('Нельзя изменять задачи, пока сервер недоступен', 'warning');
+      return null;
+    }
     setBusy((current) => ({ ...current, taskId }));
     const previous = snapshot;
     const optimistic = { ...snapshot, tasks: snapshot.tasks.map((task) => task.id === taskId ? { ...task, ...patch } : task) };
@@ -132,10 +145,14 @@ export default function useTasks() {
     } finally {
       if (mountedRef.current) setBusy((current) => ({ ...current, taskId: null }));
     }
-  }, [busy.taskId, showNotice, snapshot]);
+  }, [busy.taskId, serverConfirmed, showNotice, snapshot]);
 
   const moveTask = useCallback(async (taskId, status, beforeTaskId = null) => {
     if (!snapshot) return;
+    if (!serverConfirmed) {
+      showNotice('Нельзя перемещать задачи, пока сервер недоступен', 'warning');
+      return;
+    }
     const previous = snapshot;
     const source = snapshot.tasks.find((task) => task.id === taskId);
     if (!source) return;
@@ -158,9 +175,13 @@ export default function useTasks() {
       if (mountedRef.current) setSnapshot(previous);
       showNotice('Не удалось переместить задачу', 'error');
     }
-  }, [showNotice, snapshot]);
+  }, [serverConfirmed, showNotice, snapshot]);
 
   const toggleChecklist = useCallback(async (taskId, checklistId) => {
+    if (!serverConfirmed) {
+      showNotice('Нельзя изменять чек-лист, пока сервер недоступен', 'warning');
+      return;
+    }
     const task = snapshot?.tasks.find((item) => item.id === taskId);
     const item = task?.checklist?.find((entry) => entry.id === checklistId);
     if (!task || !item) return;
@@ -170,11 +191,15 @@ export default function useTasks() {
     } catch {
       showNotice('Не удалось обновить чек-лист', 'error');
     }
-  }, [load, showNotice, snapshot]);
+  }, [load, serverConfirmed, showNotice, snapshot]);
 
   const addComment = useCallback(async (taskId, text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (!serverConfirmed) {
+      showNotice('Нельзя добавлять комментарии, пока сервер недоступен', 'warning');
+      return;
+    }
     try {
       await addTaskComment(taskId, trimmed);
       await load();
@@ -182,11 +207,15 @@ export default function useTasks() {
     } catch {
       showNotice('Не удалось добавить комментарий', 'error');
     }
-  }, [load, showNotice]);
+  }, [load, serverConfirmed, showNotice]);
 
   const addChecklist = useCallback(async (taskId, text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (!serverConfirmed) {
+      showNotice('Нельзя добавлять пункты, пока сервер недоступен', 'warning');
+      return;
+    }
     try {
       await addTaskChecklistItem(taskId, trimmed);
       await load();
@@ -194,7 +223,7 @@ export default function useTasks() {
     } catch {
       showNotice('Не удалось добавить пункт', 'error');
     }
-  }, [load, showNotice]);
+  }, [load, serverConfirmed, showNotice]);
 
   const addAttachments = useCallback(() => {
     showNotice('Хранилище файлов ещё не подключено — файл не был загружен', 'warning');
@@ -202,6 +231,8 @@ export default function useTasks() {
 
   return {
     snapshot,
+    serverConfirmed,
+    stale: Boolean(snapshot?.stale),
     loading,
     error,
     reload: load,
