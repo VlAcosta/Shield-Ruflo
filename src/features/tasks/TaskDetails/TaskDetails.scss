@@ -85,7 +85,10 @@
     > div { display: flex; align-items: center; gap: 9px; }
     small { color: $color-text-muted; font-size: 8px; }
     label { display: flex; align-items: center; gap: 8px; color: $color-text-muted; font-size: 8px; }
-    select { min-height: 31px; padding: 0 28px 0 10px; border: 1px solid $color-border; border-radius: 9px; color: $color-text-secondary; background: #fff; cursor: pointer; font: inherit; font-size: 8px; font-weight: 620; outline: 0; }
+    select, input[type='date'] { min-height: 31px; padding: 0 10px; border: 1px solid $color-border; border-radius: 9px; color: $color-text-secondary; background: #fff; font: inherit; font-size: 8px; font-weight: 620; outline: 0; }
+    select { padding-right: 28px; cursor: pointer; }
+    input[type='date'] { min-width: 122px; }
+    select:disabled, input[type='date']:disabled { opacity: .55; cursor: default; }
   }
 
   &__status { min-height: 24px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 8px; font-weight: 700; }
@@ -131,11 +134,16 @@
   &__check i { width: 16px; height: 16px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #d9deea; border-radius: 5px; color: transparent; transition: all $transition-fast; svg { width: 11px; height: 11px; } }
   &__check.is-done { color: $color-text-muted; background: #fbfbfd; span { text-decoration: line-through; text-decoration-color: #c9cfdd; } i { border-color: transparent; color: #fff; background: $color-primary; box-shadow: 0 3px 8px rgba(102, 97, 245, .19); } }
 
+  &__check-add { min-height: 38px; padding: 4px 5px 4px 11px; display: flex; align-items: center; gap: 8px; border: 1px dashed #dfe3ef; border-radius: 10px; background: #fbfbfe; }
+  &__check-add input { flex: 1; min-width: 0; border: 0; outline: 0; color: $color-text; background: transparent; font: inherit; font-size: 8.5px; }
+  &__check-add button { width: 29px; height: 29px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #fff; background: $gradient-primary; cursor: pointer; svg { width: 13px; height: 13px; } &:disabled { opacity: .35; cursor: default; } }
+
   &__files { display: flex; flex-wrap: wrap; gap: 7px; }
   &__file, &__file-add { min-height: 34px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #e6e9f2; border-radius: 10px; color: $color-text-secondary; background: #fbfbfe; font-size: 8px; }
   &__file i { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 6px; color: $color-primary; background: $color-primary-soft; svg { width: 12px; height: 12px; } }
   &__file b { max-width: 150px; @include truncate; font-weight: 600; }
   &__file-add { color: $color-primary; border-style: dashed; cursor: pointer; background: #fff; transition: border-color $transition-fast, background $transition-fast; svg { width: 13px; height: 13px; } &:hover { border-color: rgba(102, 97, 245, .34); background: $color-primary-soft; } }
+  &__file-add--disabled { max-width: 100%; color: $color-text-muted; cursor: default; background: #fafbfe; &:hover { border-color: #e6e9f2; background: #fafbfe; } }
 
   &__comments { display: grid; gap: 8px; }
   &__comment { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; }
@@ -152,6 +160,7 @@
   &__actions button { min-height: 42px; border-radius: 12px; cursor: pointer; font: inherit; font-size: 9px; font-weight: 680; transition: transform $transition-fast, box-shadow $transition-base, border-color $transition-fast, background $transition-fast; &:disabled { opacity: .45; cursor: default; } }
   &__accept { display: flex; align-items: center; justify-content: center; gap: 7px; border: 0; color: #fff; background: $gradient-primary; box-shadow: 0 10px 24px rgba(102, 97, 245, .18); svg { width: 14px; height: 14px; } &:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 14px 30px rgba(102, 97, 245, .24); } }
   &__revise { border: 1px solid $color-border; color: $color-text-secondary; background: #fff; &:not(:disabled):hover { border-color: #d9ddeb; background: #fafbfe; } }
+  &__delete { grid-column: 1 / -1; border: 1px solid rgba(216, 61, 93, .22); color: #c83b58; background: rgba(216, 61, 93, .045); &:not(:disabled):hover { border-color: rgba(216, 61, 93, .34); background: rgba(216, 61, 93, .08); } }
 }
 
 @keyframes task-details-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
