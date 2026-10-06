@@ -1,4 +1,4 @@
-import { getCurrentAccessContext, getRoleLabel, hasPermission, PRESET_ROLES } from './rbacService';
+import { getCurrentAccessContext, getRoleLabel, hasPermission, permissionsForMember, PRESET_ROLES } from './rbacService';
 
 describe('server-authoritative RBAC UX context', () => {
   test('normalizes backend role names', () => {
@@ -56,6 +56,16 @@ describe('server-authoritative RBAC UX context', () => {
       permissions: ['business.manage', 'locations.view', 'tasks.manage', 'team.manage', 'analytics.view'],
     });
     expect(context.permissions).toEqual(['business.manage', 'locations.view', 'tasks.manage', 'team.manage', 'analytics.view']);
+  });
+
+  test('uses server-effective permissions for another team member when available', () => {
+    const member = {
+      role: 'ADMIN',
+      permissionOverrides: { allow: ['billing.manage'], deny: [] },
+      permissions: ['dashboard.view', 'team.view'],
+    };
+
+    expect(permissionsForMember(member)).toEqual(['dashboard.view', 'team.view']);
   });
 
   test('keeps role-preview permissions aligned with backend role policy', () => {
