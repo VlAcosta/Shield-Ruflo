@@ -25,6 +25,46 @@ async function request(path = '', options = {}) {
   return apiRequest(joinEndpoint(TASKS_ENDPOINT, path), { ...options, timeout: 8000 });
 }
 
+function formatTaskDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat('ru-RU').format(date);
+}
+
+function normalizeComment(comment = {}) {
+  const author = comment.author && typeof comment.author === 'object'
+    ? (comment.author.name || comment.author.email || 'Пользователь')
+    : (comment.author || 'Пользователь');
+  const initials = String(author)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'БЩ';
+  const createdAt = comment.createdAt || comment.created_at || '';
+  const time = createdAt && Number.isFinite(new Date(createdAt).getTime())
+    ? new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(createdAt))
+    : (comment.time || '');
+
+  return {
+    ...comment,
+    author,
+    initials: comment.initials || initials,
+    time,
+  };
+}
+
+function deriveTaskType(task = {}) {
+  if (task.type) return task.type;
+  if (task.reviewId || task.sourceReviewId) return 'Отзывы';
+  if (task.caseId) return 'Кейсы';
+  if (task.locationId) return 'Локации';
+  if (task.businessId) return 'Компания';
+  return 'Общее';
+}
+
 function normalizeTask(task = {}) {
   return {
     comments: [],
@@ -33,10 +73,11 @@ function normalizeTask(task = {}) {
     assignees: [],
     description: '',
     ...task,
-    type: task.type || (task.reviewId || task.sourceReviewId ? 'Отзывы' : 'Общее'),
+    type: deriveTaskType(task),
     sourceReviewId: task.sourceReviewId || task.reviewId || null,
     reviewId: task.reviewId || task.sourceReviewId || null,
-    dueDate: task.dueDate || task.deadline || null,
+    dueDate: formatTaskDate(task.dueDate || task.deadline),
+    comments: Array.isArray(task.comments) ? task.comments.map(normalizeComment) : [],
   };
 }
 
@@ -154,6 +195,17 @@ export async function moveTask(taskId, status, beforeTaskId, snapshot) {
   const nextSnapshot = { ...snapshot, tasks: remaining };
   writeCache(nextSnapshot);
   return { task, snapshot: nextSnapshot };
+}
+
+export async function deleteTask(taskId, snapshot) {
+  const remote = await request(`/${taskId}`, { method: 'DELETE' });
+  const deletedId = remote?.task?.id || remote?.id || taskId;
+  const nextSnapshot = {
+    ...snapshot,
+    tasks: (snapshot?.tasks || []).filter((item) => item.id !== deletedId),
+  };
+  writeCache(nextSnapshot);
+  return { task: remote?.task || { id: deletedId }, snapshot: nextSnapshot };
 }
 
 export async function saveTaskPreferences(preferences, snapshot) {
