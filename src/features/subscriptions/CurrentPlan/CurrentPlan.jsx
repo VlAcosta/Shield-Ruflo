@@ -4,6 +4,13 @@ import { CrownIcon, SparkIcon } from '../model/icons';
 import { formatCurrency } from '../model/formatters';
 import './CurrentPlan.scss';
 
+function formatActiveUntil(value) {
+  if (!value) return 'без срока';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('ru-RU');
+}
+
 function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
   return (
     <section className="current-plan">
@@ -20,7 +27,7 @@ function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
         </div>
 
         <div className="current-plan__meta">
-          <span>Активна до <strong>{plan.activeUntil}</strong></span>
+          <span>Действует до <strong>{formatActiveUntil(plan.activeUntil)}</strong></span>
           <span className="current-plan__divider" aria-hidden="true" />
           <span><strong>{formatCurrency(plan.price)}</strong> / {plan.billingLabel}</span>
         </div>
@@ -31,7 +38,7 @@ function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
       <div className="current-plan__renewal">
         <div>
           <span>Автопродление</span>
-          <small>{plan.autoRenew ? 'Следующее списание включено' : 'Продление вручную'}</small>
+          <small>{plan.autoRenew ? 'Следующее продление включено' : 'Продление вручную'}</small>
         </div>
 
         <button
