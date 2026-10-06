@@ -239,7 +239,7 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
             <div className="invite-user-modal__success-mark"><CheckIcon /></div>
             <span className="invite-user-modal__success-eyebrow">Доступ подготовлен</span>
             <h2 id="invite-user-title">Приглашение готово</h2>
-            <p>{result.demo ? 'В локальном режиме отправка email не выполняется — передайте пользователю ссылку ниже.' : `Приглашение для ${result.email || form.email} создано и готово к отправке.`}</p>
+            <p>Приглашение для {result.email || form.email} создано. Передайте пользователю ссылку ниже — автоматическая отправка письма пока не подключена.</p>
 
             <div className="invite-user-modal__success-meta">
               <div><span>Пользователь</span><strong>{result.name || form.name}</strong></div>
@@ -254,7 +254,7 @@ export default function InviteUserModal({ open, busy, onClose, onInvite }) {
                 <div><code>{result.inviteUrl}</code><button type="button" onClick={copyLink}><CopyIcon /> {copied ? 'Скопировано' : 'Копировать'}</button></div>
               </div>
             ) : (
-              <div className="invite-user-modal__sent-note">Email будет отправлен сервисом приглашений. Пользователь появится активным после принятия доступа.</div>
+              <div className="invite-user-modal__sent-note">Приглашение создано, но автоматическая отправка email пока не подключена. Пользователь появится в команде после принятия доступа.</div>
             )}
             {clipboardError ? <p className="invite-user-modal__error" role="alert">{clipboardError}</p> : null}
 
