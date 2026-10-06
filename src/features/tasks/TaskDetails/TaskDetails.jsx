@@ -69,7 +69,7 @@ function TaskDetails({ task, busy, onClose, onUpdate, onToggleChecklist, onAddCh
             </div>
             <h2 id="task-details-title">{task.title}</h2>
             <div className="task-details__meta">
-              <span><CalendarIcon />{task.dueDate}</span>
+              <span><CalendarIcon />{task.dueDate || 'Без срока'}</span>
               <span><MessageIcon />{task.comments?.length || 0} комм.</span>
               {task.attachments?.length ? <span><PaperclipIcon />{task.attachments.length} файла</span> : null}
             </div>
