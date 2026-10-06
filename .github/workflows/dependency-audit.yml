@@ -60,11 +60,13 @@ jobs:
           node-version: 22.23.2
       - name: Refresh frontend lockfile
         run: |
+          rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts
           npm audit fix --package-lock-only --ignore-scripts || true
       - name: Refresh backend lockfile
         working-directory: backend
         run: |
+          rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts
           npm audit fix --package-lock-only --ignore-scripts || true
       - name: Commit refreshed lockfiles
