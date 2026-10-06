@@ -25,6 +25,8 @@ export default function useSubscriptions() {
   const [promo, setPromo] = useState(EMPTY_PROMO);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [source, setSource] = useState('loading');
+  const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState({ renewal: false, promo: false, checkout: false, trial: false });
   const [notice, setNotice] = useState(null);
   const mountedRef = useRef(true);
@@ -45,8 +47,12 @@ export default function useSubscriptions() {
       if (!mountedRef.current) return;
       setSnapshot(result.snapshot);
       setCart(result.cart || {});
+      setSource(result.source || 'api');
+      setStale(Boolean(result.stale));
     } catch (loadError) {
       if (!mountedRef.current) return;
+      setSource('error');
+      setStale(false);
       setError('Не удалось загрузить данные подписки. Проверьте соединение и повторите попытку.');
     } finally {
       if (mountedRef.current) setLoading(false);
@@ -263,6 +269,9 @@ export default function useSubscriptions() {
     promo,
     loading,
     error,
+    source,
+    stale,
+    serverConfirmed: source === 'api' && !stale,
     busy,
     notice,
     setPromoInput,

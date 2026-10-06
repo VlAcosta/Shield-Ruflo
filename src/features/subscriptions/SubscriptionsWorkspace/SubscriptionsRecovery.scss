@@ -45,3 +45,50 @@
   .subscriptions-payment-note strong { color: #e0bf78; }
   .subscriptions-payment-note span { color: #b9ae94; }
 }
+
+.subscriptions-workspace--recovered .subscriptions-truth-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid rgba(222, 164, 48, .28);
+  border-radius: 16px;
+  background: rgba(255, 188, 64, .08);
+}
+
+.subscriptions-workspace--recovered .subscriptions-truth-warning > div {
+  display: grid;
+  gap: 4px;
+}
+
+.subscriptions-workspace--recovered .subscriptions-truth-warning strong {
+  color: #7e6227;
+  font-size: 14px;
+}
+
+.subscriptions-workspace--recovered .subscriptions-truth-warning span {
+  color: #8d836d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .subscriptions-workspace--recovered .subscriptions-truth-warning {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+[data-theme='dark'] .subscriptions-workspace--recovered .subscriptions-truth-warning {
+  background: rgba(223, 174, 72, .09);
+  border-color: rgba(223, 174, 72, .24);
+}
+
+[data-theme='dark'] .subscriptions-workspace--recovered .subscriptions-truth-warning strong {
+  color: #e0bf78;
+}
+
+[data-theme='dark'] .subscriptions-workspace--recovered .subscriptions-truth-warning span {
+  color: #b9ae94;
+}

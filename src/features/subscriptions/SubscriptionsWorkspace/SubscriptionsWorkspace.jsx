@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Button from '../../../components/ui/Button';
 import CurrentPlan from '../CurrentPlan';
 import PlanLimits from '../PlanLimits';
@@ -25,7 +26,9 @@ function SubscriptionSkeleton() {
 function SubscriptionsWorkspace() {
   const subscription = useSubscriptions();
   const access = useAccessControl();
+  const navigate = useNavigate();
   const canManage = access.can('billing.manage');
+  const canManageConfirmed = canManage && subscription.serverConfirmed;
 
   if (subscription.loading) return <SubscriptionSkeleton />;
 
@@ -52,37 +55,45 @@ function SubscriptionsWorkspace() {
 
   return (
     <div className="subscriptions-workspace subscriptions-workspace--recovered">
+      {subscription.stale ? (
+        <section className="subscriptions-truth-warning" role="alert">
+          <div><strong>Показаны сохранённые данные</strong><span>Сервер не подтвердил текущий тариф и лимиты. Изменение подписки временно заблокировано, чтобы не работать с устаревшими финансовыми данными.</span></div>
+          <Button onClick={subscription.reload}>Проверить сервер</Button>
+        </section>
+      ) : null}
       <div className="subscriptions-workspace__top">
         <CurrentPlan
           plan={plan}
           renewalBusy={subscription.busy.renewal}
           onToggleRenewal={subscription.toggleAutoRenew}
-          canManage={canManage && Boolean(paymentProviderConfigured)}
+          canManage={canManageConfirmed && Boolean(paymentProviderConfigured)}
+          onChangePlan={() => navigate('/pricing')}
+          onRenew={() => navigate('/pricing')}
         />
         <PlanLimits limits={limits} />
       </div>
 
-      {canManage && trial?.available ? (
+      {canManageConfirmed && trial?.available ? (
         <section className="subscriptions-trial">
           <div>
             <span>PRO · {trial.days || 14} дней бесплатно</span>
             <h2>Попробуйте полный Бизнес Щит</h2>
-            <p>AI-функции, расширенные лимиты и инструменты роста активируются сразу. Карта не нужна, автосписания не будет.</p>
+            <p>На пробный период откроются возможности тарифа PRO и его расширенные лимиты. Карта не нужна, автосписания не будет.</p>
             {proPlan ? <strong>{Number(proPlan.price || 0).toLocaleString('ru-RU')} ₽ / месяц после подключения оплаты</strong> : null}
           </div>
           <Button onClick={subscription.startTrial} disabled={subscription.busy.trial}>
-            {subscription.busy.trial ? 'Активируем…' : 'Активировать PRO на 14 дней'}
+            {subscription.busy.trial ? 'Активируем…' : `Активировать PRO на ${trial.days || 14} дней`}
           </Button>
         </section>
       ) : null}
 
-      {!paymentProviderConfigured ? (
+      {subscription.serverConfirmed && !paymentProviderConfigured ? (
         <section className="subscriptions-payment-note">
           <div><strong>Онлайн-оплата пока не подключена</strong><span>Текущий тариф и лимиты работают. Для тестирования PRO используйте бесплатный период; фиктивные платежи мы не показываем.</span></div>
         </section>
       ) : null}
 
-      {canManage && paymentProviderConfigured && packages.length ? (
+      {canManageConfirmed && paymentProviderConfigured && packages.length ? (
         <>
           <PackageStore packages={packages} cart={subscription.cart} onChangeCount={subscription.changePackageCount} onSetCount={subscription.setPackageCount} />
           <SubscriptionCart items={subscription.cartItems} subtotal={subscription.subtotal} discount={subscription.discount} total={subscription.total} totalItems={subscription.totalItems} promoInput={subscription.promoInput} promo={subscription.promo} promoBusy={subscription.busy.promo} checkoutBusy={subscription.busy.checkout} onPromoChange={subscription.setPromoInput} onApplyPromo={subscription.applyPromo} onRemovePromo={subscription.removePromo} onCheckout={subscription.checkout} />
@@ -90,6 +101,7 @@ function SubscriptionsWorkspace() {
       ) : null}
 
       {!canManage ? <section className="subscriptions-workspace__read-only"><strong>Подписка доступна только для просмотра</strong><span>Изменение тарифа ограничено вашей ролью.</span></section> : null}
+      {canManage && !subscription.serverConfirmed ? <section className="subscriptions-workspace__read-only"><strong>Изменения временно недоступны</strong><span>Сначала подтвердите актуальное состояние подписки на сервере.</span></section> : null}
 
       {payments.length ? <PaymentHistory payments={payments} onDownload={subscription.downloadReceipt} /> : null}
 

@@ -42,19 +42,56 @@ function safeWriteLocal(value, { emit = true } = {}) {
   if (emit && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SUBSCRIPTION_CHANGED_EVENT, { detail: value }));
 }
 
-function mergeSnapshot(localState) {
+const USAGE_META = Object.freeze({
+  locations: { label: 'Точки', tone: 'violet' },
+  review_sources: { label: 'Источники отзывов', tone: 'purple' },
+  reviews: { label: 'Отзывы за месяц', tone: 'green' },
+  users: { label: 'Пользователи', tone: 'orange' },
+  ai_actions: { label: 'Действия ИИ за месяц', tone: 'violet' },
+  automation_rules: { label: 'Активные автоматизации', tone: 'purple' },
+  competitors: { label: 'Конкуренты', tone: 'green' },
+});
+
+export function normalizeSubscriptionSnapshot(value = {}) {
   const base = baseSubscriptionSnapshot();
+  const usageMeters = Array.isArray(value?.usage?.meters) ? value.usage.meters : null;
+  const limits = usageMeters
+    ? usageMeters.map((meter) => {
+      const meta = USAGE_META[meter.key] || { label: meter.key, tone: 'violet' };
+      const limit = meter.limit === null || meter.limit === undefined
+        ? null
+        : (Number.isFinite(Number(meter.limit)) ? Number(meter.limit) : null);
+      const percentage = meter.percentage === null || meter.percentage === undefined
+        ? null
+        : (Number.isFinite(Number(meter.percentage)) ? Number(meter.percentage) : null);
+      return {
+        id: meter.key,
+        key: meter.key,
+        label: meta.label,
+        tone: meta.tone,
+        used: Number(meter.used) || 0,
+        total: limit,
+        state: meter.state || (limit === null ? 'unmetered' : 'ok'),
+        percentage,
+      };
+    })
+    : (Array.isArray(value?.limits) ? value.limits : base.limits);
+
   return {
     ...base,
-    ...(localState?.snapshot || {}),
+    ...value,
     plan: {
       ...base.plan,
-      ...(localState?.snapshot?.plan || {}),
+      ...(value?.plan || {}),
     },
-    limits: localState?.snapshot?.limits || base.limits,
-    packages: localState?.snapshot?.packages || base.packages,
-    payments: localState?.snapshot?.payments || base.payments,
+    limits,
+    packages: Array.isArray(value?.packages) ? value.packages : base.packages,
+    payments: Array.isArray(value?.payments) ? value.payments : base.payments,
   };
+}
+
+function mergeSnapshot(localState) {
+  return normalizeSubscriptionSnapshot(localState?.snapshot || {});
 }
 
 async function request(path = '', options = {}) {
@@ -78,12 +115,14 @@ export async function getSubscriptionSnapshot({ signal } = {}) {
   if (ENDPOINT) {
     try {
       const data = await request('', { signal });
-      const cachedState = { snapshot: data, cart: { ...baseCart(), ...(safeReadLocal()?.cart || {}) } };
+      const snapshot = normalizeSubscriptionSnapshot(data);
+      const cachedState = { snapshot, cart: { ...baseCart(), ...(safeReadLocal()?.cart || {}) } };
       safeWriteLocal(cachedState, { emit: false });
       return {
-        snapshot: data,
+        snapshot,
         cart: cachedState.cart,
         source: 'api',
+        stale: false,
       };
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
@@ -93,6 +132,7 @@ export async function getSubscriptionSnapshot({ signal } = {}) {
           snapshot: mergeSnapshot(localState),
           cart: { ...baseCart(), ...(localState?.cart || {}) },
           source: 'cache',
+          stale: true,
           error,
         };
       }
@@ -109,6 +149,7 @@ export async function getSubscriptionSnapshot({ signal } = {}) {
       ...(localState?.cart || {}),
     },
     source: 'local',
+    stale: true,
   };
 }
 

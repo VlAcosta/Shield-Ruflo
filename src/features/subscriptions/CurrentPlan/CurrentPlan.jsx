@@ -4,7 +4,14 @@ import { CrownIcon, SparkIcon } from '../model/icons';
 import { formatCurrency } from '../model/formatters';
 import './CurrentPlan.scss';
 
-function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
+function formatActiveUntil(value) {
+  if (!value) return 'без срока';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('ru-RU');
+}
+
+function CurrentPlan({ plan, renewalBusy, onToggleRenewal, onChangePlan, onRenew, canManage = true }) {
   return (
     <section className="current-plan">
       <div className="current-plan__glow current-plan__glow--one" />
@@ -20,18 +27,18 @@ function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
         </div>
 
         <div className="current-plan__meta">
-          <span>Активна до <strong>{plan.activeUntil}</strong></span>
+          <span>Действует до <strong>{formatActiveUntil(plan.activeUntil)}</strong></span>
           <span className="current-plan__divider" aria-hidden="true" />
           <span><strong>{formatCurrency(plan.price)}</strong> / {plan.billingLabel}</span>
         </div>
 
-        {canManage ? <div className="current-plan__actions"><Button variant="ghost" className="current-plan__change">Сменить тариф</Button><Button variant="outline" className="current-plan__renew">Продлить</Button></div> : <div className="current-plan__actions"><span className="current-plan__readonly">Только просмотр</span></div>}
+        {canManage ? <div className="current-plan__actions"><Button variant="ghost" className="current-plan__change" onClick={onChangePlan}>Сменить тариф</Button><Button variant="outline" className="current-plan__renew" onClick={onRenew}>Продлить</Button></div> : <div className="current-plan__actions"><span className="current-plan__readonly">Только просмотр</span></div>}
       </div>
 
       <div className="current-plan__renewal">
         <div>
           <span>Автопродление</span>
-          <small>{plan.autoRenew ? 'Следующее списание включено' : 'Продление вручную'}</small>
+          <small>{plan.autoRenew ? 'Следующее продление включено' : 'Продление вручную'}</small>
         </div>
 
         <button
