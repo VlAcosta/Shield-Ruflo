@@ -25,7 +25,29 @@ async function request(path = '', options = {}) {
   return apiRequest(joinEndpoint(TASKS_ENDPOINT, path), { ...options, timeout: 8000 });
 }
 
+function formatTaskDate(value) {
+  if (!value) return 'Без срока';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('ru-RU');
+}
+
+function normalizeComment(comment = {}) {
+  const authorValue = comment.author;
+  const author = typeof authorValue === 'string'
+    ? authorValue
+    : (authorValue?.name || [authorValue?.firstName, authorValue?.lastName].filter(Boolean).join(' ') || authorValue?.email || 'Пользователь');
+  const initials = comment.initials || author.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'П';
+  const createdAt = comment.createdAt ? new Date(comment.createdAt) : null;
+  const time = comment.time || (createdAt && !Number.isNaN(createdAt.getTime())
+    ? createdAt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '');
+
+  return { ...comment, author, initials, time };
+}
+
 function normalizeTask(task = {}) {
+  const reviewId = task.reviewId || task.sourceReviewId || null;
   return {
     comments: [],
     checklist: [],
@@ -33,10 +55,11 @@ function normalizeTask(task = {}) {
     assignees: [],
     description: '',
     ...task,
-    type: task.type || (task.reviewId || task.sourceReviewId ? 'Отзывы' : 'Общее'),
-    sourceReviewId: task.sourceReviewId || task.reviewId || null,
-    reviewId: task.reviewId || task.sourceReviewId || null,
-    dueDate: task.dueDate || task.deadline || null,
+    type: reviewId ? 'Отзывы' : 'Общее',
+    sourceReviewId: reviewId,
+    reviewId,
+    dueDate: formatTaskDate(task.dueDate || task.deadline),
+    comments: (task.comments || []).map(normalizeComment),
   };
 }
 
@@ -93,14 +116,14 @@ export async function getTasksSnapshot({ signal } = {}) {
     const remote = await request('', { signal });
     const source = snapshotFromResponse(remote);
     if (!source) throw new Error('Invalid Tasks API response');
-    const snapshot = { ...source, tasks: (source.tasks || []).map(normalizeTask) };
+    const snapshot = { ...source, stale: false, tasks: (source.tasks || []).map(normalizeTask) };
     writeCache(snapshot, { emit: false });
     return snapshot;
   } catch (error) {
     if (error?.name === 'AbortError') throw error;
     const cached = readCache();
     if (cached) return { ...cached, tasks: (cached.tasks || []).map(normalizeTask), stale: true, error };
-    if (isDemoDataEnabled()) return clone(DEFAULT_TASKS_SNAPSHOT);
+    if (isDemoDataEnabled()) return { ...clone(DEFAULT_TASKS_SNAPSHOT), stale: true, demo: true };
     throw error;
   }
 }
