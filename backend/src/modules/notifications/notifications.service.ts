@@ -1,5 +1,4 @@
-import type { FastifyInstance } from 'fastify';
-import type { Prisma } from '../../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 
 export type NotificationEventKey =
   | 'review'
@@ -145,8 +144,8 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export async function getNotificationConfig(app: FastifyInstance, userId: string) {
-  const user = await app.prisma.user.findUnique({
+export async function getNotificationConfig(prisma: PrismaClient, userId: string) {
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { notificationPreferences: true },
   });
@@ -154,11 +153,11 @@ export async function getNotificationConfig(app: FastifyInstance, userId: string
 }
 
 export async function saveNotificationConfig(
-  app: FastifyInstance,
+  prisma: PrismaClient,
   userId: string,
   config: NotificationConfig,
 ) {
-  await app.prisma.user.update({
+  await prisma.user.update({
     where: { id: userId },
     data: { notificationPreferences: toJson(config) },
   });
@@ -166,15 +165,15 @@ export async function saveNotificationConfig(
 }
 
 export async function createNotificationForUser(
-  app: FastifyInstance,
+  prisma: PrismaClient,
   input: CreateNotificationInput,
 ) {
   if (input.eventKey) {
-    const config = await getNotificationConfig(app, input.userId);
+    const config = await getNotificationConfig(prisma, input.userId);
     if (config.settings.events[input.eventKey] === false) return null;
   }
 
-  return app.prisma.notification.create({
+  return prisma.notification.create({
     data: {
       organizationId: input.organizationId,
       userId: input.userId,
@@ -187,10 +186,10 @@ export async function createNotificationForUser(
 }
 
 export async function createNotificationForOrganization(
-  app: FastifyInstance,
+  prisma: PrismaClient,
   input: Omit<CreateNotificationInput, 'userId'> & { excludeUserIds?: string[] },
 ) {
-  const members = await app.prisma.organizationMember.findMany({
+  const members = await prisma.organizationMember.findMany({
     where: {
       organizationId: input.organizationId,
       status: 'ACTIVE',
@@ -201,7 +200,7 @@ export async function createNotificationForOrganization(
 
   const created = [];
   for (const member of members) {
-    const notification = await createNotificationForUser(app, {
+    const notification = await createNotificationForUser(prisma, {
       organizationId: input.organizationId,
       userId: member.userId,
       ...(input.eventKey ? { eventKey: input.eventKey } : {}),
@@ -216,11 +215,11 @@ export async function createNotificationForOrganization(
 }
 
 export async function createNotificationForUsers(
-  app: FastifyInstance,
+  prisma: PrismaClient,
   input: Omit<CreateNotificationInput, 'userId'> & { userIds: string[] },
 ) {
   const uniqueUserIds = [...new Set(input.userIds)];
-  const activeMembers = await app.prisma.organizationMember.findMany({
+  const activeMembers = await prisma.organizationMember.findMany({
     where: {
       organizationId: input.organizationId,
       status: 'ACTIVE',
@@ -231,7 +230,7 @@ export async function createNotificationForUsers(
 
   const created = [];
   for (const member of activeMembers) {
-    const notification = await createNotificationForUser(app, {
+    const notification = await createNotificationForUser(prisma, {
       organizationId: input.organizationId,
       userId: member.userId,
       ...(input.eventKey ? { eventKey: input.eventKey } : {}),
