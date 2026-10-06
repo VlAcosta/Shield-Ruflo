@@ -31,6 +31,28 @@ describe('InviteUserModal canonical role contract', () => {
     await waitFor(() => expect(onInvite).toHaveBeenCalledWith(expect.objectContaining({ role: 'MEMBER' })));
   });
 
+  test('does not claim that an email was sent when delivery is not connected', async () => {
+    const onInvite = vi.fn().mockResolvedValue({
+      ok: true,
+      invitation: {
+        name: 'Анна Петрова',
+        email: 'anna@example.test',
+        role: 'MEMBER',
+        inviteUrl: 'https://bis-shield.ru/auth?invite=test-token',
+        expiresAt: '2026-10-14T12:00:00.000Z',
+      },
+    });
+    render(<InviteUserModal open busy={false} onClose={vi.fn()} onInvite={onInvite} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Анна Петрова'), { target: { value: 'Анна Петрова' } });
+    fireEvent.change(screen.getByPlaceholderText('anna@company.ru'), { target: { value: 'anna@example.test' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Создать приглашение' }));
+
+    expect(await screen.findByRole('heading', { name: 'Приглашение готово' })).toBeInTheDocument();
+    expect(screen.getByText(/автоматическая отправка письма пока не подключена/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Email будет отправлен/i)).not.toBeInTheDocument();
+  });
+
   test('announces validation, marks the invalid field, and moves focus to it', () => {
     render(<InviteUserModal open busy={false} onClose={vi.fn()} onInvite={vi.fn()} />);
 
