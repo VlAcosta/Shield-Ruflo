@@ -8,7 +8,7 @@ function ReviewsInsights({ review, reasonStats, platformStats, onCreateTask, onL
     <aside className="reviews-intel__sidecar" aria-label="Контекст отзыва">
       <section className={`reviews-sidecard reviews-sidecard--sla ${review.sla?.overdue ? 'is-overdue' : review.sla?.progress >= 70 ? 'is-risk' : ''}`}>
         <div className="reviews-sidecard__head">
-          <span>SLA CONTROL</span>
+          <span>СРОК ОТВЕТА</span>
           <em>{review.sla?.hours} ч</em>
         </div>
         <div className="reviews-sla-orbit" aria-hidden="true">
@@ -26,19 +26,19 @@ function ReviewsInsights({ review, reasonStats, platformStats, onCreateTask, onL
 
       <section className="reviews-sidecard">
         <div className="reviews-sidecard__head">
-          <span>AI SIGNALS</span>
+          <span>ПРИЧИНЫ ОТЗЫВА</span>
           <em>{(review.aiReasons || []).length}</em>
         </div>
         <div className="reviews-sidecard__reasons">
           {(review.aiReasons || review.tags || []).map((reason) => <span key={reason}>{reason}</span>)}
         </div>
-        <p>Причины определяются автоматически и помогают находить повторяющиеся проблемы.</p>
+        <p>Причины определяются автоматически и помогают быстрее замечать повторяющиеся проблемы.</p>
       </section>
 
       <section className="reviews-sidecard">
         <div className="reviews-sidecard__head">
-          <span>TOP REASONS</span>
-          <em>30D</em>
+          <span>ЧАСТЫЕ ПРИЧИНЫ</span>
+          <em>текущая выборка</em>
         </div>
         <div className="reviews-reason-bars">
           {reasonStats.slice(0, 4).map((item) => (
@@ -52,7 +52,7 @@ function ReviewsInsights({ review, reasonStats, platformStats, onCreateTask, onL
 
       <section className="reviews-sidecard reviews-sidecard--actions">
         <div className="reviews-sidecard__head">
-          <span>ACTIONS</span>
+          <span>ДЕЙСТВИЯ</span>
         </div>
         <button type="button" onClick={onCreateTask} disabled={!canCreateTask || working.startsWith('task:')}>
           <span>+</span>
@@ -65,7 +65,7 @@ function ReviewsInsights({ review, reasonStats, platformStats, onCreateTask, onL
       </section>
 
       <section className="reviews-sidecard reviews-sidecard--platforms">
-        <div className="reviews-sidecard__head"><span>PLATFORMS</span><em>5</em></div>
+        <div className="reviews-sidecard__head"><span>ПЛОЩАДКИ</span><em>{platformStats.length}</em></div>
         {platformStats.map((item) => (
           <div className="reviews-platform-row" key={item.platform}>
             <span>{item.platform}</span>

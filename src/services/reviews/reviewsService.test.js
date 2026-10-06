@@ -1,4 +1,4 @@
-import { getReviews } from './reviewsService';
+import { getReviews, getReviewSources } from './reviewsService';
 
 const originalFetch = global.fetch;
 
@@ -58,6 +58,59 @@ describe('reviewsService', () => {
     );
 
     expect(result.pagination.total).toBe(1);
+  });
+
+
+  test('loads review sources for the current organization', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        items: [
+          {
+            id: 'source-1',
+            name: 'Яндекс Бизнес · Тула',
+            provider: 'yandex',
+            status: 'ACTIVE',
+            businessId: 'business-1',
+            locationId: 'location-1',
+          },
+        ],
+      }),
+    );
+
+    const result = await getReviewSources();
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'source-1',
+        name: 'Яндекс Бизнес · Тула',
+        provider: 'yandex',
+      }),
+    ]);
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/v1/review-sources',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  test('passes sourceId to the backend so filtering is not limited to the current page', async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      jsonResponse({
+        items: [],
+        pagination: {
+          page: 1,
+          pageSize: 30,
+          total: 0,
+          pages: 1,
+        },
+      }),
+    );
+
+    await getReviews({ sourceId: '11111111-1111-4111-8111-111111111111' });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('sourceId=11111111-1111-4111-8111-111111111111'),
+      expect.objectContaining({ credentials: 'include' }),
+    );
   });
 
   test('surfaces backend failure instead of silently using fake reviews', async () => {

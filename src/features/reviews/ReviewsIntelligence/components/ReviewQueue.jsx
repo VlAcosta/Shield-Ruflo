@@ -20,7 +20,7 @@ const WORKFLOW_LABEL = {
 };
 
 function formatSla(sla) {
-  if (sla?.overdue) return 'SLA просрочен';
+  if (sla?.overdue) return 'Срок ответа истёк';
   if (!sla) return '';
   if (sla.remainingHours > 0) return `${sla.remainingHours}ч ${sla.remainingMinutes}м`;
   return `${Math.max(1, sla.remainingMinutes)} мин`;
@@ -31,7 +31,7 @@ function ReviewQueue({ reviews, selectedId, onSelect }) {
     <section className="reviews-intel__queue" aria-label="Очередь отзывов">
       <div className="reviews-intel__queueHead">
         <div>
-          <span>LIVE QUEUE</span>
+          <span>ОЧЕРЕДЬ ОТЗЫВОВ</span>
           <strong>{reviews.length} отзывов</strong>
         </div>
         <i className="reviews-intel__liveDot" aria-hidden="true" />
@@ -42,7 +42,7 @@ function ReviewQueue({ reviews, selectedId, onSelect }) {
           <div className="reviews-intel__queueEmpty">
             <span>✓</span>
             <strong>Очередь пуста</strong>
-            <small>Для выбранных фильтров ничего не требует внимания.</small>
+            <small>По выбранным фильтрам отзывов нет.</small>
           </div>
         ) : null}
         {reviews.map((review, index) => {

@@ -17,8 +17,6 @@ const QUEUES = [
   { id: 'processed', label: 'Обработанные' },
 ];
 
-const PLATFORMS = ['all', 'Яндекс', '2GIS', 'Ozon', 'Отзовик', 'WB'];
-
 function ReviewsLoadingState() {
   return (
     <section className="reviews-intel-workspace reviews-intel-workspace--loading" aria-label="Загрузка отзывов">
@@ -85,9 +83,9 @@ export default function ReviewsIntelligenceWorkspace() {
     <div className="reviews-intel-page">
       <section className="reviews-intel-hero">
         <div className="reviews-intel-hero__copy">
-          <span className="reviews-intel-hero__eyebrow"><i /> REPUTATION OPERATIONS</span>
+          <span className="reviews-intel-hero__eyebrow"><i /> ЦЕНТР РАБОТЫ С ОТЗЫВАМИ</span>
           <h1>Отзывы, которые требуют<br /><em>решения — сейчас.</em></h1>
-          <p>Единый центр для подключённых источников: SLA, AI-анализ, безопасные ответы, согласование и подтверждённая публикация.</p>
+          <p>Отзывы из подключённых источников в одном месте: сроки ответа, анализ ИИ, подготовка ответа, согласование и контроль публикации.</p>
           <div className="reviews-intel-hero__mode">
             <span>Режим ответа</span>
             <strong>{intelligence.responseMode.label}</strong>
@@ -111,15 +109,15 @@ export default function ReviewsIntelligenceWorkspace() {
           </div>
           <div className="reviews-intel-hero__signal">
             <span><i /> данные из вашего рабочего пространства</span>
-            <strong>{intelligence.metrics.overdue ? `${intelligence.metrics.overdue} SLA требуют реакции` : 'Критических просрочек нет'}</strong>
+            <strong>{intelligence.metrics.overdue ? `Просрочено: ${intelligence.metrics.overdue}` : 'Критических просрочек нет'}</strong>
           </div>
         </div>
       </section>
 
       <section className="reviews-intel-metrics" aria-label="Метрики отзывов">
-        <article className="is-violet"><span>В работе</span><strong>{queueCounts.inbox}</strong><small>по доступным источникам</small><i /></article>
-        <article className="is-red"><span>Негатив 1–3★</span><strong>{intelligence.metrics.negative}</strong><small>{intelligence.metrics.overdue ? `${intelligence.metrics.overdue} просрочено по SLA` : 'все в срок'}</small><i /></article>
-        <article className="is-amber"><span>Согласование</span><strong>{intelligence.metrics.awaiting}</strong><small>ждут руководителя</small><i /></article>
+        <article className="is-violet"><span>В работе</span><strong>{queueCounts.inbox}</strong><small>на текущей странице</small><i /></article>
+        <article className="is-red"><span>Негатив 1–3★</span><strong>{intelligence.metrics.negative}</strong><small>{intelligence.metrics.overdue ? `просрочено: ${intelligence.metrics.overdue}` : 'все в срок'}</small><i /></article>
+        <article className="is-amber"><span>Согласование</span><strong>{intelligence.metrics.awaiting}</strong><small>на текущей странице</small><i /></article>
         <article className="is-green"><span>Средний рейтинг</span><strong>{intelligence.metrics.average || '—'}</strong><small>по текущей выборке</small><i /></article>
       </section>
 
@@ -133,8 +131,17 @@ export default function ReviewsIntelligenceWorkspace() {
         </div>
         <div className="reviews-intel-controlbar__actions">
           <label className="reviews-intel-search"><SearchIcon /><input value={intelligence.query} onChange={(event) => intelligence.setQuery(event.target.value)} placeholder="Автор, текст, причина…" /></label>
-          <select value={intelligence.filters.platform} onChange={(event) => selectFilter('platform', event.target.value)} aria-label="Площадка">
-            {PLATFORMS.map((item) => <option key={item} value={item}>{item === 'all' ? 'Все площадки' : item}</option>)}
+          <select
+            value={intelligence.filters.sourceId}
+            onChange={(event) => selectFilter('sourceId', event.target.value)}
+            aria-label="Источник отзывов"
+            disabled={intelligence.sourcesLoading}
+            title={intelligence.sourcesError || undefined}
+          >
+            <option value="">{intelligence.sourcesLoading ? 'Загружаем источники…' : 'Все источники'}</option>
+            {intelligence.sources.map((source) => (
+              <option key={source.id} value={source.id}>{source.name}{source.provider && source.provider !== source.name ? ` · ${source.provider}` : ''}</option>
+            ))}
           </select>
           <select value={intelligence.filters.sentiment} onChange={(event) => selectFilter('sentiment', event.target.value)} aria-label="Тональность">
             <option value="all">Любая тональность</option>
@@ -204,9 +211,9 @@ export default function ReviewsIntelligenceWorkspace() {
           <section className="reviews-legal-dialog" role="dialog" aria-modal="true" aria-labelledby="reviews-legal-title">
             <span className="reviews-legal-dialog__icon">§</span>
             <div className="reviews-legal-dialog__copy">
-              <span>LEGAL ESCALATION</span>
+              <span>ЮРИДИЧЕСКАЯ ПРОВЕРКА</span>
               <h2 id="reviews-legal-title">Передать отзыв на проверку?</h2>
-              <p>Мы зафиксируем отзыв, соберём контекст и подготовим основания для обращения к площадке. Сам отзыв автоматически не удаляется.</p>
+              <p>Зафиксируем отзыв, соберём контекст и подготовим основания для обращения к площадке. Отправка на проверку не означает автоматическое удаление отзыва.</p>
             </div>
             <label><span>Причина эскалации</span><textarea value={legalReason} onChange={(event) => setLegalReason(event.target.value)} rows={4} maxLength={500} /></label>
             <label><span>Дополнительное доказательство / контекст</span><textarea value={legalEvidenceNote} onChange={(event) => setLegalEvidenceNote(event.target.value)} rows={3} maxLength={500} placeholder="Например: номер заказа, ссылка на переписку, внутренний факт проверки…" /></label>

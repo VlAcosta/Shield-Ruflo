@@ -64,7 +64,7 @@ function ReviewInspector({
   if (!review) {
     return (
       <section className="reviews-intel__inspector reviews-intel__inspector--empty">
-        <div><span>✓</span><strong>Выберите отзыв</strong><p>Здесь появятся контекст, AI-черновик и рабочие действия.</p></div>
+        <div><span>✓</span><strong>Выберите отзыв</strong><p>Здесь появятся контекст, черновик ответа и рабочие действия.</p></div>
       </section>
     );
   }
@@ -97,7 +97,7 @@ function ReviewInspector({
         <section className="reviews-inspector__legalState">
           <div className="reviews-inspector__legalIcon">§</div>
           <div>
-            <span>LEGAL REVIEW</span>
+            <span>ЮРИДИЧЕСКАЯ ПРОВЕРКА</span>
             <h3>Отзыв на юридической проверке</h3>
             <p>{review.legalCase?.reason || 'Спорный отзыв передан на предварительную оценку.'}</p>
             <ul>
@@ -110,12 +110,12 @@ function ReviewInspector({
         </section>
       ) : null}
 
-      <section className="reviews-inspector__aiIntel" aria-label="Shield AI Intelligence">
-        <div className="reviews-inspector__sectionTitle"><span>SHIELD AI</span><strong>Анализ отзыва</strong></div>
-        {!review.intelligence || review.intelligence.status === 'LOADING' ? <p>Загружаем AI-анализ…</p> : null}
-        {review.intelligence?.status === 'QUEUED' || review.intelligence?.status === 'ANALYZING' ? <p>AI-анализ выполняется в фоне. Отзыв уже доступен для работы.</p> : null}
-        {review.intelligence?.status === 'UNAVAILABLE' ? <div className="reviews-ai-state is-muted"><strong>AI-анализ пока недоступен</strong><span>{review.intelligence.providerState?.reasonMessage || 'Провайдер не настроен.'}</span></div> : null}
-        {review.intelligence?.status === 'FAILED' ? <div className="reviews-ai-state is-danger"><strong>Не удалось выполнить AI-анализ</strong><span>{review.intelligence.error || review.intelligence.operation?.errorCode || 'Попробуйте повторить анализ.'}</span></div> : null}
+      <section className="reviews-inspector__aiIntel" aria-label="Анализ отзыва">
+        <div className="reviews-inspector__sectionTitle"><span>ИИ БИЗНЕС ЩИТ</span><strong>Анализ отзыва</strong></div>
+        {!review.intelligence || review.intelligence.status === 'LOADING' ? <p>Загружаем анализ ИИ…</p> : null}
+        {review.intelligence?.status === 'QUEUED' || review.intelligence?.status === 'ANALYZING' ? <p>Анализ ИИ выполняется в фоне. С отзывом уже можно работать.</p> : null}
+        {review.intelligence?.status === 'UNAVAILABLE' ? <div className="reviews-ai-state is-muted"><strong>Анализ ИИ пока недоступен</strong><span>{review.intelligence.providerState?.reasonMessage || 'Провайдер не настроен.'}</span></div> : null}
+        {review.intelligence?.status === 'FAILED' ? <div className="reviews-ai-state is-danger"><strong>Не удалось выполнить анализ ИИ</strong><span>{review.intelligence.error || review.intelligence.operation?.errorCode || 'Попробуйте повторить анализ.'}</span></div> : null}
         {review.intelligence?.status === 'STALE' ? <div className="reviews-ai-state is-warning"><strong>Анализ устарел</strong><span>Текст отзыва изменился после последнего анализа.</span></div> : null}
         {review.intelligence?.insight ? (
           <div className="reviews-ai-grid">
@@ -125,28 +125,28 @@ function ReviewInspector({
             <div><span>Уверенность</span><strong>{review.intelligence.insight.confidence >= 0.8 ? 'Высокая' : review.intelligence.insight.confidence >= 0.55 ? 'Средняя' : 'Низкая'}</strong></div>
             {review.intelligence.insight.aspects?.length ? <div className="reviews-ai-grid__wide"><span>Аспекты</span><div className="reviews-inspector__chips">{review.intelligence.insight.aspects.map((item) => <span key={`${item.aspect}-${item.sentiment}`}>{item.aspect}</span>)}</div></div> : null}
             {review.intelligence.insight.legalPrRisk ? <div className="reviews-ai-grid__wide is-risk"><strong>Потенциальный юридический / PR-риск</strong><span>{review.intelligence.insight.legalPrRiskReason || 'Требуется проверка человеком.'}</span></div> : null}
-            {review.intelligence.insight.safetyRisk ? <div className="reviews-ai-grid__wide is-risk"><strong>Safety-сигнал</strong><span>{review.intelligence.insight.safetyRiskReason || 'Требуется приоритетная проверка.'}</span></div> : null}
+            {review.intelligence.insight.safetyRisk ? <div className="reviews-ai-grid__wide is-risk"><strong>Сигнал безопасности</strong><span>{review.intelligence.insight.safetyRiskReason || 'Требуется приоритетная проверка.'}</span></div> : null}
             {review.intelligence.insight.observedFacts?.length ? <div className="reviews-ai-grid__wide"><span>Что сообщил клиент</span><ul>{review.intelligence.insight.observedFacts.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
             {review.intelligence.insight.inferences?.length ? <div className="reviews-ai-grid__wide"><span>Возможные причины</span><ul>{review.intelligence.insight.inferences.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
             {review.intelligence.insight.recommendations?.length ? <div className="reviews-ai-grid__wide"><span>Что проверить</span><ul>{review.intelligence.insight.recommendations.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
           </div>
         ) : null}
-        {canReanalyze && onReanalyze && !['QUEUED', 'ANALYZING'].includes(review.intelligence?.status) ? <button type="button" className="reviews-copilot__generate" onClick={onReanalyze} disabled={working.startsWith('intelligence:')}>{working.startsWith('intelligence:') ? 'Ставим в очередь…' : 'Повторить AI-анализ'}</button> : null}
+        {canReanalyze && onReanalyze && !['QUEUED', 'ANALYZING'].includes(review.intelligence?.status) ? <button type="button" className="reviews-copilot__generate" onClick={onReanalyze} disabled={working.startsWith('intelligence:')}>{working.startsWith('intelligence:') ? 'Ставим в очередь…' : 'Повторить анализ ИИ'}</button> : null}
       </section>
 
       <section className="reviews-copilot">
         <div className="reviews-copilot__head">
           <div>
-            <span>AI REPLY COPILOT</span>
+            <span>ПОМОЩНИК ПО ОТВЕТАМ</span>
             <h3>Ответ компании</h3>
             <p>{mode.label} · Brand Voice применяется на сервере</p>
           </div>
           <button type="button" className="reviews-copilot__generate" onClick={() => onGenerate(generationMode)} disabled={!canReply || working.startsWith('ai:') || review.intelligence?.status !== 'AVAILABLE'}>
-            <span>✦</span>{working.startsWith('ai:') ? 'Генерируем…' : reply ? 'Переписать AI' : 'Создать AI-черновик'}
+            <span>✦</span>{working.startsWith('ai:') ? 'Генерируем…' : reply ? 'Переписать с ИИ' : 'Создать черновик с ИИ'}
           </button>
         </div>
 
-        <div className="reviews-copilot__modes" role="group" aria-label="Стиль AI-ответа">
+        <div className="reviews-copilot__modes" role="group" aria-label="Стиль ответа ИИ">
           {AI_MODES.map((item) => <button key={item.id} type="button" className={generationMode === item.id ? 'is-active' : ''} onClick={() => setGenerationMode(item.id)} disabled={Boolean(working)}>{item.label}</button>)}
         </div>
 
@@ -154,7 +154,7 @@ function ReviewInspector({
           <textarea
             value={reply}
             onChange={(event) => setReply(event.target.value)}
-            placeholder="Подготовьте ответ или создайте AI-черновик…"
+            placeholder="Напишите ответ или создайте черновик с ИИ…"
             rows={8}
             maxLength={1400}
             readOnly={!canReply || isPublished || publishing || publishUnknown}
@@ -164,13 +164,13 @@ function ReviewInspector({
 
         {review.replyOrigin ? (
           <div className="reviews-copilot__meta">
-            <span>✦ Источник: {review.replyOrigin === 'ai' ? 'AI Copilot' : review.replyOrigin === 'ai_edited' ? 'AI + редактура' : review.replyOrigin === 'autopilot' ? 'Autopilot' : 'ручной ответ'}</span>
-            {review.replyPolicyDecision ? <span>Policy: {review.replyPolicyDecision}</span> : <span>Проверьте факты перед публикацией</span>}
+            <span>✦ Источник: {review.replyOrigin === 'ai' ? 'ИИ' : review.replyOrigin === 'ai_edited' ? 'ИИ + редактура' : review.replyOrigin === 'autopilot' ? 'Автопилот' : 'ручной ответ'}</span>
+            {review.replyPolicyDecision ? <span>Проверка ответа: {review.replyPolicyDecision === 'ALLOW' ? 'разрешён' : review.replyPolicyDecision === 'BLOCK' ? 'заблокирован' : 'требует проверки'}</span> : <span>Проверьте факты перед публикацией</span>}
           </div>
         ) : null}
 
         {policyBlocked ? <div className="reviews-ai-state is-danger"><strong>Публикация заблокирована политикой</strong><span>Измените текст ответа и отправьте новую версию на проверку.</span></div> : null}
-        {publishUnknown ? <div className="reviews-ai-state is-warning"><strong>Проверяем статус публикации</strong><span>Площадка не подтвердила результат однозначно. Business Shield выполняет reconciliation и не отправляет ответ повторно вслепую.</span></div> : null}
+        {publishUnknown ? <div className="reviews-ai-state is-warning"><strong>Проверяем статус публикации</strong><span>Площадка не подтвердила результат однозначно. Бизнес Щит проверяет фактический статус и не отправляет ответ повторно вслепую.</span></div> : null}
         {publishFailed ? <div className="reviews-ai-state is-danger"><strong>Публикация не выполнена</strong><span>{review.replyFailedReason || 'Площадка отклонила операцию или ответ не найден после проверки.'}</span></div> : null}
         {review.replyProviderState && !isPublished ? <div className="reviews-copilot__meta"><span>Статус площадки: {review.replyProviderState}</span></div> : null}
 
@@ -199,7 +199,7 @@ function ReviewInspector({
 
           {isApproved ? (
             <div className="reviews-copilot__approved">
-              <div><span>✓</span><div><strong>{publishing ? 'Публикация выполняется' : publishUnknown ? 'Проверяем публикацию' : publishFailed ? 'Нужна повторная публикация' : 'Ответ согласован'}</strong><small>{publishing ? 'Запрос выполняется в фоне' : publishUnknown ? 'Не отправляем повторно до reconciliation' : publishFailed ? 'Можно повторить после проверки причины' : `Готов к отправке в ${review.platform}`}</small></div></div>
+              <div><span>✓</span><div><strong>{publishing ? 'Публикация выполняется' : publishUnknown ? 'Проверяем публикацию' : publishFailed ? 'Нужна повторная публикация' : 'Ответ согласован'}</strong><small>{publishing ? 'Запрос выполняется в фоне' : publishUnknown ? 'Не отправляем повторно до проверки статуса' : publishFailed ? 'Можно повторить после проверки причины' : `Готов к отправке в ${review.platform}`}</small></div></div>
               <button type="button" className="is-primary" onClick={onPublishApproved} disabled={!canApprove || Boolean(working) || publishing || publishUnknown || policyBlocked}>{working.startsWith('publish:') ? 'Ставим в очередь…' : publishFailed ? 'Повторить публикацию' : 'Опубликовать'}</button>
             </div>
           ) : null}
@@ -211,10 +211,10 @@ function ReviewInspector({
       </section>
 
       <section className="reviews-inspector__history">
-        <div className="reviews-inspector__sectionTitle"><span>WORKFLOW</span><strong>История обработки</strong></div>
+        <div className="reviews-inspector__sectionTitle"><span>ЭТАПЫ</span><strong>История обработки</strong></div>
         <div className="reviews-workflow-timeline">
           <div className="is-done"><i>✓</i><div><strong>Отзыв получен</strong><span>{review.platform} · {review.date}, {review.time}</span></div></div>
-          {review.replyOrigin === 'ai' || review.replyOrigin === 'autopilot' || review.replyOrigin === 'ai_edited' ? <div className="is-done"><i>✓</i><div><strong>Создан AI-черновик</strong><span>{review.replyGenerationMode || 'AI Reply Copilot'}</span></div></div> : null}
+          {review.replyOrigin === 'ai' || review.replyOrigin === 'autopilot' || review.replyOrigin === 'ai_edited' ? <div className="is-done"><i>✓</i><div><strong>Создан черновик с ИИ</strong><span>{review.replyGenerationMode || 'Помощник по ответам'}</span></div></div> : null}
           {isApproval ? <div className="is-current"><i>2</i><div><strong>Согласование</strong><span>Ожидает руководителя</span></div></div> : null}
           {isApproved && !isPublished ? <div className="is-current"><i>3</i><div><strong>Публикация</strong><span>{publishing ? 'Выполняется' : publishUnknown ? 'Проверяется' : publishFailed ? 'Требует повторной попытки' : 'Готова к запуску'}</span></div></div> : null}
           {review.legalCase ? <div className="is-current"><i>§</i><div><strong>Юридическая проверка</strong><span>{review.legalCase.reason}</span></div></div> : null}
