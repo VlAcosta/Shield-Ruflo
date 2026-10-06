@@ -160,6 +160,69 @@ describeWithPostgres('P2 organization context and RBAC', () => {
     expect(invitation.json()).toMatchObject({ error: { code: 'PERMISSION_NON_DELEGABLE' } });
   });
 
+  it('enforces granular team permissions in addition to team.manage', async () => {
+    const adminMembershipId = memberIds[adminAId];
+
+    await app.prisma.organizationMember.update({
+      where: { id: adminMembershipId },
+      data: { permissionOverrides: { allow: [], deny: ['team.remove'] } },
+    });
+    const removeDenied = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/team/members/${memberIds[memberAId]}`,
+      headers: { cookie: cookie(tokens.adminA) },
+    });
+    expect(removeDenied.statusCode).toBe(403);
+    expect(removeDenied.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+
+    await app.prisma.organizationMember.update({
+      where: { id: adminMembershipId },
+      data: { permissionOverrides: { allow: [], deny: ['team.manage_security'] } },
+    });
+    const securityDenied = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/team/members/${memberIds[memberAId]}/sessions`,
+      headers: { cookie: cookie(tokens.adminA) },
+    });
+    expect(securityDenied.statusCode).toBe(403);
+    expect(securityDenied.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+
+    await app.prisma.organizationMember.update({
+      where: { id: adminMembershipId },
+      data: { permissionOverrides: { allow: [], deny: ['team.manage_roles'] } },
+    });
+    const roleDenied = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/team/members/${memberIds[memberAId]}`,
+      headers: { cookie: cookie(tokens.adminA) },
+      payload: { role: 'ANALYST' },
+    });
+    expect(roleDenied.statusCode).toBe(403);
+    expect(roleDenied.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+
+    await app.prisma.organizationMember.update({
+      where: { id: adminMembershipId },
+      data: { permissionOverrides: { allow: [], deny: ['team.invite'] } },
+    });
+    const inviteDenied = await app.inject({
+      method: 'POST',
+      url: '/api/v1/team/invitations',
+      headers: { cookie: cookie(tokens.adminA) },
+      payload: {
+        name: 'Granular deny',
+        email: `granular-${randomUUID()}@example.test`,
+        role: 'MEMBER',
+      },
+    });
+    expect(inviteDenied.statusCode).toBe(403);
+    expect(inviteDenied.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+
+    await app.prisma.organizationMember.update({
+      where: { id: adminMembershipId },
+      data: { permissionOverrides: { allow: [], deny: [] } },
+    });
+  });
+
   it('revalidates stale actor authority inside the organization lock', async () => {
     await app.prisma.organizationMember.update({
       where: { id: memberIds[adminAId] }, data: { permissionOverrides: { allow: [], deny: ['team.manage'] } },
