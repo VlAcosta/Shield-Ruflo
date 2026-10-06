@@ -16,8 +16,9 @@ function PlanLimits({ limits }) {
 
       <div className="plan-limits__list">
         {limits.map((item, index) => {
-          const percent = getUsagePercent(item.used, item.total);
-          const warning = percent >= 80;
+          const unmetered = item.state === 'unmetered' || item.total === null || Number(item.total) <= 0;
+          const percent = unmetered ? 0 : getUsagePercent(item.used, item.total);
+          const warning = !unmetered && percent >= 80;
 
           return (
             <div
@@ -27,14 +28,14 @@ function PlanLimits({ limits }) {
             >
               <div className="plan-limits__row">
                 <span>{item.label}</span>
-                <strong>{item.used}<small>/ {item.total}</small></strong>
+                <strong>{item.used}<small>{unmetered ? ' · без лимита' : `/ ${item.total}`}</small></strong>
               </div>
 
-              <Progress value={percent} tone={item.tone === 'purple' ? 'violet' : item.tone} />
+              {!unmetered ? <Progress value={percent} tone={item.tone === 'purple' ? 'violet' : item.tone} /> : null}
 
               <div className="plan-limits__foot">
-                <span>{percent}% использовано</span>
-                {warning ? <em>Пора докупить</em> : null}
+                <span>{unmetered ? 'Лимит не установлен' : `${percent}% использовано`}</span>
+                {warning ? <em>Почти достигнут лимит</em> : null}
               </div>
             </div>
           );
