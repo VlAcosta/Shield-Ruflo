@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { createCaseFromReview } from '../cases/cases.service.js';
 import { enqueueAiReplyGeneration } from '../ai/reply-copilot.service.js';
+import { createNotificationForOrganization } from '../notifications/notifications.service.js';
 
 type AutomationEvent = {
   type: 'new_review' | 'unanswered_age';
@@ -296,16 +297,19 @@ async function executeAction(
     const body = review
       ? String(action.config.body || `Новый отзыв ${review.rating}★ требует внимания`)
       : String(action.config.body || 'Автоматизация сработала');
-    const notification = await app.prisma.notification.create({
-      data: {
-        organizationId: event.organizationId,
-        type: 'automation',
-        title,
-        body,
-        payload: { automationId: automation.id, reviewId: review?.id ?? null, caseId: runtime.caseId ?? null },
-      },
+    const notifications = await createNotificationForOrganization(app.prisma, {
+      organizationId: event.organizationId,
+      type: 'automation',
+      title,
+      body,
+      payload: { automationId: automation.id, reviewId: review?.id ?? null, caseId: runtime.caseId ?? null },
     });
-    return { type: action.type, notificationId: notification.id, caseId: runtime.caseId ?? null };
+    return {
+      type: action.type,
+      notificationIds: notifications.map((notification) => notification.id),
+      recipients: notifications.length,
+      caseId: runtime.caseId ?? null,
+    };
   }
 
   return { type: action.type, skipped: 'UNSUPPORTED_ACTION' };

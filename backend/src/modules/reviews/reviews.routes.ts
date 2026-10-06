@@ -36,6 +36,7 @@ import {
   submitReplyForApproval,
 } from './review-replies.service.js';
 import { dispatchAutomationEvent } from '../operations/automation-engine.js';
+import { createNotificationForOrganization } from '../notifications/notifications.service.js';
 
 export const reviewsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/reviews', { preHandler: [app.authenticate, app.authorize('reviews.view')] }, async (request) => {
@@ -121,8 +122,34 @@ export const reviewsRoutes: FastifyPluginAsync = async (app) => {
   // dedupe key so the same provider review cannot create duplicate operational work.
   app.post('/reviews/import', { preHandler: [app.authenticate, app.authorize('reviews.settings')] }, async (request) => {
     const body = seedReviewSchema.parse(request.body);
+    const existing = await app.prisma.review.findUnique({
+      where: {
+        sourceId_externalId: {
+          sourceId: body.sourceId,
+          externalId: body.externalId,
+        },
+      },
+      select: { id: true },
+    });
     const result = await seedReview(app, request, body);
     const review = result.review;
+
+    if (!existing) {
+      await createNotificationForOrganization(app.prisma, {
+        organizationId: request.auth!.organizationId!,
+        eventKey: 'review',
+        type: 'reviews',
+        title: `Новый отзыв · ${review.rating}/5`,
+        body: review.text ? String(review.text).slice(0, 500) : 'Получен новый отзыв.',
+        payload: {
+          reviewId: review.id,
+          actionLabel: 'Открыть отзыв',
+          actionRoute: `/reviews?review=${review.id}`,
+          tone: Number(review.rating) <= 2 ? 'amber' : 'blue',
+        },
+      });
+    }
+
     const automationResults = await dispatchAutomationEvent(app, {
       type: 'new_review',
       organizationId: request.auth!.organizationId!,

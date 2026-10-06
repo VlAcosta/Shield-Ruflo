@@ -8,6 +8,7 @@ import type {
   SupportTicketStatus,
 } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
+import { createNotificationForUser } from '../notifications/notifications.service.js';
 
 type SupportActor = {
   organizationId: string;
@@ -518,6 +519,23 @@ export async function addAdminSupportMessage(
       },
     });
   });
+
+  if (!input.internal && current.createdByUserId !== actorUserId) {
+    await createNotificationForUser(app.prisma, {
+      organizationId: current.organizationId,
+      userId: current.createdByUserId,
+      eventKey: 'message',
+      type: 'chat',
+      title: 'Новый ответ от поддержки',
+      body: input.text.slice(0, 500),
+      payload: {
+        ticketId: current.id,
+        actionLabel: 'Открыть чат',
+        actionRoute: `/chat?channel=${current.channel === 'TECHNICAL' ? 'technical' : 'manager'}`,
+        tone: 'green',
+      },
+    });
+  }
 
   return adminTicket(await getAdminTicketOrThrow(app, ticketId));
 }

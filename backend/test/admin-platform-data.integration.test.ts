@@ -207,6 +207,22 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
       expect.objectContaining({ from: 'support', text: 'Проверили обращение. Уже занимаемся проблемой.' }),
     ]));
 
+    const clientNotifications = await app.inject({
+      method: 'GET',
+      url: '/api/v1/notifications',
+      headers: { cookie: regularCookie },
+    });
+    expect(clientNotifications.statusCode).toBe(200);
+    expect(clientNotifications.json().notifications).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        userId: regularUserId,
+        type: 'chat',
+        title: 'Новый ответ от поддержки',
+        status: 'UNREAD',
+      }),
+    ]));
+    expect(JSON.stringify(clientNotifications.json())).toContain(ticketId);
+
     const close = await app.inject({
       method: 'PATCH',
       url: `/api/v1/admin/tickets/${ticketId}`,

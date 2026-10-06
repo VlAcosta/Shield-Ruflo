@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma, TaskPriority, TaskStatus } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
+import { createNotificationForUsers } from '../notifications/notifications.service.js';
 
 const statusToClient: Record<TaskStatus, string> = {
   NEW: 'new',
@@ -335,6 +336,30 @@ export async function updateTask(
     });
     return tx.task.findUniqueOrThrow({ where: { id: existing.id }, include: taskInclude });
   });
+  if (status === 'DONE' && existing.status !== 'DONE') {
+    const recipientUserIds = [
+      existing.createdByUserId,
+      ...updated.assignees.map((assignee) => assignee.member.userId),
+    ].filter((userId) => userId !== context.userId);
+
+    if (recipientUserIds.length) {
+      await createNotificationForUsers(app.prisma, {
+        organizationId: context.organizationId,
+        userIds: recipientUserIds,
+        eventKey: 'completedTask',
+        type: 'tasks',
+        title: 'Задача выполнена',
+        body: `Задача «${updated.title}» отмечена выполненной.`,
+        payload: {
+          taskId: updated.id,
+          actionLabel: 'Открыть задачу',
+          actionRoute: `/tasks?task=${updated.id}`,
+          tone: 'green',
+        },
+      });
+    }
+  }
+
   return serializeTask(updated);
 }
 

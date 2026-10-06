@@ -211,6 +211,58 @@ describeWithPostgres('Tasks API tenant isolation and durable preferences', () =>
     })).resolves.toBeTruthy();
   });
 
+  it('creates a personal notification for task stakeholders when another member completes a task', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: { cookie },
+      payload: {
+        title: 'Notification completion task',
+        assigneeMemberIds: [memberAId],
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const taskId = created.json().task.id as string;
+
+    const completed = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${taskId}`,
+      headers: { cookie: teammateCookie },
+      payload: { status: 'done' },
+    });
+    expect(completed.statusCode).toBe(200);
+
+    const notifications = await app.inject({
+      method: 'GET',
+      url: '/api/v1/notifications',
+      headers: { cookie },
+    });
+    expect(notifications.statusCode).toBe(200);
+    expect(notifications.json().notifications).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        userId: userAId,
+        type: 'tasks',
+        title: 'Задача выполнена',
+        status: 'UNREAD',
+      }),
+    ]));
+    expect(JSON.stringify(notifications.json())).toContain(taskId);
+
+    const beforeRepeat = await app.prisma.notification.count({
+      where: { organizationId: organizationAId, userId: userAId, type: 'tasks' },
+    });
+    const repeated = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/tasks/${taskId}`,
+      headers: { cookie: teammateCookie },
+      payload: { status: 'done' },
+    });
+    expect(repeated.statusCode).toBe(200);
+    await expect(app.prisma.notification.count({
+      where: { organizationId: organizationAId, userId: userAId, type: 'tasks' },
+    })).resolves.toBe(beforeRepeat);
+  });
+
   it('returns 404 and performs no write for cross-tenant task and member identifiers', async () => {
     const taskBBefore = await app.prisma.task.findUniqueOrThrow({ where: { id: taskBId } });
 
