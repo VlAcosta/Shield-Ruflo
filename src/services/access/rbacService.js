@@ -399,6 +399,9 @@ export function findFirstAllowedRoute(context = getCurrentAccessContext()) {
 }
 
 export function permissionsForMember(user = {}) {
+  if (Array.isArray(user.permissions)) {
+    return user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission));
+  }
   return resolvePermissions(user.accessRoleId || user.role || 'guest', user.permissionOverrides || {});
 }
 
