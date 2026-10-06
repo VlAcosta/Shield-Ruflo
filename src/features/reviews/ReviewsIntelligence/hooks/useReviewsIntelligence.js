@@ -81,15 +81,23 @@ export default function useReviewsIntelligence() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let alive = true;
     setSourcesLoading(true);
     setSourcesError('');
     getReviewSources({ signal: controller.signal })
-      .then((items) => setSources(items))
-      .catch((error) => {
-        if (error?.name !== 'AbortError') setSourcesError(error?.message || 'Не удалось загрузить источники отзывов');
+      .then((items) => {
+        if (alive) setSources(items);
       })
-      .finally(() => setSourcesLoading(false));
-    return () => controller.abort();
+      .catch((error) => {
+        if (alive && error?.name !== 'AbortError') setSourcesError(error?.message || 'Не удалось загрузить источники отзывов');
+      })
+      .finally(() => {
+        if (alive) setSourcesLoading(false);
+      });
+    return () => {
+      alive = false;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
