@@ -57,6 +57,24 @@ export function getCachedReviews() {
   return [];
 }
 
+export async function getReviewSources({ signal } = {}) {
+  const endpoint = String(getRuntimeEnv('API_BASE', '/api/v1')).replace(/\/$/, '');
+  const payload = await apiRequest(joinEndpoint(endpoint, '/review-sources'), {
+    signal,
+    timeout: 8000,
+  });
+  const items = Array.isArray(payload) ? payload : payload?.items;
+  if (!Array.isArray(items)) throw new Error('Сервер вернул некорректный список источников отзывов');
+  return items.map((item) => ({
+    id: item.id,
+    name: item.name || item.provider || 'Источник',
+    provider: item.provider || '',
+    status: item.status || '',
+    businessId: item.businessId || item.business?.id || '',
+    locationId: item.locationId || item.location?.id || '',
+  }));
+}
+
 export async function getReviews({ signal, page = 1, pageSize = 30, ...filters } = {}) {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   Object.entries(filters).forEach(([key, value]) => {
