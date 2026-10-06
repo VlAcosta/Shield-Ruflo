@@ -180,12 +180,12 @@ function MemberInspector({
       </> : null}
 
       {view === 'sessions' ? <section className="users-profile__device-center">
-        <header><div><span>DEVICE CONTROL</span><h4>Активные устройства</h4></div>{!owner && canManageSecurity && liveSessions.length ? <button type="button" className="users-profile__logout-all" disabled={busy.securityUserId === user.id} onClick={() => onForceLogout(user.id)}><ExitIcon/> Завершить все</button> : null}</header>
-        <p>Здесь отображаются устройства, которые использовали доступ к компании. IP и геолокацию должен возвращать сервер авторизации.</p>
+        <header><div><span>УСТРОЙСТВА</span><h4>Активные устройства</h4></div>{!owner && canManageSecurity && liveSessions.length ? <button type="button" className="users-profile__logout-all" disabled={busy.securityUserId === user.id} onClick={() => onForceLogout(user.id)}><ExitIcon/> Завершить все</button> : null}</header>
+        <p>Здесь отображаются устройства, которые использовали доступ к компании. IP показывается, если он доступен в данных сессии.</p>
         <div className="users-profile__device-list">
           {sessions.length ? sessions.map((session, index) => <article key={session.id} className={`${session.revokedAt ? 'is-revoked' : ''} ${session.current ? 'is-current' : ''}`} style={{ '--device-index': index }}>
             <span className="users-profile__device-icon"><DeviceIcon mobile={session.deviceType === 'mobile'}/></span>
-            <div><div><strong>{session.label || 'Браузер'}</strong>{session.current ? <em>Это устройство</em> : session.online ? <em className="is-online">Онлайн</em> : null}</div><span>{session.location || 'Геопозиция определяется сервером'}{session.ip ? ` · ${session.ip}` : ''}</span><small>{session.revokedAt ? `Завершена ${formatRelative(session.revokedAt)}` : `Активность ${formatRelative(session.lastSeenAt)}`}</small></div>
+            <div><div><strong>{session.label || 'Браузер'}</strong>{session.current ? <em>Это устройство</em> : session.online ? <em className="is-online">Онлайн</em> : null}</div><span>{session.location || 'Местоположение не определено'}{session.ip ? ` · ${session.ip}` : ''}</span><small>{session.revokedAt ? `Завершена ${formatRelative(session.revokedAt)}` : `Активность ${formatRelative(session.lastSeenAt)}`}</small></div>
             {!owner && canManageSecurity && !session.revokedAt ? <button type="button" onClick={() => onRevokeSession(user.id, session.id)} disabled={busy.securitySessionId === session.id} aria-label="Завершить сессию"><ExitIcon/></button> : null}
           </article>) : <div className="users-profile__device-empty"><DeviceIcon/><strong>Устройств пока нет</strong><p>Они появятся после первого входа пользователя в кабинет.</p></div>}
         </div>
@@ -243,19 +243,19 @@ function SecurityCenter({ members, securityApi, canManageSecurity, onSelect }) {
 
   return <div className="users-profile__security-view">
     <section className="users-profile__security-hero">
-      <div><span>SECURITY OPERATIONS</span><h3>Контроль доступа команды</h3><p>Сессии, временный доступ и мгновенная заморозка без удаления аккаунта.</p></div>
+      <div><span>БЕЗОПАСНОСТЬ КОМАНДЫ</span><h3>Контроль доступа команды</h3><p>Сессии, временный доступ и мгновенная заморозка без удаления аккаунта.</p></div>
       <div className="users-profile__security-orbit"><i/><i/><span><ShieldIcon/><b>{frozen + expired}</b><small>рисков</small></span></div>
       <footer><div><strong>{activeSessions}</strong><span>активных сессий</span></div><div><strong>{temporary}</strong><span>временных доступов</span></div><div><strong>{frozen}</strong><span>заморожено</span></div><div><strong>{expired}</strong><span>истёк срок</span></div></footer>
     </section>
 
     <div className="users-profile__security-grid">
       <section className="users-profile__access-policies">
-        <header><div><span>ACCESS POLICIES</span><h3>Участники</h3></div><small>{canManageSecurity ? 'Нажмите на пользователя для управления' : 'Режим просмотра'}</small></header>
+        <header><div><span>ПРАВИЛА ДОСТУПА</span><h3>Участники</h3></div><small>{canManageSecurity ? 'Нажмите на пользователя для управления' : 'Режим просмотра'}</small></header>
         <div>{rows.map((row, index) => <button type="button" key={row.user.id} onClick={() => onSelect(row.user.id)} style={{ '--policy-index': index }}><span className={`users-profile__avatar is-${row.user.tone || 'violet'}`}>{row.user.initials || initialsFromName(row.user.name)}</span><span><strong>{row.user.name}</strong><small>{row.user.email || 'Владелец компании'}</small></span><em className={`is-${row.status.tone}`}><i/>{row.status.label}</em><span className="users-profile__policy-session"><strong>{row.sessions.length}</strong><small>сессий</small></span><span className="users-profile__policy-expiry">{row.security.accessExpiresAt ? formatDate(row.security.accessExpiresAt) : 'Постоянный'}</span></button>)}</div>
       </section>
 
       <section className="users-profile__security-log">
-        <header><div><span>SECURITY LOG</span><h3>Критичные события</h3></div><strong><i/> live</strong></header>
+        <header><div><span>ЖУРНАЛ БЕЗОПАСНОСТИ</span><h3>Критичные события</h3></div><strong><i/> актуально</strong></header>
         <div>{securityApi.securityEvents.length ? securityApi.securityEvents.slice(0, 16).map((item, index) => <article key={item.id} style={{ '--security-index': index }}><span className={`is-${item.tone || 'neutral'}`}/><div><strong>{item.title}</strong><p>{item.detail || item.actor?.name || 'Системное событие'}</p></div><time>{formatRelative(item.createdAt)}</time></article>) : <div className="users-profile__security-empty"><ShieldIcon/><strong>Рисковых событий нет</strong><p>Смена PIN, заморозка, роли и отключение устройств будут фиксироваться здесь.</p></div>}</div>
       </section>
     </div>
@@ -315,7 +315,7 @@ export default function UsersProfile({
     <section className="users-profile">
       <header className="users-profile__hero">
         <div>
-          <span>TEAM ACCESS CENTER</span>
+          <span>КОМАНДА И ДОСТУП</span>
           <h2>Команда, роли и безопасность</h2>
           <p>Управляйте полномочиями, устройствами и сроком доступа без удаления рабочих профилей.</p>
         </div>
@@ -330,7 +330,7 @@ export default function UsersProfile({
         <div className="is-live"><span>Онлайн</span><strong>{onlineCount}</strong><small>активны сейчас</small></div>
         <div><span>Ожидают</span><strong>{pendingCount}</strong><small>приглашений</small></div>
         <div className={securityRiskCount ? 'is-risk' : ''}><span>Контроль</span><strong>{securityRiskCount}</strong><small>{securityRiskCount ? 'требует внимания' : 'рисков нет'}</small></div>
-        <div><span>Свои роли</span><strong>—</strong><small>нужен серверный API</small></div>
+        <div><span>Свои роли</span><strong>—</strong><small>пока недоступны</small></div>
       </div>
 
       <nav className="users-profile__tabs">{TABS.map((item) => <button type="button" key={item.id} className={tab === item.id ? 'is-active' : ''} onClick={() => { setTab(item.id); setSelectedId(null); }}>{item.label}{item.id === 'activity' && team.activity.length ? <em>{Math.min(team.activity.length, 99)}</em> : item.id === 'security' && securityRiskCount ? <em className="is-risk">{securityRiskCount}</em> : null}</button>)}</nav>
@@ -370,7 +370,7 @@ export default function UsersProfile({
           </div>
 
           <section className="users-profile__matrix">
-            <header><div><span>PERMISSION MATRIX</span><h3>Матрица системных ролей</h3></div><p>Быстро сравнивайте, какие действия доступны каждой базовой роли.</p></header>
+            <header><div><span>МАТРИЦА ДОСТУПА</span><h3>Матрица системных ролей</h3></div><p>Быстро сравнивайте, какие действия доступны каждой базовой роли.</p></header>
             <div className="users-profile__matrix-scroll"><div className="users-profile__matrix-grid"><div className="users-profile__matrix-head"><span>Разрешение</span>{PRESET_ROLES.map((role) => <strong key={role.id}>{role.label}</strong>)}</div>{PERMISSION_GROUPS.flatMap((group) => group.permissions.map((permission, index) => <div className="users-profile__matrix-row" key={permission.id}><span><small>{index === 0 ? group.label : ''}</small><strong>{permission.label}</strong></span>{PRESET_ROLES.map((role) => <i key={role.id} className={role.permissions.includes(permission.id) ? 'is-on' : 'is-off'}>{role.permissions.includes(permission.id) ? '✓' : '—'}</i>)}</div>))}</div></div>
           </section>
         </div>
@@ -378,7 +378,7 @@ export default function UsersProfile({
 
       {tab === 'activity' ? (
         <div className="users-profile__activity-view">
-          <header><div><span>LIVE AUDIT</span><h3>Что происходило в компании</h3></div><strong><i/> обновляется автоматически</strong></header>
+          <header><div><span>ЖУРНАЛ ДЕЙСТВИЙ</span><h3>Что происходило в компании</h3></div><strong><i/> обновляется автоматически</strong></header>
           <div className="users-profile__activity-feed">{team.activity.length ? team.activity.map((item, index) => <article key={item.id} style={{ '--activity-index': index }}><span className={`users-profile__activity-dot is-${item.tone || 'neutral'}`}/><div><span>{item.actor?.name || item.actor?.email || 'Пользователь'}</span><strong>{item.title}</strong>{item.detail ? <p>{item.detail}</p> : null}</div><time>{formatRelative(item.createdAt)}</time></article>) : <div className="users-profile__activity-empty"><ClockIcon/><strong>История пока пустая</strong><p>Здесь появятся входы, изменения ролей и важные действия команды.</p></div>}</div>
         </div>
       ) : null}

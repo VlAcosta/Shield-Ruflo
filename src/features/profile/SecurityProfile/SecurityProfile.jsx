@@ -85,7 +85,7 @@ export default function SecurityProfile({ sessions, preferences, busy, onChangeP
           <div>
             <span>Защита кабинета</span>
             <h2>Смена PIN-кода</h2>
-            <p>PIN используется для локальной блокировки кабинета и повторного входа.</p>
+            <p>PIN используется только для локальной блокировки кабинета на этом устройстве. Вход в аккаунт подтверждается отдельно.</p>
           </div>
         </header>
 
@@ -97,7 +97,7 @@ export default function SecurityProfile({ sessions, preferences, busy, onChangeP
 
         <div className="security-profile__pin-note">
           <LockIcon />
-          <span>Используйте PIN, который не совпадает с кодом телефона или банковской карты.</span>
+          <span>Не используйте PIN от банковской карты, телефона или других важных сервисов.</span>
         </div>
 
         <button className="security-profile__primary" type="submit" disabled={busy.pin}>
@@ -111,7 +111,7 @@ export default function SecurityProfile({ sessions, preferences, busy, onChangeP
           <div>
             <span>Автоблокировка</span>
             <h2>Защита при бездействии</h2>
-            <p>Эти параметры применяются ко всему кабинету и начинают действовать сразу после сохранения.</p>
+            <p>Эти параметры действуют в текущем браузере и определяют, когда интерфейс потребует локальный PIN.</p>
           </div>
         </header>
 
@@ -184,7 +184,7 @@ export default function SecurityProfile({ sessions, preferences, busy, onChangeP
                   <strong>{session.title}</strong>
                   {session.current ? <span className="security-profile__current-pill">Текущая</span> : null}
                 </div>
-                <p>{[session.ip, session.location].filter(Boolean).join(' · ') || 'IP и геопозиция появятся после подключения session API'}</p>
+                <p>{[session.ip, session.location].filter(Boolean).join(' · ') || 'Дополнительные данные этого сеанса недоступны'}</p>
                 <small>{session.time}</small>
               </div>
               {!session.current ? (

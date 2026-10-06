@@ -8,7 +8,9 @@ import { getAccountScope, readScopedJson, writeScopedJson } from '../core/dataSc
 import { apiRequest, joinEndpoint } from '../core/apiClient';
 import { isDemoDataEnabled } from '../core/runtimeConfig';
 
-const PROFILE_ENDPOINT = String(getRuntimeEnv('PROFILE_ENDPOINT', getRuntimeEnv('API_BASE', '/api/v1'))).replace(/\/$/, '');
+const API_BASE = String(getRuntimeEnv('API_BASE', '/api/v1')).replace(/\/$/, '');
+const PROFILE_ENDPOINT = String(getRuntimeEnv('PROFILE_ENDPOINT', joinEndpoint(API_BASE, '/profile'))).replace(/\/$/, '');
+const COMPANY_PROFILE_ENDPOINT = joinEndpoint(API_BASE, '/company/profile');
 export const PROFILE_CACHE_KEY = 'business-shield:profile:snapshot:v1';
 export const PROFILE_CHANGED_EVENT = 'business-shield:profile-changed';
 
@@ -135,7 +137,12 @@ function writeCache(snapshot, { emit = true } = {}) {
 
 async function request(path = '', options = {}) {
   if (!PROFILE_ENDPOINT) return null;
-  return apiRequest(joinEndpoint(PROFILE_ENDPOINT, path), { ...options, timeout: 9000 });
+  const endpoint = path ? joinEndpoint(PROFILE_ENDPOINT, path) : PROFILE_ENDPOINT;
+  return apiRequest(endpoint, { ...options, timeout: 9000 });
+}
+
+async function requestCompanyProfile(options = {}) {
+  return apiRequest(COMPANY_PROFILE_ENDPOINT, { ...options, timeout: 9000 });
 }
 
 function normalizeSnapshot(value) {
@@ -161,15 +168,11 @@ function normalizeSnapshot(value) {
 }
 
 export async function getProfileSnapshot({ signal } = {}) {
-  let remote = null;
-  try {
-    remote = await request('/company/profile', { signal });
-  } catch (error) {
-    throw error;
-  }
+  const remote = await request('', { signal });
   if (remote) {
-    const snapshot = overlayCurrentUserPersonal(normalizeSnapshot({ ...(readCache() || {}), company: remote.company }));
+    const snapshot = normalizeSnapshot(remote.snapshot || remote);
     writeCache(snapshot, { emit: false });
+    mirrorPersonalToCurrentUser(snapshot.personal);
     return snapshot;
   }
 
@@ -220,7 +223,7 @@ export async function savePersonalProfile(personal, snapshot) {
 }
 
 export async function saveCompanyProfile(company, snapshot) {
-  const remote = await request('/company/profile', {
+  const remote = await requestCompanyProfile({
     method: 'PATCH',
     body: JSON.stringify(company),
   });
@@ -263,7 +266,7 @@ export async function syncProfileCompanyFromOnboarding(organization) {
   if (!PROFILE_ENDPOINT) return localSnapshot;
 
   try {
-    const remote = await request('/company/profile', {
+    const remote = await requestCompanyProfile({
       method: 'PATCH',
       body: JSON.stringify(company),
     });
@@ -279,18 +282,11 @@ export async function syncProfileCompanyFromOnboarding(organization) {
 }
 
 export async function changeProfilePin({ currentPin, newPin }) {
-  const remote = await request('/security/pin', {
-    method: 'PATCH',
-    body: JSON.stringify({ currentPin, newPin }),
-  });
-
-  if (!remote) {
-    const savedPin = localStorage.getItem(PIN_CODE_KEY) || '';
-    if (!savedPin || savedPin !== currentPin) {
-      const error = new Error('Текущий PIN указан неверно');
-      error.code = 'INVALID_PIN';
-      throw error;
-    }
+  const savedPin = localStorage.getItem(PIN_CODE_KEY) || '';
+  if (!savedPin || savedPin !== currentPin) {
+    const error = new Error('Текущий PIN указан неверно');
+    error.code = 'INVALID_PIN';
+    throw error;
   }
 
   localStorage.setItem(PIN_CODE_KEY, newPin);
