@@ -380,7 +380,7 @@ function DashboardWorkspace({ firstRun = false }) {
         <div className="dashboard-workspace__empty">
           <strong>Доска пустая</strong>
           <span>{accessibleWidgets.length ? 'Добавьте нужные блоки и соберите рабочее пространство под себя.' : 'Для вашей роли нет доступных дополнительных блоков.'}</span>
-          {accessibleWidgets.length && canEditDashboard ? <button type="button" onClick={handleOpenCatalog}>Добавить блоки</button> : null}
+          {accessibleWidgets.length && canEditDashboard ? <button type="button" onClick={handleOpenCatalog}>Выбрать блоки</button> : null}
         </div>
       ) : null}
 
