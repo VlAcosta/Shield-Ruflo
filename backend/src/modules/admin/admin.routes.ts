@@ -12,6 +12,11 @@ import {
   updateAdminPlan,
   updateAdminSubscription,
 } from './admin.service.js';
+import {
+  addAdminSupportMessage,
+  listAdminSupportTickets,
+  updateAdminSupportTicket,
+} from '../support/support.service.js';
 
 const clientParams = z.object({ clientId: z.string().uuid() });
 const planParams = z.object({ planId: z.string().min(1).max(120) });
@@ -34,6 +39,19 @@ const planCreate = z.object({
   currency: z.string().length(3).optional(),
 }).strict();
 const subscriptionPatch = z.object({ autoRenew: z.boolean() }).strict();
+const ticketParams = z.object({ ticketId: z.string().uuid() });
+const ticketPatch = z.object({
+  status: z.enum(['open', 'in_progress', 'waiting', 'closed']).optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  unread: z.number().int().min(0).max(10_000).optional(),
+  assignedManagerId: z.string().uuid().nullable().optional(),
+  assignedManagerName: z.string().max(180).optional(),
+  updatedAt: z.string().max(80).optional(),
+}).strict();
+const ticketMessage = z.object({
+  text: z.string().trim().min(1).max(10_000),
+  internal: z.boolean().optional(),
+}).strict();
 
 function normalizeIdentity(value: string | null | undefined): string {
   return String(value || '').trim().toLowerCase();
@@ -57,6 +75,47 @@ async function assertPlatformAdmin(app: Parameters<FastifyPluginAsync>[0], reque
     request.log.warn({ userId: user.id }, 'Denied platform admin access');
     throw new AppError({ code: 'PLATFORM_ADMIN_ACCESS_DENIED', message: 'Доступ к панели администратора запрещён', statusCode: 403 });
   }
+}
+
+async function listPlatformManagers(app: Parameters<FastifyPluginAsync>[0]) {
+  const emailIdentities = env.PLATFORM_ADMIN_IDENTITIES.filter((identity) => identity.includes('@'));
+  const phoneIdentities = env.PLATFORM_ADMIN_IDENTITIES.filter((identity) => !identity.includes('@'));
+  if (!emailIdentities.length && !phoneIdentities.length) return [];
+
+  const users = await app.prisma.user.findMany({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        ...(emailIdentities.length ? [{ email: { in: emailIdentities, mode: 'insensitive' as const } }] : []),
+        ...(phoneIdentities.length ? [{ phone: { in: phoneIdentities } }] : []),
+      ],
+    },
+    select: { id: true, displayName: true, firstName: true, lastName: true, email: true, phone: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    name: user.displayName || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || user.phone || 'Администратор',
+    email: user.email || '',
+    role: 'Platform admin',
+    status: 'active',
+  }));
+}
+
+async function assertAssignableManager(app: Parameters<FastifyPluginAsync>[0], managerId: string | null | undefined) {
+  if (!managerId) return;
+  const managers = await listPlatformManagers(app);
+  if (!managers.some((manager) => manager.id === managerId)) {
+    throw new AppError({ code: 'ADMIN_MANAGER_NOT_FOUND', message: 'Менеджер поддержки не найден', statusCode: 404 });
+  }
+}
+
+function requestIdempotencyKey(request: FastifyRequest) {
+  const header = request.headers['idempotency-key'];
+  const value = Array.isArray(header) ? header[0] : header;
+  const normalized = String(value || '').trim();
+  return normalized ? normalized.slice(0, 160) : null;
 }
 
 function notConfigured(feature: string): never {
@@ -97,9 +156,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         date: new Intl.DateTimeFormat('ru-RU').format(item.createdAt),
         metadata: item.metadata,
       })),
-      tickets: [],
+      tickets: (await listAdminSupportTickets(app)).filter((ticket) => ticket.clientId === clientId),
       activitySeries: { labels: [], values: [], measured: false },
-      supportConfigured: false,
+      supportConfigured: true,
       source: 'api',
     };
   });
@@ -125,13 +184,44 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { client: clients.find((item) => item.id === clientId) };
   });
 
-  app.get('/admin/managers', async () => ({ managers: [], configured: false, source: 'api' }));
+  app.get('/admin/managers', async () => ({
+    managers: await listPlatformManagers(app),
+    configured: true,
+    source: 'api',
+  }));
   app.post('/admin/managers', async () => notConfigured('Управление platform-менеджерами'));
   app.patch('/admin/managers/:managerId', async () => notConfigured('Управление platform-менеджерами'));
 
-  app.get('/admin/tickets', async () => ({ tickets: [], configured: false, source: 'api' }));
-  app.patch('/admin/tickets/:ticketId', async () => notConfigured('Служба поддержки'));
-  app.post('/admin/tickets/:ticketId/messages', async () => notConfigured('Служба поддержки'));
+  app.get('/admin/tickets', async () => ({
+    tickets: await listAdminSupportTickets(app),
+    configured: true,
+    source: 'api',
+  }));
+
+  app.patch('/admin/tickets/:ticketId', async (request) => {
+    const { ticketId } = ticketParams.parse(request.params);
+    const patch = ticketPatch.parse(request.body);
+    await assertAssignableManager(app, patch.assignedManagerId);
+    return {
+      ticket: await updateAdminSupportTicket(app, request.auth!.userId, ticketId, {
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+        ...(patch.unread !== undefined ? { unread: patch.unread } : {}),
+        ...(patch.assignedManagerId !== undefined ? { assignedManagerId: patch.assignedManagerId } : {}),
+      }),
+    };
+  });
+
+  app.post('/admin/tickets/:ticketId/messages', async (request, reply) => {
+    const { ticketId } = ticketParams.parse(request.params);
+    const body = ticketMessage.parse(request.body);
+    const ticket = await addAdminSupportMessage(app, request.auth!.userId, ticketId, {
+      text: body.text,
+      internal: body.internal,
+      idempotencyKey: requestIdempotencyKey(request),
+    });
+    return reply.code(201).send({ ticket });
+  });
 
   app.get('/admin/subscriptions', async () => ({ ...(await getAdminSubscriptions(app)), source: 'api' }));
 
