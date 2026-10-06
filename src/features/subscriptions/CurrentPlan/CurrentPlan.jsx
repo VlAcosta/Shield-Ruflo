@@ -11,7 +11,7 @@ function formatActiveUntil(value) {
   return date.toLocaleDateString('ru-RU');
 }
 
-function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
+function CurrentPlan({ plan, renewalBusy, onToggleRenewal, onChangePlan, onRenew, canManage = true }) {
   return (
     <section className="current-plan">
       <div className="current-plan__glow current-plan__glow--one" />
@@ -32,7 +32,7 @@ function CurrentPlan({ plan, renewalBusy, onToggleRenewal, canManage = true }) {
           <span><strong>{formatCurrency(plan.price)}</strong> / {plan.billingLabel}</span>
         </div>
 
-        {canManage ? <div className="current-plan__actions"><Button variant="ghost" className="current-plan__change">Сменить тариф</Button><Button variant="outline" className="current-plan__renew">Продлить</Button></div> : <div className="current-plan__actions"><span className="current-plan__readonly">Только просмотр</span></div>}
+        {canManage ? <div className="current-plan__actions"><Button variant="ghost" className="current-plan__change" onClick={onChangePlan}>Сменить тариф</Button><Button variant="outline" className="current-plan__renew" onClick={onRenew}>Продлить</Button></div> : <div className="current-plan__actions"><span className="current-plan__readonly">Только просмотр</span></div>}
       </div>
 
       <div className="current-plan__renewal">
