@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import PricingWorkspace from './PricingWorkspace';
 import { authService } from '../../services/auth/authService';
@@ -63,7 +63,8 @@ describe('pricing checkout continuity', () => {
   test('restores annual billing from the checkout continuation URL', async () => {
     renderPricing('/pricing?checkout=START&billing=annual');
 
-    expect(await screen.findByText(/Оплата за год:/)).toBeInTheDocument();
+    const checkout = await screen.findByRole('dialog');
+    expect(within(checkout).getByText(/Оплата за год:/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /За год/ })).toHaveClass('is-active');
   });
 
