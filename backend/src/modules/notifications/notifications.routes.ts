@@ -140,7 +140,11 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
     const { userId } = authContext(request);
     const patch = notificationPreferencesPatchSchema.parse(request.body);
     const current = await getNotificationConfig(app.prisma, userId);
-    const preferences = mergeNotificationPreferences(current.preferences, patch);
+    const preferencePatch = {
+      ...(patch.activeTab !== undefined ? { activeTab: patch.activeTab } : {}),
+      ...(patch.activeType !== undefined ? { activeType: patch.activeType } : {}),
+    };
+    const preferences = mergeNotificationPreferences(current.preferences, preferencePatch);
     await saveNotificationConfig(app.prisma, userId, { ...current, preferences });
     return { preferences };
   });
@@ -151,7 +155,34 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
     assertConfiguredChannels(patch.channels);
 
     const current = await getNotificationConfig(app.prisma, userId);
-    const settings = mergeNotificationSettings(current.settings, patch);
+    const settingsPatch = {
+      ...(patch.channels !== undefined ? {
+        channels: {
+          ...(patch.channels.email !== undefined ? { email: patch.channels.email } : {}),
+          ...(patch.channels.telegram !== undefined ? { telegram: patch.channels.telegram } : {}),
+          ...(patch.channels.push !== undefined ? { push: patch.channels.push } : {}),
+          ...(patch.channels.sms !== undefined ? { sms: patch.channels.sms } : {}),
+        },
+      } : {}),
+      ...(patch.events !== undefined ? {
+        events: {
+          ...(patch.events.review !== undefined ? { review: patch.events.review } : {}),
+          ...(patch.events.overdueTask !== undefined ? { overdueTask: patch.events.overdueTask } : {}),
+          ...(patch.events.completedTask !== undefined ? { completedTask: patch.events.completedTask } : {}),
+          ...(patch.events.reportReady !== undefined ? { reportReady: patch.events.reportReady } : {}),
+          ...(patch.events.message !== undefined ? { message: patch.events.message } : {}),
+          ...(patch.events.subscription !== undefined ? { subscription: patch.events.subscription } : {}),
+        },
+      } : {}),
+      ...(patch.quietHours !== undefined ? {
+        quietHours: {
+          ...(patch.quietHours.enabled !== undefined ? { enabled: patch.quietHours.enabled } : {}),
+          ...(patch.quietHours.from !== undefined ? { from: patch.quietHours.from } : {}),
+          ...(patch.quietHours.to !== undefined ? { to: patch.quietHours.to } : {}),
+        },
+      } : {}),
+    };
+    const settings = mergeNotificationSettings(current.settings, settingsPatch);
     await saveNotificationConfig(app.prisma, userId, { ...current, settings });
     return { settings };
   });
