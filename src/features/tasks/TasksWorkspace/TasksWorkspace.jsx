@@ -5,7 +5,7 @@ import TaskDetails from '../TaskDetails';
 import TaskCreateModal from '../TaskCreateModal';
 import useTasks from '../hooks/useTasks';
 import { BoardIcon, ListIcon, PlusIcon, SearchIcon } from '../model/icons';
-import { TASK_PRIORITIES, TASK_TYPES } from '../model/taskData';
+import { TASK_PRIORITIES } from '../model/taskData';
 import './TasksWorkspace.scss';
 import useAccessControl from '../../access/hooks/useAccessControl';
 
@@ -14,6 +14,7 @@ export default function TasksWorkspace() {
   const access = useAccessControl();
   const canCreate = access.can('tasks.create');
   const canEdit = access.can('tasks.edit');
+  const canDelete = access.can('tasks.delete');
   const [createOpen, setCreateOpen] = useState(false);
   const [createStatus, setCreateStatus] = useState('new');
 
@@ -66,7 +67,7 @@ export default function TasksWorkspace() {
           <label className="tasks-workspace__select tasks-workspace__select--type">
             <select value={tasks.type} onChange={(event) => tasks.setType(event.target.value)} aria-label="Фильтр по типу задачи">
               <option value="all">Все типы</option>
-              {TASK_TYPES.map((item) => <option value={item} key={item}>{item}</option>)}
+              {Array.from(new Set(tasks.snapshot.tasks.map((item) => item.type).filter(Boolean))).map((item) => <option value={item} key={item}>{item}</option>)}
             </select>
           </label>
         </div>
@@ -112,8 +113,10 @@ export default function TasksWorkspace() {
         onClose={() => tasks.setSelectedTaskId(null)}
         onUpdate={tasks.updateTask}
         onToggleChecklist={tasks.toggleChecklist}
+        onAddChecklist={tasks.addChecklist}
         onAddComment={tasks.addComment}
-        onAddAttachments={tasks.addAttachments}
+        onDelete={tasks.deleteTask}
+        canDelete={canDelete}
         readOnly={!canEdit}
       />
 
