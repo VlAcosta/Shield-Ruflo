@@ -9,41 +9,41 @@ import './IntegrationHubWorkspace.scss';
 const STATUS_ORDER = ['error', 'expired', 'degraded', 'needs_setup', 'syncing', 'configured', 'connected', 'disconnected'];
 const PROVIDER_SETUP = Object.freeze({
   wb: {
-    note: 'Используется официальный API Wildberries для вопросов и отзывов. Токен хранится на сервере в зашифрованном виде.',
+    note: 'Используется официальное подключение Wildberries для вопросов и отзывов. Ключ доступа хранится на сервере в зашифрованном виде.',
     supportsScheduledSync: true,
     fields: [
-      { key: 'apiToken', target: 'credentials', label: 'WB API token', placeholder: 'Токен категории «Вопросы и отзывы»', secret: true, required: true },
+      { key: 'apiToken', target: 'credentials', label: 'Ключ доступа Wildberries', placeholder: 'Ключ категории «Вопросы и отзывы»', secret: true, required: true },
     ],
   },
   ozon: {
-    note: 'Используется API кабинета продавца Ozon. Client ID и API key сохраняются на сервере в зашифрованном виде и не возвращаются в браузер.',
+    note: 'Используется подключение кабинета продавца Ozon. Идентификатор и ключ доступа сохраняются на сервере в зашифрованном виде и не возвращаются в браузер.',
     supportsScheduledSync: true,
     fields: [
-      { key: 'clientId', target: 'credentials', label: 'Ozon Client ID', placeholder: 'Client ID продавца', required: true },
-      { key: 'apiKey', target: 'credentials', label: 'Ozon API key', placeholder: 'API key Seller API', secret: true, required: true },
+      { key: 'clientId', target: 'credentials', label: 'Идентификатор продавца Ozon', placeholder: 'Client ID продавца', required: true },
+      { key: 'apiKey', target: 'credentials', label: 'Ключ доступа Ozon', placeholder: 'Ключ кабинета продавца', secret: true, required: true },
     ],
   },
   gis: {
-    note: 'Официальный Places API 2GIS предоставляет карточку и статистику отзывов, но не текст отзывов. Поэтому автоматический импорт текстов отключён честно.',
+    note: '2GIS предоставляет данные карточки и статистику отзывов, но не передаёт тексты отзывов через доступное подключение. Поэтому автоматический импорт текстов отключён.',
     supportsScheduledSync: false,
     fields: [
-      { key: 'apiKey', target: 'credentials', label: '2GIS API key', placeholder: 'Ключ Places API', secret: true, required: true },
+      { key: 'apiKey', target: 'credentials', label: 'Ключ доступа 2GIS', placeholder: 'Ключ Places API', secret: true, required: true },
     ],
   },
   yandex: {
-    note: 'Публичного API для отзывов Яндекс Бизнес нет. Подключение возможно только через проверенный партнёрский шлюз; сбор данных со страниц сайта не используется.',
+    note: 'Для отзывов Яндекс Бизнес требуется отдельное партнёрское подключение. Сбор данных со страниц сайта без авторизации не используется.',
     supportsScheduledSync: true,
     fields: [
-      { key: 'bridgeBaseUrl', target: 'configuration', label: 'Bridge URL', placeholder: 'https://bridge.example.ru', required: true },
-      { key: 'bridgeToken', target: 'credentials', label: 'Bridge token', placeholder: 'Bearer token', secret: true, required: true },
+      { key: 'bridgeBaseUrl', target: 'configuration', label: 'Адрес партнёрского подключения', placeholder: 'https://partner.example.ru', required: true },
+      { key: 'bridgeToken', target: 'credentials', label: 'Ключ партнёрского подключения', placeholder: 'Ключ доступа', secret: true, required: true },
     ],
   },
   otzovik: {
-    note: 'Подключение выполняется через проверенный шлюз Бизнес Щит. Неавторизованный сбор данных с публичных страниц не используется.',
+    note: 'Подключение Отзовика выполняется через проверенный канал Бизнес Щит. Неавторизованный сбор данных с публичных страниц не используется.',
     supportsScheduledSync: true,
     fields: [
-      { key: 'bridgeBaseUrl', target: 'configuration', label: 'Bridge URL', placeholder: 'https://bridge.example.ru', required: true },
-      { key: 'bridgeToken', target: 'credentials', label: 'Bridge token', placeholder: 'Bearer token', secret: true, required: true },
+      { key: 'bridgeBaseUrl', target: 'configuration', label: 'Адрес партнёрского подключения', placeholder: 'https://partner.example.ru', required: true },
+      { key: 'bridgeToken', target: 'credentials', label: 'Ключ партнёрского подключения', placeholder: 'Ключ доступа', secret: true, required: true },
     ],
   },
 });
@@ -225,13 +225,13 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
     </div>
     <p className="integration-inspector__description">{integration.description}</p>
     <div className="integration-inspector__facts">
-      <div><span>Последняя синхронизация</span><strong>{formatRelative(integration.lastSyncAt)}</strong></div>
-      <div><span>Канал</span><strong>{remoteReady ? 'Backend provider' : runtime.releaseStage === 'PLANNED' ? 'Production adapter не готов' : runtime.releaseStage === 'ADAPTER_NOT_CONFIGURED' ? 'Adapter требует настройки' : 'Ожидает provider truth'}</strong></div>
+      <div><span>Последнее обновление</span><strong>{formatRelative(integration.lastSyncAt)}</strong></div>
+      <div><span>Подключение</span><strong>{remoteReady ? 'Серверное подключение готово' : runtime.releaseStage === 'PLANNED' ? 'Подключение ещё не выпущено' : runtime.releaseStage === 'ADAPTER_NOT_CONFIGURED' ? 'Требуется настройка на сервере' : 'Проверяем готовность'}</strong></div>
       <div><span>Источник</span><strong>{integration.link ? 'Идентификатор задан' : 'Не настроен'}</strong></div>
       <div><span>Состояние</span><strong>{meta.label}</strong></div>
       {integration.lastSyncStats?.reviews !== undefined ? <div><span>Последний импорт</span><strong>{integration.lastSyncStats.reviews} отзывов</strong></div> : null}
       {integration.syncPolicy ? <div><span>Автосинхронизация</span><strong>{integration.syncPolicy.enabled ? `каждые ${integration.syncPolicy.intervalMinutes} мин.` : 'выключена'}</strong></div> : null}
-      {integration.nextSyncAt ? <div><span>Следующий sync</span><strong>{formatRelative(integration.nextSyncAt)}</strong></div> : null}
+      {integration.nextSyncAt ? <div><span>Следующее обновление</span><strong>{formatRelative(integration.nextSyncAt)}</strong></div> : null}
     </div>
     {integration.lastError ? <div className="integration-inspector__error"><i>!</i><div><strong>Последняя ошибка</strong><span>{integration.lastError}</span></div></div> : null}
     <CapabilityList providerId={integration.id} />
@@ -240,14 +240,14 @@ function ProviderInspector({ integration, busy, canManage, onConfigure, onSync, 
     {canManage ? <div className="integration-inspector__actions">
       {!integration.enabled || integration.status === 'needs_setup' || integration.status === 'disconnected' ? <button type="button" className="is-primary" onClick={onConfigure}>Настроить источник</button> : null}
       {integration.enabled && ['expired', 'error', 'degraded'].includes(integration.status) ? <button type="button" className="is-primary" disabled={Boolean(busy) || !remoteReady} title={!remoteReady ? unavailableReason : ''} onClick={() => onReconnect(integration.id)}>{busy === 'reconnect' ? 'Восстанавливаем…' : 'Переподключить'}</button> : null}
-      {integration.enabled ? <button type="button" disabled={Boolean(busy) || !remoteReady || !runtime.sync?.supported} title={!remoteReady ? unavailableReason : !runtime.sync?.supported ? 'Provider не поддерживает импорт отзывов' : ''} onClick={() => onSync(integration.id)}>{busy === 'sync' ? 'Синхронизация…' : 'Синхронизировать'}</button> : null}
+      {integration.enabled ? <button type="button" disabled={Boolean(busy) || !remoteReady || !runtime.sync?.supported} title={!remoteReady ? unavailableReason : !runtime.sync?.supported ? 'Источник не поддерживает автоматический импорт отзывов' : ''} onClick={() => onSync(integration.id)}>{busy === 'sync' ? 'Синхронизация…' : 'Синхронизировать'}</button> : null}
       {integration.enabled ? <button type="button" className="is-danger" disabled={Boolean(busy)} onClick={() => onDisconnect(integration.id)}>Отключить</button> : null}
     </div> : null}
   </aside>;
 }
 
 function ActivityFeed({ items }) {
-  return <section className="integration-activity"><header><div><span>ACTIVITY LOG</span><h2>Журнал подключений</h2></div><small>Только фактические действия и диагностика</small></header>{items.length ? <div className="integration-activity__list">{items.slice(0, 12).map((item, index) => <article className={`is-${item.level || 'info'}`} key={item.id} style={{ '--activity-index': index }}><i>{item.level === 'success' ? '✓' : item.level === 'error' ? '!' : '•'}</i><div><strong>{item.providerName || item.providerId}</strong><p>{item.message || item.action}</p><span>{formatRelative(item.createdAt)}</span></div></article>)}</div> : <div className="integration-activity__empty"><span>LOG</span><strong>Журнал пока пуст</strong><p>После настройки, диагностики или синхронизации здесь появится история действий.</p></div>}</section>;
+  return <section className="integration-activity"><header><div><span>ИСТОРИЯ</span><h2>Журнал подключений</h2></div><small>Только фактические действия и диагностика</small></header>{items.length ? <div className="integration-activity__list">{items.slice(0, 12).map((item, index) => <article className={`is-${item.level || 'info'}`} key={item.id} style={{ '--activity-index': index }}><i>{item.level === 'success' ? '✓' : item.level === 'error' ? '!' : '•'}</i><div><strong>{item.providerName || item.providerId}</strong><p>{item.message || item.action}</p><span>{formatRelative(item.createdAt)}</span></div></article>)}</div> : <div className="integration-activity__empty"><span>0</span><strong>Журнал пока пуст</strong><p>После настройки, диагностики или синхронизации здесь появится история действий.</p></div>}</section>;
 }
 
 function ProviderCard({ integration, selected, busy, canManage, onSelect, onConfigure, onSync }) {
@@ -258,11 +258,11 @@ function ProviderCard({ integration, selected, busy, canManage, onSelect, onConf
     <button type="button" className="integration-provider-card__main" onClick={onSelect}>
       <div className="integration-provider-card__head"><ProviderMark integration={integration} /><StatusBadge status={integration.status} /></div>
       <div className="integration-provider-card__copy"><span>{integration.category}</span><h3>{integration.name}</h3><p>{integration.description}</p></div>
-      <div className="integration-provider-card__meta"><span><i className={integration.link ? 'is-ok' : ''} />{integration.link ? 'Идентификатор задан' : 'Требуется идентификатор'}</span><span>Sync: {formatRelative(integration.lastSyncAt)}</span></div>
+      <div className="integration-provider-card__meta"><span><i className={integration.link ? 'is-ok' : ''} />{integration.link ? 'Идентификатор задан' : 'Требуется идентификатор'}</span><span>Обновление: {formatRelative(integration.lastSyncAt)}</span></div>
     </button>
     {canManage ? <div className="integration-provider-card__actions">
       <button type="button" onClick={onConfigure}>{integration.enabled ? 'Настроить' : 'Подключить'}</button>
-      <button type="button" disabled={!canSync || Boolean(busy)} onClick={onSync}>{busy === 'sync' ? 'Sync…' : 'Синхронизировать'}</button>
+      <button type="button" disabled={!canSync || Boolean(busy)} onClick={onSync}>{busy === 'sync' ? 'Обновляем…' : 'Синхронизировать'}</button>
       <span className={`is-${meta.tone}`}>{meta.shortLabel}</span>
     </div> : null}
   </article>;
@@ -313,14 +313,14 @@ function IntegrationHubWorkspace() {
 
   return <div className="integration-hub-page">
     <section className="integration-hub-hero">
-      <div className="integration-hub-hero__copy"><span className="integration-hub-eyebrow"><i /> INTEGRATION OPERATIONS</span><h1>Все источники.<br/><em>Один контрольный центр.</em></h1><p>Подключения, синхронизация и диагностика Яндекс, 2GIS, Ozon, Отзовика и Wildberries — без скрытой имитации provider API.</p><div className="integration-hub-hero__actions">{canManage ? <button type="button" onClick={() => setConnectId(hub.connections.find((item) => !item.enabled)?.id || selectedId)}>+ Подключить источник</button> : null}<button type="button" className="is-secondary" onClick={hub.refresh}>Обновить состояние</button></div></div>
-      <div className="integration-health-orbit" aria-label={`Состояние подключений ${hub.metrics.score}%`}><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="68" pathLength="100" className="integration-health-orbit__track"/><circle cx="90" cy="90" r="68" pathLength="100" strokeDasharray={`${hub.metrics.score} 100`} className="integration-health-orbit__value"/></svg><div><strong>{hub.metrics.score}%</strong><span>готовность</span></div><i className="is-one"/><i className="is-two"/><b>{backendReady ? `${liveProviders} PROVIDERS LIVE` : providerEndpointReady ? 'PROVIDERS LIMITED' : 'PROVIDER ENDPOINT OFF'}</b></div>
+      <div className="integration-hub-hero__copy"><span className="integration-hub-eyebrow"><i /> ИНТЕГРАЦИИ</span><h1>Все источники.<br/><em>Один контрольный центр.</em></h1><p>Подключайте площадки, проверяйте состояние и запускайте обновление данных из одного раздела. Если источник ещё не готов к работе, мы показываем это прямо.</p><div className="integration-hub-hero__actions">{canManage ? <button type="button" onClick={() => setConnectId(hub.connections.find((item) => !item.enabled)?.id || selectedId)}>+ Подключить источник</button> : null}<button type="button" className="is-secondary" onClick={hub.refresh}>Обновить состояние</button></div></div>
+      <div className="integration-health-orbit" aria-label={`Состояние подключений ${hub.metrics.score}%`}><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="68" pathLength="100" className="integration-health-orbit__track"/><circle cx="90" cy="90" r="68" pathLength="100" strokeDasharray={`${hub.metrics.score} 100`} className="integration-health-orbit__value"/></svg><div><strong>{hub.metrics.score}%</strong><span>готовность</span></div><i className="is-one"/><i className="is-two"/><b>{backendReady ? `ДОСТУПНО: ${liveProviders}` : providerEndpointReady ? 'ЧАСТЬ ИСТОЧНИКОВ НЕДОСТУПНА' : 'СЕРВЕРНОЕ ПОДКЛЮЧЕНИЕ ВЫКЛЮЧЕНО'}</b></div>
     </section>
 
     <section className="integration-hub-kpis">
       <article><span>Активно</span><strong>{hub.metrics.enabled}</strong><small>источников выбрано</small></article>
-      <article><span>Подключено</span><strong>{hub.metrics.connected}</strong><small>подтверждено backend</small></article>
-      <article><span>Настроено</span><strong>{hub.metrics.configured}</strong><small>ожидает provider API</small></article>
+      <article><span>Подключено</span><strong>{hub.metrics.connected}</strong><small>подтверждено сервером</small></article>
+      <article><span>Настроено</span><strong>{hub.metrics.configured}</strong><small>ожидает готовности подключения</small></article>
       <article className={hub.metrics.issues ? 'is-alert' : ''}><span>Требуют внимания</span><strong>{hub.metrics.issues}</strong><small>{hub.metrics.issues ? 'нужна проверка' : 'ошибок нет'}</small></article>
     </section>
 
