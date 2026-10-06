@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import TaskBoard from '../TaskBoard';
 import TaskList from '../TaskList';
 import TaskDetails from '../TaskDetails';
 import TaskCreateModal from '../TaskCreateModal';
 import useTasks from '../hooks/useTasks';
 import { BoardIcon, ListIcon, PlusIcon, SearchIcon } from '../model/icons';
-import { TASK_PRIORITIES, TASK_TYPES } from '../model/taskData';
+import { TASK_PRIORITIES } from '../model/taskData';
 import './TasksWorkspace.scss';
 import useAccessControl from '../../access/hooks/useAccessControl';
 
@@ -14,11 +14,17 @@ export default function TasksWorkspace() {
   const access = useAccessControl();
   const canCreate = access.can('tasks.create');
   const canEdit = access.can('tasks.edit');
+  const canCreateConfirmed = canCreate && tasks.serverConfirmed;
+  const canEditConfirmed = canEdit && tasks.serverConfirmed;
+  const taskTypes = useMemo(
+    () => Array.from(new Set((tasks.snapshot?.tasks || []).map((item) => item.type).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ru')),
+    [tasks.snapshot?.tasks],
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [createStatus, setCreateStatus] = useState('new');
 
   const openCreate = (status = 'new') => {
-    if (!canCreate) return;
+    if (!canCreateConfirmed) return;
     setCreateStatus(status);
     setCreateOpen(true);
   };
@@ -66,7 +72,7 @@ export default function TasksWorkspace() {
           <label className="tasks-workspace__select tasks-workspace__select--type">
             <select value={tasks.type} onChange={(event) => tasks.setType(event.target.value)} aria-label="Фильтр по типу задачи">
               <option value="all">Все типы</option>
-              {TASK_TYPES.map((item) => <option value={item} key={item}>{item}</option>)}
+              {taskTypes.map((item) => <option value={item} key={item}>{item}</option>)}
             </select>
           </label>
         </div>
@@ -80,11 +86,18 @@ export default function TasksWorkspace() {
           </button>
         </div>
 
-        <button type="button" className="tasks-workspace__create" onClick={() => openCreate('new')} disabled={!canCreate} title={!canCreate ? 'Нет права создавать задачи' : undefined}>
+        <button type="button" className="tasks-workspace__create" onClick={() => openCreate('new')} disabled={!canCreateConfirmed} title={!canCreate ? 'Нет права создавать задачи' : !tasks.serverConfirmed ? 'Сервер не подтвердил актуальное состояние задач' : undefined}>
           <PlusIcon />
-          <span>{canCreate ? 'Создать' : 'Только просмотр'}</span>
+          <span>{canCreate ? (tasks.serverConfirmed ? 'Создать' : 'Сервер недоступен') : 'Только просмотр'}</span>
         </button>
       </section>
+
+      {tasks.stale ? (
+        <section className="tasks-truth-warning" role="alert">
+          <div><strong>Показаны сохранённые задачи</strong><span>Сервер не подтвердил актуальное состояние. Изменения временно заблокированы, чтобы локальный cache не перезаписал свежие данные команды.</span></div>
+          <button type="button" onClick={tasks.reload}>Проверить сервер</button>
+        </section>
+      ) : null}
 
       <div className="tasks-workspace__summary" aria-label="Сводка по задачам">
         <span><strong>{tasks.snapshot.tasks.length}</strong> всего</span>
@@ -99,8 +112,8 @@ export default function TasksWorkspace() {
           onOpen={tasks.setSelectedTaskId}
           onMove={tasks.moveTask}
           onCreate={openCreate}
-          canEdit={canEdit}
-          canCreate={canCreate}
+          canEdit={canEditConfirmed}
+          canCreate={canCreateConfirmed}
         />
       ) : (
         <TaskList tasks={tasks.filteredTasks} onOpen={tasks.setSelectedTaskId} />
@@ -113,12 +126,13 @@ export default function TasksWorkspace() {
         onUpdate={tasks.updateTask}
         onToggleChecklist={tasks.toggleChecklist}
         onAddComment={tasks.addComment}
-        onAddAttachments={tasks.addAttachments}
-        readOnly={!canEdit}
+        onAddChecklist={tasks.addChecklist}
+        readOnly={!canEditConfirmed}
+        canAddChecklist={canCreateConfirmed}
       />
 
       <TaskCreateModal
-        open={createOpen}
+        open={createOpen && canCreateConfirmed}
         initialStatus={createStatus}
         busy={tasks.busy.create}
         onClose={() => setCreateOpen(false)}
