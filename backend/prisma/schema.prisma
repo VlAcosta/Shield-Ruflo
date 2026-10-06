@@ -387,6 +387,7 @@ model User {
   telegram                 String?    @db.VarChar(120)
   avatarUrl                String?    @map("avatar_url") @db.Text
   notificationPreferences  Json?      @map("notification_preferences")
+  supportPreferences       Json?      @map("support_preferences")
   status                   UserStatus @default(ACTIVE)
   phoneVerifiedAt          DateTime?  @map("phone_verified_at")
   emailVerifiedAt          DateTime?  @map("email_verified_at")
@@ -417,6 +418,9 @@ model User {
   createdAiVisibilityProbes AiVisibilityProbe[] @relation("AiVisibilityProbeCreator")
   createdAiVisibilityRuns AiVisibilityRun[] @relation("AiVisibilityRunCreator")
   notifications              Notification[]        @relation("NotificationUser")
+  supportTicketsCreated      SupportTicket[]         @relation("SupportTicketCreator")
+  supportTicketsAssigned     SupportTicket[]         @relation("SupportTicketAssignee")
+  supportMessages            SupportMessage[]        @relation("SupportMessageAuthor")
   askShieldQueries           AskShieldQuery[]        @relation("AskShieldQueryCreator")
 
   @@index([status], map: "users_status_idx")
@@ -477,6 +481,8 @@ model Organization {
   automationExecutions   AutomationExecution[]
   reports                Report[]
   notifications          Notification[]
+  supportTickets         SupportTicket[]
+  supportMessages        SupportMessage[]
   reputationCases        ReputationCase[]
   reputationCaseActivities ReputationCaseActivity[]
   reputationCaseMetricSnapshots ReputationCaseMetricSnapshot[]
@@ -1649,6 +1655,91 @@ model Notification {
   @@index([organizationId, status, createdAt], map: "notifications_org_status_created_idx")
   @@index([userId, status, createdAt], map: "notifications_user_status_created_idx")
   @@map("notifications")
+}
+
+enum SupportChannel {
+  MANAGER
+  TECHNICAL
+
+  @@map("support_channel")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  CLOSED
+
+  @@map("support_ticket_status")
+}
+
+enum SupportPriority {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("support_priority")
+}
+
+enum SupportMessageRole {
+  CLIENT
+  AGENT
+  ADMIN
+  SYSTEM
+
+  @@map("support_message_role")
+}
+
+model SupportTicket {
+  id                    String              @id @default(uuid()) @db.Uuid
+  organizationId        String              @map("organization_id") @db.Uuid
+  createdByUserId       String              @map("created_by_user_id") @db.Uuid
+  assignedToUserId      String?             @map("assigned_to_user_id") @db.Uuid
+  channel               SupportChannel
+  subject               String              @db.VarChar(240)
+  category              String              @db.VarChar(120)
+  status                 SupportTicketStatus @default(OPEN)
+  priority               SupportPriority    @default(MEDIUM)
+  adminUnreadCount       Int                 @default(0) @map("admin_unread_count")
+  clientUnreadCount      Int                 @default(0) @map("client_unread_count")
+  firstResponseAt        DateTime?           @map("first_response_at")
+  lastClientMessageAt    DateTime?           @map("last_client_message_at")
+  lastAgentMessageAt     DateTime?           @map("last_agent_message_at")
+  closedAt               DateTime?           @map("closed_at")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User             @relation("SupportTicketCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignedTo   User?            @relation("SupportTicketAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  messages     SupportMessage[]
+
+  @@unique([organizationId, createdByUserId, channel], map: "support_tickets_org_creator_channel_key")
+  @@index([organizationId, status, updatedAt], map: "support_tickets_org_status_updated_idx")
+  @@index([assignedToUserId, status, updatedAt], map: "support_tickets_assignee_status_updated_idx")
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  ticketId       String             @map("ticket_id") @db.Uuid
+  authorUserId   String?            @map("author_user_id") @db.Uuid
+  role           SupportMessageRole
+  text           String             @db.Text
+  internal       Boolean            @default(false)
+  attachments    Json?
+  idempotencyKey String?            @map("idempotency_key") @db.VarChar(160)
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author       User?         @relation("SupportMessageAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([ticketId, idempotencyKey], map: "support_messages_ticket_idempotency_key")
+  @@index([organizationId, createdAt], map: "support_messages_org_created_idx")
+  @@index([ticketId, createdAt], map: "support_messages_ticket_created_idx")
+  @@map("support_messages")
 }
 
 model Plan {
