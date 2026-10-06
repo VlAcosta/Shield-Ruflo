@@ -1,6 +1,19 @@
-import { canonicalRoleId } from './UsersProfile';
+import { canonicalRoleId, dedupeTeamMembers } from './UsersProfile';
 
 describe('UsersProfile canonical backend roles', () => {
+  test('keeps the server membership list authoritative and removes duplicate rows', () => {
+    const members = [
+      { id: 'member-owner', email: 'owner@example.test', role: 'owner' },
+      { id: 'member-manager', email: 'manager@example.test', role: 'manager' },
+      { id: 'duplicate-email', email: 'OWNER@example.test', role: 'owner' },
+    ];
+
+    expect(dedupeTeamMembers(members)).toEqual([
+      members[0],
+      members[1],
+    ]);
+  });
+
   test('normalizes backend-shaped roles for selectors, owner exclusion, and counts', () => {
     const backendMember = { accessRoleId: 'manager' };
     const roles = [{ id: 'OWNER' }, { id: 'MANAGER' }, { id: 'MEMBER' }];
