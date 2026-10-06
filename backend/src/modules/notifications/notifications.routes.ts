@@ -84,7 +84,7 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
-      getNotificationConfig(app, userId),
+      getNotificationConfig(app.prisma, userId),
     ]);
 
     return {
@@ -139,9 +139,9 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/notifications/preferences', { preHandler: [app.authenticate] }, async (request) => {
     const { userId } = authContext(request);
     const patch = notificationPreferencesPatchSchema.parse(request.body);
-    const current = await getNotificationConfig(app, userId);
+    const current = await getNotificationConfig(app.prisma, userId);
     const preferences = mergeNotificationPreferences(current.preferences, patch);
-    await saveNotificationConfig(app, userId, { ...current, preferences });
+    await saveNotificationConfig(app.prisma, userId, { ...current, preferences });
     return { preferences };
   });
 
@@ -150,9 +150,9 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
     const patch = notificationSettingsPatchSchema.parse(request.body);
     assertConfiguredChannels(patch.channels);
 
-    const current = await getNotificationConfig(app, userId);
+    const current = await getNotificationConfig(app.prisma, userId);
     const settings = mergeNotificationSettings(current.settings, patch);
-    await saveNotificationConfig(app, userId, { ...current, settings });
+    await saveNotificationConfig(app.prisma, userId, { ...current, settings });
     return { settings };
   });
 };
