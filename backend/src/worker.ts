@@ -22,6 +22,7 @@ import { scheduleDueReports, type ScheduledReportDelivery } from './modules/repo
 import { enqueueReportDelivery, processReportDeliveryJob } from './modules/reports/report-delivery.service.js';
 import { hasReportsEntitlement } from './modules/reports/report-entitlement.service.js';
 import { processSuggestionDeliveryJob } from './modules/feedback/feedback.service.js';
+import { createNotificationForOrganization } from './modules/notifications/notifications.service.js';
 
 registerIntegrationProviders();
 registerAiProviders();
@@ -188,6 +189,20 @@ async function processReport(payload: any) {
   await prisma.report.update({
     where: { id: report.id },
     data: { status: 'READY', data, generatedAt: new Date(), errorMessage: null },
+  });
+
+  await createNotificationForOrganization(prisma, {
+    organizationId: report.organizationId,
+    eventKey: 'reportReady',
+    type: 'reports',
+    title: 'Отчёт готов',
+    body: `Отчёт «${report.title}» сформирован и готов к просмотру.`,
+    payload: {
+      reportId: report.id,
+      actionLabel: 'Открыть отчёт',
+      actionRoute: `/reports?report=${report.id}`,
+      tone: 'purple',
+    },
   });
 
   if (delivery) {
