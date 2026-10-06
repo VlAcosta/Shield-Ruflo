@@ -109,7 +109,7 @@ function OrganizationResult({ organization, onConfirm, onEdit }) {
       {organization.demo ? (
         <div className="organization-result__demo">
           <Icon name="spark" size={15} />
-          Сейчас используются демонстрационные сведения. После подключения API здесь будут реальные данные ФНС.
+          Показаны демонстрационные сведения. Они не подтверждают данные ФНС и нужны только для проверки интерфейса.
         </div>
       ) : null}
 
@@ -126,7 +126,9 @@ function OrganizationResult({ organization, onConfirm, onEdit }) {
 function OrganizationStep({ draft, setDraft, onContinue }) {
   const organization = draft.organization;
   const [lookupState, setLookupState] = useState({ loading: false, error: '' });
-  const [manualMode, setManualMode] = useState(false);
+  const [manualMode, setManualMode] = useState(() => Boolean(
+    organization.source === 'Ручной ввод' || (organization.title && !organization.lookupEvidence),
+  ));
   const expectedLength = organization.type === 'ul' ? 10 : 12;
   const validInn = organization.inn.length === expectedLength;
 
@@ -189,7 +191,7 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
     onContinue();
   };
 
-  if (organization.title && !manualMode && !organization.confirmed) {
+  if (organization.title && organization.lookupEvidence && !manualMode && !organization.confirmed) {
     return (
       <div className="onboarding-step onboarding-step--organization">
         <div className="onboarding-step__heading">
@@ -307,7 +309,11 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
           {lookupState.error ? <div className="onboarding-error" role="alert">{lookupState.error}</div> : null}
 
           <div className="organization-formCard__footer">
-            <button type="button" className="onboarding-linkBtn" onClick={() => { setManualMode((value) => !value); setLookupState({ loading: false, error: '' }); }}>
+            <button type="button" className="onboarding-linkBtn" onClick={() => {
+                if (manualMode) invalidateConfirmation({ title: '', kpp: '', ogrn: '', address: '', status: '', registrationDate: '' });
+                setManualMode((value) => !value);
+                setLookupState({ loading: false, error: '' });
+              }}>
               {manualMode ? 'Вернуться к поиску по ИНН' : 'Не нашли организацию? Заполнить вручную'}
             </button>
             {manualMode ? (
@@ -329,8 +335,8 @@ function OrganizationStep({ draft, setDraft, onContinue }) {
           </ul>
           <div className="organization-aside__source">
             <span><Icon name="building" size={16} /> Источник данных</span>
-            <strong>Настроенный провайдер</strong>
-            <small>Источник и тестовый режим будут показаны именно так, как их вернул сервер.</small>
+            <strong>Источник появится после проверки</strong>
+            <small>После поиска покажем, откуда получены сведения об организации и являются ли они подтверждёнными.</small>
           </div>
         </aside>
       </div>
@@ -356,8 +362,8 @@ function IntegrationStep({ draft, setDraft, onBack, onContinue }) {
       <div className="onboarding-step__heading onboarding-step__heading--split">
         <div>
           <span className="onboarding-kicker">Шаг 2 · интеграции</span>
-          <h2>Выберите площадки для настройки</h2>
-          <p>Выбор сохранит план подключения. Он не означает, что площадка уже авторизована или синхронизирована.</p>
+          <h2>Выберите площадки, с которыми работает бизнес</h2>
+          <p>Отметьте нужные источники. Мы сохраним список для последующего подключения — на этом шаге доступы к площадкам не запрашиваются.</p>
         </div>
         <div className="integration-summary"><strong>{enabledCount}</strong><span>выбрано</span></div>
       </div>
@@ -445,7 +451,7 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
       } else if (event.key === 'Enter' && complete) {
         event.preventDefault();
         if (ready && canFinish) setConfirmed(true);
-        else if (ready) setError('Сначала сохраните текущий прогресс на сервере');
+        else if (ready) setError('Подождите, пока прогресс сохранится, и попробуйте ещё раз');
         else setError('PIN-коды не совпадают');
       }
     };
@@ -468,7 +474,7 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
 
   const finish = () => {
     if (!canFinish) {
-      setError('Сначала сохраните текущий прогресс на сервере');
+      setError('Подождите, пока прогресс сохранится, и попробуйте ещё раз');
       return;
     }
     if (!ready) {
@@ -483,8 +489,8 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
     <div className="onboarding-step security-step">
       <div className="onboarding-step__heading">
         <span className="onboarding-kicker">Шаг 3 · безопасность</span>
-        <h2>Создайте локальный PIN</h2>
-        <p>PIN действует только в этом браузере на этом устройстве. Это локальная блокировка интерфейса, а не серверная защита аккаунта.</p>
+        <h2>Создайте PIN для быстрой блокировки</h2>
+        <p>Этот PIN защищает интерфейс Бизнес Щит на текущем устройстве. Для входа в аккаунт по-прежнему используется подтверждение телефона.</p>
       </div>
 
       <div className="security-layout">
@@ -516,7 +522,7 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
         <aside className={`security-options ${confirmed ? 'is-locked' : ''}`}>
           <span className="onboarding-kicker">Политика блокировки</span>
           <h3>Локальная автоблокировка</h3>
-          <p>Эти параметры действуют только в текущем браузере и не заменяют серверную сессию и контроль доступа.</p>
+          <p>Настройте, через сколько минут бездействия кабинет будет просить локальный PIN.</p>
 
           <label className="security-option">
             <div><strong>Автоблокировка</strong><span>Блокировать кабинет при бездействии</span></div>
@@ -552,7 +558,7 @@ function SecurityStep({ draft, setDraft, onBack, onFinish, finishing, finishErro
       {confirmed ? (
         <div className="onboarding-pinToast" role="status">
           <span><Icon name="check" size={16} /></span>
-          <div><strong>PIN-коды совпадают</strong><small>Локальный PIN будет сохранён только в этом браузере</small></div>
+          <div><strong>PIN-коды совпадают</strong><small>PIN будет использоваться только для блокировки на этом устройстве</small></div>
         </div>
       ) : null}
 
@@ -639,7 +645,7 @@ export default function OnboardingWorkspace() {
     }
   }, [draft, navigate, saveState, savedDraft, step]);
 
-  if (initialState === 'loading') return <div className="onboarding-state" role="status"><span className="onboarding-state__spinner" /><strong>Загружаем настройку…</strong><p>Получаем сохранённый прогресс с сервера.</p></div>;
+  if (initialState === 'loading') return <div className="onboarding-state" role="status"><span className="onboarding-state__spinner" /><strong>Загружаем настройку…</strong><p>Восстанавливаем ваш сохранённый прогресс.</p></div>;
   if (initialState === 'error') return <div className="onboarding-state onboarding-state--error" role="alert"><strong>Настройка временно недоступна</strong><p>{loadError}</p><button type="button" onClick={hydrate}>Повторить</button></div>;
 
   return (
@@ -675,8 +681,8 @@ export default function OnboardingWorkspace() {
       {finishing ? (
         <div className="onboarding-complete" role="status" aria-live="polite">
           <span className="onboarding-complete__icon"><Icon name="check" size={28} /></span>
-          <strong>{configuration ? 'Кабинет настроен' : 'Сохраняем настройки на сервере'}</strong>
-          <span>{configuration ? 'Открываем рабочее пространство…' : 'Связываем организацию, площадки и защиту'}</span>
+          <strong>{configuration ? 'Кабинет настроен' : 'Сохраняем настройки'}</strong>
+          <span>{configuration ? 'Открываем рабочее пространство…' : 'Применяем данные компании, площадки и блокировку'}</span>
           <div className="onboarding-complete__sync">
             <span className={configuration ? 'is-done' : ''}><i>{configuration ? '✓' : '1'}</i> Профиль компании</span>
             <span className={configuration ? 'is-done' : ''}><i>{configuration ? '✓' : '2'}</i> План площадок</span>
