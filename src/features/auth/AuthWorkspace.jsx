@@ -44,11 +44,11 @@ function ArrowIcon() {
 function AuthSide({ selectedPlan, invitation }) {
   return (
     <aside className="auth-v2__side">
-      <Link to="/" className="auth-v2__brand"><BrandMark size={46} /><span><strong>БИЗНЕС ЩИТ</strong><small>reputation operating system</small></span></Link>
+      <Link to="/" className="auth-v2__brand"><BrandMark size={46} /><span><strong>БИЗНЕС ЩИТ</strong><small>управление репутацией бизнеса</small></span></Link>
       <div className="auth-v2__side-copy">
-        <span className="auth-v2__live"><i /> {invitation ? 'Защищённое приглашение' : 'Система работает 24/7'}</span>
-        <h1>{invitation ? <>Вас пригласили<br/><em>в рабочую команду.</em></> : <>Спокойно работайте.<br/><em>Репутацию прикроем мы.</em></>}</h1>
-        <p>{invitation ? `Присоединитесь к ${invitation.company?.title || 'компании'}, подтвердите телефон и настройте личный PIN. Организацию регистрировать повторно не потребуется.` : 'Один аккаунт для мониторинга отзывов, аналитики, задач, отчётов и связи с вашей командой Бизнес Щит.'}</p>
+        <span className="auth-v2__live"><i /> {invitation ? 'Защищённое приглашение' : 'Защищённый вход по одноразовому коду'}</span>
+        <h1>{invitation ? <>Вас пригласили<br/><em>в рабочую команду.</em></> : <>Ваша репутация —<br/><em>в надёжных руках.</em></>}</h1>
+        <p>{invitation ? `Присоединитесь к ${invitation.company?.title || 'компании'}, подтвердите телефон и настройте личный PIN. Организацию регистрировать повторно не потребуется.` : 'Один кабинет для отзывов, аналитики, задач, отчётов и совместной работы команды — без лишних переключений между сервисами.'}</p>
       </div>
       {invitation ? (
         <div className="auth-v2__invite-side-card">
@@ -59,9 +59,9 @@ function AuthSide({ selectedPlan, invitation }) {
         </div>
       ) : (
         <div className="auth-v2__proof">
-          <div><strong>98%</strong><span>положительных результатов</span></div>
-          <div><strong>10k+</strong><span>обработанных отзывов</span></div>
-          <div><strong>24/7</strong><span>мониторинг и поддержка</span></div>
+          <div><strong>Отзывы</strong><span>собраны в одном кабинете</span></div>
+          <div><strong>Команда</strong><span>единые задачи и ответственность</span></div>
+          <div><strong>Отчёты</strong><span>понятная картина по репутации</span></div>
         </div>
       )}
       {selectedPlan && !invitation ? <div className="auth-v2__plan"><span>Выбран тариф</span><strong>{selectedPlan.title || selectedPlan.name}</strong><small>{selectedPlan.total ? `${Number(selectedPlan.total).toLocaleString('ru-RU')} ₽` : 'Условия сохранены'}</small></div> : null}
@@ -150,6 +150,7 @@ export default function AuthWorkspace() {
     if (invitationMode) return null;
     try { return JSON.parse(localStorage.getItem('selectedPlan') || 'null'); } catch { return null; }
   }, [invitationMode]);
+  const invitationEmailLocked = invitationMode && Boolean(String(invitation?.email || '').trim());
 
   const fullPhone = `${country.dial}${onlyDigits(phoneTail).slice(0, country.digits)}`;
   const phoneReady = onlyDigits(phoneTail).length === country.digits;
@@ -303,10 +304,10 @@ export default function AuthWorkspace() {
 
           {(inviteState === 'none' || inviteState === 'ready') && step === 'profile' ? (
             <div className="auth-v2__step">
-              <span className="auth-v2__eyebrow">{invitationMode ? 'Шаг 3 из 3 · личный доступ' : 'Профиль'}</span><h2>{invitationMode ? 'Завершите подключение' : 'Как к вам обращаться?'}</h2><p>{invitationMode ? `Данные относятся только к вашему профилю внутри ${invitation?.company?.title || 'компании'}.` : 'Эти данные увидит ваша команда и персональный менеджер.'}</p>
+              <span className="auth-v2__eyebrow">{invitationMode ? 'Шаг 3 из 3 · личный доступ' : 'Профиль'}</span><h2>{invitationMode ? 'Завершите подключение' : 'Как к вам обращаться?'}</h2><p>{invitationMode ? `Данные относятся только к вашему профилю внутри ${invitation?.company?.title || 'компании'}.` : 'Имя и email используются в вашем профиле и рабочих уведомлениях.'}</p>
               <div className="auth-v2__two-cols"><label className="auth-v2__field"><span>Имя *</span><input value={firstName} onChange={(event) => setFirstName(event.target.value)} autoComplete="given-name" placeholder="Алексей" /></label><label className="auth-v2__field"><span>Фамилия</span><input value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete="family-name" placeholder="Иванов" /></label></div>
-              <label className="auth-v2__field"><span>Email *</span><input value={email} onChange={(event) => !invitationMode && setEmail(event.target.value)} readOnly={invitationMode} autoComplete="email" type="email" placeholder="you@company.ru" /></label>
-              {invitationMode ? <div className="auth-v2__pin-grid"><label className="auth-v2__field"><span>Личный PIN *</span><input value={pin} onChange={(event) => setPin(onlyDigits(event.target.value).slice(0,4))} inputMode="numeric" type="password" autoComplete="new-password" placeholder="4 цифры" maxLength={4} /></label><label className="auth-v2__field"><span>Повторите PIN *</span><input value={pinRepeat} onChange={(event) => setPinRepeat(onlyDigits(event.target.value).slice(0,4))} inputMode="numeric" type="password" autoComplete="new-password" placeholder="••••" maxLength={4} /></label>{pinRepeat && !pinReady ? <small className="auth-v2__pin-error">PIN должен состоять из 4 одинаково введённых цифр</small> : null}</div> : null}
+              <label className="auth-v2__field"><span>Email *</span><input value={email} onChange={(event) => { if (!invitationEmailLocked) setEmail(event.target.value); }} readOnly={invitationEmailLocked} autoComplete="email" type="email" placeholder="you@company.ru" /></label>
+              {invitationMode ? <div className="auth-v2__pin-grid"><label className="auth-v2__field"><span>Личный PIN *</span><input value={pin} onChange={(event) => setPin(onlyDigits(event.target.value).slice(0,4))} inputMode="numeric" type="password" autoComplete="new-password" placeholder="4 цифры" maxLength={4} /></label><label className="auth-v2__field"><span>Повторите PIN *</span><input value={pinRepeat} onChange={(event) => setPinRepeat(onlyDigits(event.target.value).slice(0,4))} inputMode="numeric" type="password" autoComplete="new-password" placeholder="••••" maxLength={4} /></label>{pinRepeat && !pinReady ? <small className="auth-v2__pin-error">PIN должен состоять из 4 цифр и совпадать в обоих полях</small> : null}</div> : null}
               <label className="auth-v2__checkbox"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} /><span>Я принимаю условия использования и политику конфиденциальности</span></label>
               {error ? <div className="auth-v2__error" role="alert" aria-live="assertive">{error}</div> : null}
               <button className="auth-v2__primary" type="button" disabled={!profileReady || busy} onClick={completeRegistration}>{busy ? (invitationMode ? 'Подключаем к компании…' : 'Создаём аккаунт…') : (invitationMode ? 'Войти в компанию' : 'Создать аккаунт')} <ArrowIcon /></button>
@@ -317,7 +318,7 @@ export default function AuthWorkspace() {
             <div className="auth-v2__step auth-v2__success"><div className="auth-v2__success-icon"><BrandMark size={70} /></div><span className="auth-v2__eyebrow">Готово</span><h2>{invitationMode ? 'Доступ активирован' : (mode === 'login' ? 'Добро пожаловать' : 'Аккаунт создан')}</h2><p>{successText}</p><button className="auth-v2__primary" type="button" onClick={finish}>{invitationMode ? 'Открыть кабинет компании' : (next.startsWith('/pricing') ? 'Вернуться к оформлению' : 'Продолжить')} <ArrowIcon /></button></div>
           ) : null}
         </div>
-        <div className="auth-v2__bottom"><Link to="/">← Главная</Link><span>{invitationMode ? 'Персональное приглашение · защищённый вход' : 'Защищённый вход · одноразовый код'}</span></div>
+        <div className="auth-v2__bottom"><Link to="/">← Главная</Link><span>{invitationMode ? 'Персональное приглашение · защищённый вход' : 'Защищённый вход · код подтверждения'}</span></div>
       </section>
     </main>
   );
