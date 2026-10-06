@@ -217,7 +217,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const body = ticketMessage.parse(request.body);
     const ticket = await addAdminSupportMessage(app, request.auth!.userId, ticketId, {
       text: body.text,
-      internal: body.internal,
+      ...(body.internal !== undefined ? { internal: body.internal } : {}),
       idempotencyKey: requestIdempotencyKey(request),
     });
     return reply.code(201).send({ ticket });
