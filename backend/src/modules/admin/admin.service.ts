@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { SubscriptionStatus } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
+import { listAdminSupportTickets } from '../support/support.service.js';
 
 const STATUS_LABELS: Record<string, string> = {
   active: 'Активен',
@@ -122,6 +123,8 @@ export async function getAdminDashboard(app: FastifyInstance) {
   const autoRenewCount = renewable.filter((item) => item.autoRenew).length;
   const renewalRate = renewable.length ? Math.round((autoRenewCount / renewable.length) * 100) : null;
   const plans = await app.prisma.plan.findMany({ where: { active: true }, orderBy: { priceCents: 'asc' } });
+  const supportTickets = await listAdminSupportTickets(app);
+  const openSupportTickets = supportTickets.filter((ticket) => ticket.status !== 'closed');
 
   return {
     measured: true,
@@ -129,7 +132,7 @@ export async function getAdminDashboard(app: FastifyInstance) {
       { id: 'revenue', label: 'MRR по активным тарифам', value: `${mrr.toLocaleString('ru-RU')} ₽`, delta: 'текущий срез', tone: 'violet', direction: 'flat' },
       { id: 'clients', label: 'Активных клиентов', value: String(active.length), delta: `${clients.length} всего`, tone: 'purple', direction: 'flat' },
       { id: 'trials', label: 'Пробных клиентов', value: String(trial.length), delta: 'текущий срез', tone: 'blue', direction: 'flat' },
-      { id: 'tickets', label: 'Тикеты поддержки', value: '—', delta: 'модуль не настроен', tone: 'gray', direction: 'flat' },
+      { id: 'tickets', label: 'Тикеты поддержки', value: String(openSupportTickets.length), delta: `${supportTickets.length} всего`, tone: openSupportTickets.length ? 'orange' : 'green', direction: 'flat' },
       { id: 'newClients', label: 'Новых за месяц', value: String(newClients), delta: 'по дате регистрации', tone: 'orange', direction: 'flat' },
       { id: 'renewals', label: 'Автопродление', value: renewalRate === null ? '—' : `${renewalRate}%`, delta: renewalRate === null ? 'нет данных' : `${autoRenewCount} из ${renewable.length}`, tone: 'green', direction: 'flat' },
     ],
@@ -149,9 +152,9 @@ export async function getAdminDashboard(app: FastifyInstance) {
       status: client.statusLabel,
       tone: client.status === 'active' ? 'green' : client.status === 'trial' ? 'violet' : 'gray',
     })),
-    tickets: [],
+    tickets: supportTickets.slice(0, 8),
     managers: [],
-    supportConfigured: false,
+    supportConfigured: true,
   };
 }
 
@@ -349,8 +352,8 @@ export async function getAdminSettings(app: FastifyInstance) {
     capabilities: {
       smtp: false,
       platformIntegrations: false,
-      supportTickets: false,
-      supportManagers: false,
+      supportTickets: true,
+      supportManagers: true,
       replyTemplates: false,
     },
   };

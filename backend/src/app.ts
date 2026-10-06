@@ -47,6 +47,7 @@ import { reviewIntelligenceRoutes } from './modules/ai/review-intelligence.route
 import { replyCopilotRoutes } from './modules/ai/reply-copilot.routes.js';
 import { registerAiProviders } from './modules/ai/providers/index.js';
 import { feedbackRoutes } from './modules/feedback/feedback.routes.js';
+import { supportRoutes } from './modules/support/support.routes.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   registerIntegrationProviders();
@@ -135,6 +136,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(integrationsRoutes, { prefix: '/api/v1' });
   await app.register(googleBusinessProfileRoutes, { prefix: '/api/v1' });
   await app.register(feedbackRoutes, { prefix: '/api/v1' });
+  await app.register(supportRoutes, { prefix: '/api/v1' });
   await app.register(operationsRoutes, { prefix: '/api/v1' });
   await app.register(billingRoutes, { prefix: '/api/v1' });
   await app.register(adminRoutes, { prefix: '/api/v1' });

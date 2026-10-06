@@ -82,6 +82,10 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
     await app.prisma.organizationMember.create({
       data: { organizationId, userId: regularUserId, role: 'OWNER', status: 'ACTIVE' },
     });
+    await app.prisma.session.updateMany({
+      where: { userId: regularUserId },
+      data: { activeOrganizationId: organizationId },
+    });
     const plan = await app.prisma.plan.create({
       data: { code: planCode, name: 'Admin Integration Plan', priceCents: 199900, currency: 'RUB', active: true },
     });
@@ -151,6 +155,81 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
     });
     expect(analytics.statusCode).toBe(200);
     expect(analytics.json()).toEqual(expect.objectContaining({ source: 'api' }));
+  });
+
+  test('client support messages appear in the platform queue and admin replies return to the client', async () => {
+    const clientMessage = await app.inject({
+      method: 'POST',
+      url: '/api/v1/support/channels/technical/messages',
+      headers: { cookie: regularCookie, 'idempotency-key': `admin-support-${randomUUID()}` },
+      payload: { text: 'Нужна помощь с production интеграцией' },
+    });
+    expect(clientMessage.statusCode).toBe(201);
+    const ticketId = clientMessage.json().ticket.id as string;
+
+    const queue = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/tickets',
+      headers: { cookie: platformAdminCookie },
+    });
+    expect(queue.statusCode).toBe(200);
+    expect(queue.json()).toMatchObject({ configured: true, source: 'api' });
+    expect(queue.json().tickets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: ticketId,
+        clientId: organizationId,
+        status: 'open',
+        unread: 1,
+      }),
+    ]));
+
+    const reply = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/tickets/${ticketId}/messages`,
+      headers: { cookie: platformAdminCookie, 'idempotency-key': `admin-reply-${randomUUID()}` },
+      payload: { text: 'Проверили обращение. Уже занимаемся проблемой.' },
+    });
+    expect(reply.statusCode).toBe(201);
+    expect(reply.json().ticket).toMatchObject({
+      id: ticketId,
+      status: 'in_progress',
+      unread: 0,
+    });
+
+    const clientSnapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/support',
+      headers: { cookie: regularCookie },
+    });
+    expect(clientSnapshot.statusCode).toBe(200);
+    expect(clientSnapshot.json().snapshot.threads.technical).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'client', text: 'Нужна помощь с production интеграцией' }),
+      expect.objectContaining({ from: 'support', text: 'Проверили обращение. Уже занимаемся проблемой.' }),
+    ]));
+
+    const close = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/tickets/${ticketId}`,
+      headers: { cookie: platformAdminCookie },
+      payload: { status: 'closed', priority: 'high', unread: 0 },
+    });
+    expect(close.statusCode).toBe(200);
+    expect(close.json().ticket).toMatchObject({
+      id: ticketId,
+      status: 'closed',
+      priority: 'high',
+    });
+
+    const clientDetails = await app.inject({
+      method: 'GET',
+      url: `/api/v1/admin/clients/${organizationId}`,
+      headers: { cookie: platformAdminCookie },
+    });
+    expect(clientDetails.statusCode).toBe(200);
+    expect(clientDetails.json().supportConfigured).toBe(true);
+    expect(clientDetails.json().tickets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: ticketId }),
+    ]));
   });
 
   test('regular authenticated users cannot read platform data', async () => {
