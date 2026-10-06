@@ -9,14 +9,14 @@ import './IntegrationHubWorkspace.scss';
 const STATUS_ORDER = ['error', 'expired', 'degraded', 'needs_setup', 'syncing', 'configured', 'connected', 'disconnected'];
 const PROVIDER_SETUP = Object.freeze({
   wb: {
-    note: 'Используется официальный WB API категории «Вопросы и отзывы». Токен хранится только в зашифрованном credential vault.',
+    note: 'Используется официальный API Wildberries для вопросов и отзывов. Токен хранится на сервере в зашифрованном виде.',
     supportsScheduledSync: true,
     fields: [
       { key: 'apiToken', target: 'credentials', label: 'WB API token', placeholder: 'Токен категории «Вопросы и отзывы»', secret: true, required: true },
     ],
   },
   ozon: {
-    note: 'Используется Ozon Seller API. Client ID и API key сохраняются зашифрованно и не возвращаются в браузер.',
+    note: 'Используется API кабинета продавца Ozon. Client ID и API key сохраняются на сервере в зашифрованном виде и не возвращаются в браузер.',
     supportsScheduledSync: true,
     fields: [
       { key: 'clientId', target: 'credentials', label: 'Ozon Client ID', placeholder: 'Client ID продавца', required: true },
@@ -31,7 +31,7 @@ const PROVIDER_SETUP = Object.freeze({
     ],
   },
   yandex: {
-    note: 'Публичного review API Яндекс Бизнес нет. Подключение выполняется только через ваш verified bridge/партнёрский шлюз; HTML-скрейпинг не используется.',
+    note: 'Публичного API для отзывов Яндекс Бизнес нет. Подключение возможно только через проверенный партнёрский шлюз; сбор данных со страниц сайта не используется.',
     supportsScheduledSync: true,
     fields: [
       { key: 'bridgeBaseUrl', target: 'configuration', label: 'Bridge URL', placeholder: 'https://bridge.example.ru', required: true },
@@ -39,7 +39,7 @@ const PROVIDER_SETUP = Object.freeze({
     ],
   },
   otzovik: {
-    note: 'Подключение выполняется через verified bridge с контрактом Business Shield. Неавторизованный скрейпинг публичных страниц не используется.',
+    note: 'Подключение выполняется через проверенный шлюз Бизнес Щит. Неавторизованный сбор данных с публичных страниц не используется.',
     supportsScheduledSync: true,
     fields: [
       { key: 'bridgeBaseUrl', target: 'configuration', label: 'Bridge URL', placeholder: 'https://bridge.example.ru', required: true },
@@ -73,31 +73,31 @@ function StatusBadge({ status }) {
 function providerAvailabilityCopy(runtime) {
   if (!runtime.endpointConfigured) {
     return {
-      title: 'Provider endpoint не настроен',
-      message: 'Конфигурацию можно сохранить, но реальный импорт не имитируется до подключения backend endpoint.',
+      title: 'Подключение со стороны сервера не настроено',
+      message: 'Настройки можно сохранить, но получать реальные данные пока нельзя.',
     };
   }
   if (runtime.connectable) {
     return {
-      title: 'Provider adapter готов',
-      message: 'Секреты отправляются только backend и сохраняются в зашифрованном credential vault. В браузер они не возвращаются.',
+      title: 'Подключение готово',
+      message: 'Ключи доступа передаются только на сервер, сохраняются в зашифрованном виде и не возвращаются в браузер.',
     };
   }
   if (runtime.releaseStage === 'UNKNOWN') {
     return {
-      title: 'Проверяем provider adapter',
-      message: 'Server capability truth ещё не загружена. Подключение временно заблокировано fail-closed.',
+      title: 'Проверяем готовность подключения',
+      message: 'Сервер ещё не подтвердил доступные возможности. Подключение временно заблокировано, чтобы не показывать неподтверждённый статус.',
     };
   }
   if (runtime.releaseStage === 'PLANNED') {
     return {
-      title: 'Production adapter ещё не готов',
-      message: runtime.reasonMessage || 'Провайдер пока не имеет production adapter и не может быть подключён.',
+      title: 'Подключение ещё не готово',
+      message: runtime.reasonMessage || 'Этот источник пока нельзя подключить в рабочем режиме.',
     };
   }
   return {
-    title: 'Provider adapter установлен, но недоступен',
-    message: runtime.reasonMessage || 'Нужна операторская настройка provider adapter перед подключением организации.',
+    title: 'Подключение временно недоступно',
+    message: runtime.reasonMessage || 'Перед подключением требуется дополнительная настройка со стороны Бизнес Щит.',
   };
 }
 
@@ -115,7 +115,7 @@ function CapabilityList({ providerId }) {
     'crm.read': 'Данные CRM',
     'crm.write': 'Запись в CRM',
   };
-  return <div className="integration-capabilities"><small>Фактические возможности</small>{runtime.capabilities.length ? runtime.capabilities.map((item) => <span key={item}>{labels[item] || item}</span>) : <span>Не заявлены server capability truth</span>}</div>;
+  return <div className="integration-capabilities"><small>Доступные возможности</small>{runtime.capabilities.length ? runtime.capabilities.map((item) => <span key={item}>{labels[item] || item}</span>) : <span>Сервер ещё не сообщил доступные возможности</span>}</div>;
 }
 
 function ConnectionModal({ integration, open, busy, onClose, onSave }) {
@@ -192,7 +192,7 @@ function ConnectionModal({ integration, open, busy, onClose, onSave }) {
           </div>
           <CapabilityList providerId={integration.id} />
         </div>
-        <footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={Boolean(busy) || providerBlocked} onClick={submit}>{busy ? 'Проверяем доступ…' : providerReady ? 'Проверить и подключить' : providerBlocked ? 'Provider недоступен' : 'Сохранить конфигурацию'}</button></footer>
+        <footer><button type="button" onClick={onClose}>Отмена</button><button type="button" className="is-primary" disabled={Boolean(busy) || providerBlocked} onClick={submit}>{busy ? 'Проверяем доступ…' : providerReady ? 'Проверить и подключить' : providerBlocked ? 'Подключение недоступно' : 'Сохранить настройки'}</button></footer>
       </section>
     </div>,
     document.body,
@@ -202,7 +202,7 @@ function ConnectionModal({ integration, open, busy, onClose, onSave }) {
 function DiagnosticsPanel({ integration, diagnostics, busy, canManage, onRun }) {
   const checks = diagnostics?.checks || integration.diagnostics?.checks || [];
   return <div className="integration-diagnostics">
-    <div className="integration-diagnostics__head"><div><span>DIAGNOSTICS</span><strong>Проверка канала</strong></div>{canManage ? <button type="button" disabled={Boolean(busy)} onClick={onRun}>{busy === 'diagnostics' ? 'Проверяем…' : 'Запустить'}</button> : null}</div>
+    <div className="integration-diagnostics__head"><div><span>ДИАГНОСТИКА</span><strong>Проверка канала</strong></div>{canManage ? <button type="button" disabled={Boolean(busy)} onClick={onRun}>{busy === 'diagnostics' ? 'Проверяем…' : 'Запустить'}</button> : null}</div>
     {checks.length ? <div className="integration-diagnostics__checks">{checks.map((check) => <div key={check.id} className={check.pending ? 'is-pending' : check.ok ? 'is-ok' : 'is-error'}><i>{check.pending ? '…' : check.ok ? '✓' : '!'}</i><span>{check.label}</span></div>)}</div> : <p>Диагностика ещё не запускалась. Она проверит конфигурацию и состояние provider-канала, не создавая новых данных.</p>}
   </div>;
 }
