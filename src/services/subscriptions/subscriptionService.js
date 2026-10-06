@@ -58,7 +58,12 @@ export function normalizeSubscriptionSnapshot(value = {}) {
   const limits = usageMeters
     ? usageMeters.map((meter) => {
       const meta = USAGE_META[meter.key] || { label: meter.key, tone: 'violet' };
-      const limit = Number.isFinite(Number(meter.limit)) ? Number(meter.limit) : null;
+      const limit = meter.limit === null || meter.limit === undefined
+        ? null
+        : (Number.isFinite(Number(meter.limit)) ? Number(meter.limit) : null);
+      const percentage = meter.percentage === null || meter.percentage === undefined
+        ? null
+        : (Number.isFinite(Number(meter.percentage)) ? Number(meter.percentage) : null);
       return {
         id: meter.key,
         key: meter.key,
@@ -67,7 +72,7 @@ export function normalizeSubscriptionSnapshot(value = {}) {
         used: Number(meter.used) || 0,
         total: limit,
         state: meter.state || (limit === null ? 'unmetered' : 'ok'),
-        percentage: Number.isFinite(Number(meter.percentage)) ? Number(meter.percentage) : null,
+        percentage,
       };
     })
     : (Array.isArray(value?.limits) ? value.limits : base.limits);
