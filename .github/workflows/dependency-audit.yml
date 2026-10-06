@@ -61,14 +61,12 @@ jobs:
       - name: Refresh frontend lockfile
         run: |
           rm -f package-lock.json
-          npm install --package-lock-only --ignore-scripts
-          npm audit fix --package-lock-only --ignore-scripts || true
+          npm install --package-lock-only --ignore-scripts --force
       - name: Refresh backend lockfile
         working-directory: backend
         run: |
           rm -f package-lock.json
-          npm install --package-lock-only --ignore-scripts
-          npm audit fix --package-lock-only --ignore-scripts || true
+          npm install --package-lock-only --ignore-scripts --force
       - name: Commit refreshed lockfiles
         run: |
           if git diff --quiet -- package-lock.json backend/package-lock.json; then
