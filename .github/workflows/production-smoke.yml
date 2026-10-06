@@ -1,5 +1,5 @@
 name: Business Shield Production Smoke
-# Exact-SHA verification trigger for production release 6c386cb61c292e1155fab9185b3d604225b308b5 (2026-10-07).
+# Exact-SHA verification trigger for production release 92554744f058902010942afd41de2ee76a81d132 (2026-10-07).
 
 on:
   workflow_dispatch:
