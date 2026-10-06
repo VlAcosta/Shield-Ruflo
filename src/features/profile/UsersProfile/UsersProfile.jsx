@@ -33,6 +33,19 @@ function SnowIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d
 const initialsFromName = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'БЩ';
 export const canonicalRoleId = (value) => String(value || 'MEMBER').trim().toUpperCase();
 
+export function dedupeTeamMembers(users = []) {
+  const seenIds = new Set();
+  const seenEmails = new Set();
+  return users.filter((user) => {
+    const id = String(user?.id || '').trim();
+    const email = String(user?.email || '').trim().toLowerCase();
+    if ((id && seenIds.has(id)) || (email && seenEmails.has(email))) return false;
+    if (id) seenIds.add(id);
+    if (email) seenEmails.add(email);
+    return true;
+  });
+}
+
 function formatRelative(value) {
   if (!value) return 'ещё не входил';
   const diff = Date.now() - new Date(value).getTime();
@@ -264,7 +277,6 @@ function SecurityCenter({ members, securityApi, canManageSecurity, onSelect }) {
 
 export default function UsersProfile({
   users,
-  owner,
   busy,
   onInvite,
   onUpdateUser,
@@ -279,19 +291,7 @@ export default function UsersProfile({
   const [selectedId, setSelectedId] = useState(null);
   const [menuId, setMenuId] = useState(null);
 
-  const ownerMember = useMemo(() => owner ? {
-    id: 'current-owner',
-    syntheticOwner: true,
-    initials: initialsFromName(`${owner.firstName || ''} ${owner.lastName || ''}`),
-    name: `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || 'Владелец компании',
-    email: owner.email || '',
-    role: 'OWNER',
-    accessRoleId: 'OWNER',
-    active: true,
-    tone: 'violet',
-  } : null, [owner]);
-
-  const baseUsers = useMemo(() => [ownerMember, ...users].filter(Boolean), [ownerMember, users]);
+  const baseUsers = useMemo(() => dedupeTeamMembers(users), [users]);
   const team = useTeamActivity(baseUsers);
   const members = team.users;
   const securityApi = useTeamSecurity(members);
