@@ -18,10 +18,14 @@ vi.mock('../../services/auth/authService', () => ({
   },
 }));
 
-vi.mock('../../services/profile/companyInvitationService', () => ({
-  acceptCompanyInvitation: vi.fn(),
-  getCompanyInvitation: vi.fn(),
-}));
+vi.mock('../../services/profile/companyInvitationService', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    acceptCompanyInvitation: vi.fn(),
+    getCompanyInvitation: vi.fn(),
+  };
+});
 
 function renderInvitation() {
   return render(
