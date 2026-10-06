@@ -289,7 +289,7 @@ function normalizeRemote(providerId, payload, fallback = {}) {
 
 function providerUnavailableError(providerId) {
   const runtime = getProviderRuntime(providerId);
-  const error = new Error(runtime.reasonMessage || 'Production provider adapter пока недоступен');
+  const error = new Error(runtime.reasonMessage || 'Подключение этого источника пока недоступно');
   error.code = runtime.reasonCode || 'PROVIDER_ADAPTER_NOT_CONFIGURED';
   return error;
 }
@@ -334,7 +334,7 @@ export async function configureIntegration(providerId, {
       providerMode: 'unresolved',
       lastError: '',
     }, 'configure-local');
-    appendActivity({ providerId, providerName: next.name, action: 'configured', level: 'info', message: trimmedLink ? 'Источник настроен. Ожидается подключение provider API.' : 'Источник включён и ожидает настройки.' });
+    appendActivity({ providerId, providerName: next.name, action: 'configured', level: 'info', message: trimmedLink ? 'Источник настроен. Ожидается готовность серверного подключения.' : 'Источник включён и ожидает настройки.' });
     return next;
   }
   if (!hasIntegrationBackend(providerId)) {
@@ -366,7 +366,7 @@ export async function configureIntegration(providerId, {
       syncPolicy: remote.syncPolicy || current.syncPolicy || syncPolicy || null,
       nextSyncAt: remote.syncPolicy?.nextSyncAt || remote.nextSyncAt || null,
     }, 'connect-success');
-    appendActivity({ providerId, providerName: next.name, action: 'connected', level: 'success', message: 'Подключение подтверждено provider backend.' });
+    appendActivity({ providerId, providerName: next.name, action: 'connected', level: 'success', message: 'Подключение подтверждено сервером.' });
     return next;
   } catch (error) {
     const next = updateOne(providerId, { enabled: true, link: trimmedLink, status: 'error', lastError: error.message || 'Ошибка подключения', lastErrorAt: nowIso() }, 'connect-error');
@@ -398,7 +398,7 @@ export async function reconnectIntegration(providerId, options = {}) {
 export async function disconnectIntegration(providerId, options = {}) {
   const current = readIntegrationConnections().find((item) => item.id === providerId);
   if (!current) throw new Error('Интеграция не найдена');
-  if (hasIntegrationBackend()) await providerDisconnect(providerId, options);
+  if (hasIntegrationBackend(providerId)) await providerDisconnect(providerId, options);
   const next = updateOne(providerId, { enabled: false, status: 'disconnected', lastError: '', connectedAt: null }, 'disconnect');
   appendActivity({ providerId, providerName: next.name, action: 'disconnected', level: 'warning', message: 'Источник отключён от рабочего пространства.' });
   return next;
@@ -408,7 +408,7 @@ export async function syncIntegration(providerId, options = {}) {
   const current = readIntegrationConnections().find((item) => item.id === providerId);
   if (!current || !current.enabled) throw new Error('Сначала подключите источник');
   if (!hasIntegrationBackend()) {
-    appendActivity({ providerId, providerName: current.name, action: 'sync_skipped', level: 'warning', message: 'Provider API пока не настроен — реальная синхронизация не запускалась.' });
+    appendActivity({ providerId, providerName: current.name, action: 'sync_skipped', level: 'warning', message: 'Подключение этого источника пока не готово — синхронизация не запускалась.' });
     return updateOne(providerId, { status: current.link ? 'configured' : 'needs_setup', providerMode: 'unresolved' }, 'sync-local');
   }
   if (!hasIntegrationBackend(providerId)) return recordUnavailableProvider(providerId, current, 'sync');
@@ -424,7 +424,7 @@ export async function syncIntegration(providerId, options = {}) {
       lastSyncStats: response?.stats || remote.lastSyncStats || null,
       nextSyncAt: response?.next_sync_at || response?.nextSyncAt || remote.nextSyncAt || null,
     }, 'sync-success');
-    appendActivity({ providerId, providerName: next.name, action: 'sync', level: 'success', message: 'Синхронизация поставлена в durable очередь.', details: response?.stats || null });
+    appendActivity({ providerId, providerName: next.name, action: 'sync', level: 'success', message: 'Синхронизация поставлена в очередь и будет выполнена сервером.', details: response?.stats || null });
     return next;
   } catch (error) {
     const next = updateOne(providerId, { status: 'degraded', lastError: error.message || 'Ошибка синхронизации', lastErrorAt: nowIso() }, 'sync-error');
@@ -441,11 +441,11 @@ export async function diagnoseIntegration(providerId, options = {}) {
     const checks = [
       { id: 'config', label: 'Источник включён', ok: current.enabled },
       { id: 'identity', label: 'Ссылка или идентификатор указан', ok: Boolean(current.link) },
-      { id: 'provider', label: 'Provider backend подключён', ok: false, pending: true },
+      { id: 'provider', label: 'Серверное подключение доступно', ok: false, pending: true },
     ];
     const diagnostics = { checkedAt: nowIso(), mode: 'local', checks, ok: checks.filter((item) => !item.pending).every((item) => item.ok) };
     const next = updateOne(providerId, { diagnostics, status: current.link ? 'configured' : 'needs_setup' }, 'diagnostics-local');
-    appendActivity({ providerId, providerName: next.name, action: 'diagnostics', level: 'info', message: 'Локальная диагностика завершена. Provider backend пока не подключён.' });
+    appendActivity({ providerId, providerName: next.name, action: 'diagnostics', level: 'info', message: 'Локальная диагностика завершена. Серверное подключение этого источника пока недоступно.' });
     return diagnostics;
   }
 
