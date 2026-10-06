@@ -11,6 +11,7 @@ import { getReviewIntelligence, reanalyzeReview } from '../../../../services/rev
 import { generateAiReply, waitForAiReply } from '../../../../services/reviews/replyCopilotService';
 import {
   approveReviewReply,
+  getReviewSources,
   publishReviewReply,
   rejectReviewReply,
   submitReplyForApproval,
@@ -28,7 +29,7 @@ import {
 } from '../../../../services/reviews/reviewIntelligenceService';
 
 function matchesFilter(review, filters, query) {
-  if (filters.platform !== 'all' && review.platform !== filters.platform) return false;
+  if (filters.sourceId && review.sourceId !== filters.sourceId) return false;
   if (filters.rating !== 'all' && String(review.rating) !== String(filters.rating)) return false;
   if (filters.sentiment !== 'all' && getReviewSentiment(review) !== filters.sentiment) return false;
   if (filters.queue === 'attention') {
@@ -52,7 +53,7 @@ export default function useReviewsIntelligence() {
   const [settings, setSettings] = useState(readReviewSettings);
   const [filters, setFilters] = useState(() => ({
     queue: searchParams.get('queue') || 'attention',
-    platform: searchParams.get('platform') || 'all',
+    sourceId: searchParams.get('sourceId') || '',
     rating: searchParams.get('rating') || 'all',
     sentiment: searchParams.get('sentiment') || 'all',
   }));
@@ -60,19 +61,36 @@ export default function useReviewsIntelligence() {
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
   const serverQuery = useMemo(() => ({
     ...(deferredQuery ? { q: deferredQuery } : {}),
+    ...(filters.sourceId ? { sourceId: filters.sourceId } : {}),
     ...(filters.rating !== 'all' ? { rating: filters.rating } : {}),
     ...(filters.sentiment === REVIEW_SENTIMENT.NEGATIVE ? { maxRating: 3 } : {}),
     ...(filters.sentiment === REVIEW_SENTIMENT.POSITIVE ? { minRating: 4 } : {}),
     ...(filters.queue === 'processed' ? { workflowStatus: 'published' } : {}),
     ...(filters.queue === 'approval' ? { workflowStatus: 'awaiting_approval' } : {}),
     ...(filters.queue === 'inbox' ? { status: 'new,deferred' } : {}),
-  }), [deferredQuery, filters.queue, filters.rating, filters.sentiment]);
+  }), [deferredQuery, filters.queue, filters.rating, filters.sentiment, filters.sourceId]);
   const reviewsState = useReviews(serverQuery);
   const { reviews, patchReview, replyToReview, reload, pagination } = reviewsState;
   const [selectedId, setSelectedId] = useState(() => searchParams.get('review') || '');
   const [working, setWorking] = useState('');
   const [notice, setNotice] = useState(null);
   const [insightState, setInsightState] = useState(null);
+  const [sources, setSources] = useState([]);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [sourcesError, setSourcesError] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSourcesLoading(true);
+    setSourcesError('');
+    getReviewSources({ signal: controller.signal })
+      .then((items) => setSources(items))
+      .catch((error) => {
+        if (error?.name !== 'AbortError') setSourcesError(error?.message || 'Не удалось загрузить источники отзывов');
+      })
+      .finally(() => setSourcesLoading(false));
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const handleSettings = (event) => setSettings(event.detail || readReviewSettings());
@@ -110,14 +128,14 @@ export default function useReviewsIntelligence() {
   }, [reviews, searchParams]);
 
   useEffect(() => {
-    const platform = searchParams.get('platform');
+    const sourceId = searchParams.get('sourceId');
     const queue = searchParams.get('queue');
     const rating = searchParams.get('rating');
     const sentiment = searchParams.get('sentiment');
-    if (platform || queue || rating || sentiment) {
+    if (sourceId || queue || rating || sentiment) {
       setFilters((current) => ({
         ...current,
-        ...(platform ? { platform } : {}),
+        ...(sourceId ? { sourceId } : {}),
         ...(queue ? { queue } : {}),
         ...(rating ? { rating } : {}),
         ...(sentiment ? { sentiment } : {}),
@@ -176,11 +194,14 @@ export default function useReviewsIntelligence() {
       .slice(0, 5);
   }, [enrichedReviews]);
 
-  const platformStats = useMemo(() => ['Яндекс', '2GIS', 'Ozon', 'Отзовик', 'WB'].map((platform) => {
-    const items = enrichedReviews.filter((review) => review.platform === platform);
-    const average = items.length ? items.reduce((sum, review) => sum + Number(review.rating || 0), 0) / items.length : 0;
-    return { platform, count: items.length, average: Number(average.toFixed(1)) };
-  }), [enrichedReviews]);
+  const platformStats = useMemo(() => {
+    const platforms = Array.from(new Set(enrichedReviews.map((review) => review.platform).filter(Boolean)));
+    return platforms.map((platform) => {
+      const items = enrichedReviews.filter((review) => review.platform === platform);
+      const average = items.length ? items.reduce((sum, review) => sum + Number(review.rating || 0), 0) / items.length : 0;
+      return { platform, count: items.length, average: Number(average.toFixed(1)) };
+    });
+  }, [enrichedReviews]);
 
   const run = useCallback(async (key, action, successMessage) => {
     setWorking(key);
@@ -292,6 +313,9 @@ export default function useReviewsIntelligence() {
     platformStats,
     settings,
     updateSettings,
+    sources,
+    sourcesLoading,
+    sourcesError,
     responseMode,
     working,
     notice,
