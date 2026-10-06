@@ -18,6 +18,8 @@ export default function useAutomations() {
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [source, setSource] = useState('loading');
+  const [stale, setStale] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -26,7 +28,11 @@ export default function useAutomations() {
       const snapshot = await fetchAutomationSnapshot();
       setRules(snapshot.rules);
       setLog(snapshot.log);
+      setSource(snapshot.source || 'api');
+      setStale(Boolean(snapshot.stale));
     } catch (loadError) {
+      setSource('error');
+      setStale(false);
       setError(loadError?.message || 'Не удалось загрузить автоматизации');
     } finally {
       setLoading(false);
@@ -94,6 +100,9 @@ export default function useAutomations() {
     running,
     loading,
     error,
+    source,
+    stale,
+    serverConfirmed: source === 'api' && !stale,
     reload,
     fromTemplate: createRuleFromTemplate,
   };
