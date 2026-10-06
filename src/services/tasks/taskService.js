@@ -67,7 +67,6 @@ function deriveTaskType(task = {}) {
 
 function normalizeTask(task = {}) {
   return {
-    comments: [],
     checklist: [],
     attachments: [],
     assignees: [],
