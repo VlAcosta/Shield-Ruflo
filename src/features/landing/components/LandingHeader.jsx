@@ -4,11 +4,11 @@ import shieldLogo from '../../../assets/main-site/shield.svg';
 import LandingIcon from './LandingIcon';
 
 const NAV_ITEMS = [
-  ['Workflow', 'process'],
+  ['Как это работает', 'process'],
   ['Возможности', 'capabilities'],
   ['Кому подходит', 'segments'],
   ['Тарифы', 'pricing'],
-  ['FAQ', 'faq'],
+  ['Вопросы', 'faq'],
 ];
 
 export default function LandingHeader() {
@@ -35,7 +35,7 @@ export default function LandingHeader() {
           </span>
           <span className="landing-brand__copy">
             <strong>БИЗНЕС ЩИТ</strong>
-            <small>Reputation Operations System</small>
+            <small>Управление репутацией</small>
           </span>
         </a>
 
@@ -65,7 +65,7 @@ export default function LandingHeader() {
         </div>
       </div>
 
-      <div className={`landing-mobileMenu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}>
+      <div className={`landing-mobileMenu ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen} inert={!menuOpen}>
         <div className="landing-mobileMenu__panel">
           {NAV_ITEMS.map(([label, id]) => (
             <a key={id} href={`#${id}`} onClick={closeMenu}>{label}</a>

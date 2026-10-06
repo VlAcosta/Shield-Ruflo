@@ -23,7 +23,7 @@ function allStrategyCopy() {
 describe('evidence-safe strategic landing contract', () => {
   test('uses the seven-step closed-loop reputation workflow', () => {
     expect(REPUTATION_LOOP.map((item) => item.title)).toEqual([
-      'Detect', 'Prioritize', 'Assist', 'Govern', 'Escalate', 'Operate', 'Measure',
+      'Собираем отзывы', 'Выделяем важное', 'Готовим ответ', 'Согласовываем', 'Разбираем сложное', 'Решаем проблему', 'Оцениваем результат',
     ]);
   });
 

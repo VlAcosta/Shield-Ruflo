@@ -11,9 +11,9 @@ export function ProblemsSection() {
     <section className="landing-section landing-problems" id="problems">
       <div className="landing-shell">
         <div className="landing-sectionHead landing-sectionHead--center" data-landing-reveal>
-          <span className="landing-kicker">Где теряется контроль</span>
-          <h2>Проблема не только в негативе. <span>Проблема — в разорванном процессе.</span></h2>
-          <p>Бизнесу нужен не ещё один мониторинг, а понятный путь от сигнала до ответственного действия и измеримого результата.</p>
+          <span className="landing-kicker">Знакомые проблемы</span>
+          <h2>Репутация складывается <span>из каждого отзыва.</span></h2>
+          <p>Важно вовремя замечать обратную связь, отвечать клиентам и устранять причины жалоб.</p>
         </div>
 
         <div className="landing-problems__grid">
@@ -32,7 +32,7 @@ export function ProblemsSection() {
               </div>
               <div className="landing-problemCard__signal">
                 <span className="landing-problemCard__signalDot" />
-                <span>требует процесса</span>
+                <span>требует внимания</span>
               </div>
             </article>
           ))}
@@ -41,10 +41,10 @@ export function ProblemsSection() {
         <div className="landing-problems__shield" data-landing-reveal>
           <div className="landing-problems__shieldIcon"><LandingIcon name="shield" size={24} /></div>
           <div>
-            <strong>Business Shield закрывает цикл, а не только показывает сигнал.</strong>
-            <span>Review → SLA → ответ → согласование → задача → анализ причины → отчёт.</span>
+            <strong>Мы — ваш щит.</strong>
+            <span>Помогаем заметить отзыв, подготовить ответ и довести работу с жалобой до результата.</span>
           </div>
-          <a href="#process">Посмотреть процесс <LandingIcon name="arrow" size={17} /></a>
+          <a href="#process">Как это работает <LandingIcon name="arrow" size={17} /></a>
         </div>
       </div>
     </section>
@@ -56,8 +56,8 @@ export function ProcessSection() {
     <section className="landing-section landing-process" id="process">
       <div className="landing-shell">
         <div className="landing-sectionHead" data-landing-reveal>
-          <span className="landing-kicker">Closed-loop Reputation Operations</span>
-          <h2>Сигнал проходит <span>семь управляемых этапов.</span></h2>
+          <span className="landing-kicker">Как это работает</span>
+          <h2>Простой процесс. <span>Постоянный контроль.</span></h2>
           <p>Каждый этап отвечает на отдельный вопрос: что произошло, насколько срочно, как ответить, кто согласует, что исправить и изменился ли результат.</p>
         </div>
 
@@ -74,13 +74,13 @@ export function ProcessSection() {
 
         <div className="landing-monitorPanel" data-landing-reveal>
           <div className="landing-monitorPanel__copy">
-            <span className="landing-monitorPanel__live"><i /> PROVIDER TRUTH</span>
-            <h3>Интеграция считается доступной только когда её capability подтверждена.</h3>
-            <p>Интерфейс не должен обещать read, reply или sync только потому, что логотип площадки есть в каталоге.</p>
+            <span className="landing-monitorPanel__live"><i /> Подключение площадок</span>
+            <h3>Отзывы с разных площадок — в одном кабинете.</h3>
+            <p>Перед подключением проверьте доступные действия: на одних площадках можно получать отзывы, на других — ещё и публиковать ответы.</p>
             <div className="landing-monitorPanel__sources">
-              <div><LandingIcon name="checkCircle" size={17} /><span>Read — только при production adapter</span></div>
-              <div><LandingIcon name="checkCircle" size={17} /><span>Reply — только при подтверждённом publish contract</span></div>
-              <div><LandingIcon name="checkCircle" size={17} /><span>Sync — с фактическим health/status и retry state</span></div>
+              <div><LandingIcon name="checkCircle" size={17} /><span>Сбор отзывов с подключённых площадок</span></div>
+              <div><LandingIcon name="checkCircle" size={17} /><span>Публикация ответов там, где она поддерживается</span></div>
+              <div><LandingIcon name="checkCircle" size={17} /><span>Статус подключения и обновления данных</span></div>
             </div>
           </div>
 
@@ -95,9 +95,9 @@ export function ProcessSection() {
               <i className="landing-radar__point landing-radar__point--2" />
               <i className="landing-radar__point landing-radar__point--3" />
             </div>
-            <div className="landing-monitorPanel__badge is-one"><strong>READ</strong><span>capability</span></div>
-            <div className="landing-monitorPanel__badge is-two"><strong>REPLY</strong><span>capability</span></div>
-            <div className="landing-monitorPanel__badge is-three"><strong>HEALTH</strong><span>runtime state</span></div>
+            <div className="landing-monitorPanel__badge is-one"><strong>Отзывы</strong><span>сбор</span></div>
+            <div className="landing-monitorPanel__badge is-two"><strong>Ответы</strong><span>публикация</span></div>
+            <div className="landing-monitorPanel__badge is-three"><strong>Статус</strong><span>подключение</span></div>
           </div>
         </div>
       </div>
@@ -110,9 +110,9 @@ export function CapabilitiesSection() {
     <section className="landing-section landing-capabilities" id="capabilities">
       <div className="landing-shell">
         <div className="landing-sectionHead landing-sectionHead--center" data-landing-reveal>
-          <span className="landing-kicker">Ядро платформы</span>
-          <h2>Не «12 инструментов». <span>Один управляемый reputation workflow.</span></h2>
-          <p>Дизайн, content, legal и managed replies могут подключаться отдельно. Причина купить платформу — операционный контур работы с репутацией.</p>
+          <span className="landing-kicker">Возможности</span>
+          <h2>Всё для работы с отзывами. <span>В одном месте.</span></h2>
+          <p>От первого отзыва до отчёта руководителю: каждый участник команды видит свои задачи и следующий шаг.</p>
         </div>
 
         <div className="landing-capabilities__grid">
@@ -127,8 +127,8 @@ export function CapabilitiesSection() {
         </div>
 
         <div className="landing-capabilities__more" data-landing-reveal>
-          <span>CORE PLATFORM</span>
-          <strong>Managed services продаются отдельно и не размывают SaaS-пакет.</strong>
+          <span>Дополнительные услуги</span>
+          <strong>Работа специалистов оплачивается отдельно от подписки.</strong>
         </div>
       </div>
     </section>

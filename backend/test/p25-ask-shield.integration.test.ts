@@ -13,7 +13,9 @@ const databaseName = integrationDatabaseUrl ? new URL(integrationDatabaseUrl).pa
 const isExplicitTestDatabase = /(?:test|p0|e2e)/.test(databaseName)
   && process.env.DATABASE_URL === integrationDatabaseUrl
   && process.env.NODE_ENV === 'test';
-const describeWithPostgres = integrationDatabaseUrl ? describe.sequential : describe.skip;
+const describeWithPostgres = integrationDatabaseUrl
+  ? (name: string, factory: () => void) => describe(name, { concurrent: false }, factory)
+  : (name: string, factory: () => void) => describe.skip(name, factory);
 
 if (integrationDatabaseUrl && !isExplicitTestDatabase) {
   throw new Error('P25 integration tests require NODE_ENV=test and a test-only TEST_DATABASE_URL/DATABASE_URL');

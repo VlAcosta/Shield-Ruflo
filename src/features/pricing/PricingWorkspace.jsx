@@ -102,7 +102,7 @@ function CheckoutPanel({ plan, billingId, onClose, onProceed, busy, message }) {
         </button>
 
         <p className="pricing-checkout__legal">
-          Платёж создаётся только реальным серверным провайдером. Если online checkout ещё не подключён, Бизнес Щит не создаёт фиктивную оплату и не списывает средства.
+          Оплата открывается только через подключённый платёжный сервис. Если он временно недоступен, деньги не списываются.
         </p>
       </section>
     </div>
@@ -114,14 +114,14 @@ function ExtrasSection() {
     <>
       <section className="pricing-section pricing-section--extras" id="addons">
         <div className="pricing-section__heading">
-          <span>Software add-ons</span>
-          <h2>Расширяйте usage без лишней смены тарифа</h2>
-          <p>Дополнительные объёмы относятся к продукту и считаются отдельно от человеческой работы.</p>
+          <span>Дополнительные возможности</span>
+          <h2>Добавляйте объём без смены тарифа</h2>
+          <p>Если временно нужно больше отзывов, ИИ-действий или других ресурсов, подключите отдельный пакет.</p>
         </div>
         <div className="pricing-extrasGrid">
           {SOFTWARE_ADDONS.map((item) => (
             <article className="pricing-extraCard" key={item.id}>
-              <span>ADD-ON</span>
+              <span>ДОПОЛНЕНИЕ</span>
               <h3>{item.title}</h3>
               <strong>+{formatPrice(item.price)}<small>/мес</small></strong>
               <p>{item.note}</p>
@@ -132,14 +132,14 @@ function ExtrasSection() {
 
       <section className="pricing-section pricing-section--managed" id="managed-services">
         <div className="pricing-section__heading">
-          <span>Managed services</span>
-          <h2>Экспертиза людей — отдельный сервисный слой</h2>
-          <p>Ответы специалистов, legal, content и crisis response не маскируются под «безлимитные функции» SaaS.</p>
+          <span>Услуги специалистов</span>
+          <h2>Подключайте помощь команды отдельно</h2>
+          <p>Ответы специалистов, юридическая помощь, работа с контентом и кризисными ситуациями оплачиваются отдельно от подписки.</p>
         </div>
         <div className="pricing-extrasGrid pricing-extrasGrid--managed">
           {MANAGED_SERVICES.map((service) => (
             <article className="pricing-extraCard pricing-extraCard--managed" key={service.id}>
-              <span>SERVICE</span>
+              <span>УСЛУГА</span>
               <h3>{service.title}</h3>
               <strong>{service.prefix ? `${service.prefix} ` : ''}{formatPrice(service.price)}<small>{service.suffix}</small></strong>
               <p>{service.description}</p>
@@ -154,12 +154,16 @@ function ExtrasSection() {
 export default function PricingWorkspace() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [billingId, setBillingId] = useState('monthly');
+  const requestedBillingId = String(searchParams.get('billing') || '').toLowerCase();
+  const [billingId, setBillingId] = useState(
+    Object.prototype.hasOwnProperty.call(BILLING_PERIODS, requestedBillingId) ? requestedBillingId : 'monthly',
+  );
   const [serverPlans, setServerPlans] = useState([]);
   const [catalogState, setCatalogState] = useState('loading');
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState('');
+  const [pageMessage, setPageMessage] = useState('');
 
   const plans = useMemo(() => mergeServerCatalog(PRICING_PLANS, serverPlans), [serverPlans]);
 
@@ -177,14 +181,28 @@ export default function PricingWorkspace() {
   }, []);
 
   useEffect(() => {
+    const nextBillingId = String(searchParams.get('billing') || '').toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(BILLING_PERIODS, nextBillingId) && nextBillingId !== billingId) {
+      setBillingId(nextBillingId);
+    }
+
     const checkoutId = String(searchParams.get('checkout') || '').toUpperCase();
     if (!checkoutId) return;
     const plan = plans.find((item) => item.id === checkoutId);
     if (plan && !plan.contactSales) setSelectedPlan(plan);
-  }, [plans, searchParams]);
+  }, [billingId, plans, searchParams]);
+
+  const selectBillingPeriod = (periodId) => {
+    setBillingId(periodId);
+    const next = new URLSearchParams(searchParams);
+    if (periodId === 'monthly') next.delete('billing');
+    else next.set('billing', periodId);
+    setSearchParams(next, { replace: true });
+  };
 
   const openPlan = async (plan) => {
     setCheckoutMessage('');
+    setPageMessage('');
     if (plan.contactSales) {
       try {
         await authService.restoreSession();
@@ -194,7 +212,7 @@ export default function PricingWorkspace() {
           navigate(`/auth?mode=register&next=${encodeURIComponent('/chat?topic=business')}`);
           return;
         }
-        setCheckoutMessage(error?.message || 'Не удалось проверить сессию');
+        setPageMessage(error?.message || 'Не удалось открыть чат с менеджером. Попробуйте ещё раз.');
       }
       return;
     }
@@ -221,7 +239,9 @@ export default function PricingWorkspace() {
     } catch (error) {
       if (error?.status === 401) {
         setCheckoutBusy(false);
-        navigate(`/auth?mode=register&next=${encodeURIComponent(`/pricing?checkout=${selectedPlan.id}`)}`);
+        const continuation = new URLSearchParams({ checkout: selectedPlan.id });
+        if (billingId !== 'monthly') continuation.set('billing', billingId);
+        navigate(`/auth?mode=register&next=${encodeURIComponent(`/pricing?${continuation.toString()}`)}`);
         return;
       }
       setCheckoutMessage(error?.message || 'Не удалось проверить сессию');
@@ -235,7 +255,10 @@ export default function PricingWorkspace() {
         billing: billingId,
         amount: Math.round(totals.total),
         currency: 'RUB',
-        returnUrl: `${window.location.origin}/pricing?checkout=${selectedPlan.id}`,
+        returnUrl: `${window.location.origin}/pricing?${new URLSearchParams({
+          checkout: selectedPlan.id,
+          ...(billingId !== 'monthly' ? { billing: billingId } : {}),
+        }).toString()}`,
       });
       if (result?.checkout_url) {
         window.location.assign(result.checkout_url);
@@ -258,38 +281,39 @@ export default function PricingWorkspace() {
       <header className="pricing-header">
         <Link className="pricing-header__brand" to="/" aria-label="Бизнес Щит — главная">
           <BrandMark size={42} />
-          <span><strong>БИЗНЕС ЩИТ</strong><small>Reputation Operations System</small></span>
+          <span><strong>БИЗНЕС ЩИТ</strong><small>Управление отзывами и репутацией</small></span>
         </Link>
-        <nav><Link to="/">Главная</Link><a href="#plans">Тарифы</a><a href="#addons">Add-ons</a><button type="button" onClick={() => navigate('/auth?mode=login')}>Войти</button></nav>
+        <nav><Link to="/">Главная</Link><a href="#plans">Тарифы</a><a href="#addons">Дополнения</a><button type="button" onClick={() => navigate('/auth?mode=login')}>Войти</button></nav>
       </header>
 
       <section className="pricing-hero">
         <div className="pricing-hero__glow" aria-hidden="true" />
-        <span className="pricing-kicker"><i /> 4 SaaS-тарифа · отдельные managed services · прозрачные лимиты</span>
-        <h1>Платите за масштаб<br/><em>репутационных операций</em></h1>
-        <p>Тариф определяет capability и governance. Рост цены объясняется локациями, review volume, AI и командой — не скрытым ручным трудом.</p>
+        <span className="pricing-kicker"><i /> 4 тарифа · понятные лимиты · услуги специалистов отдельно</span>
+        <h1>Тариф под ваш бизнес<br/><em>и количество точек</em></h1>
+        <p>Выберите пакет по числу филиалов, объёму отзывов и размеру команды. Все основные лимиты видны заранее — без скрытых условий.</p>
         <div className="pricing-billing" role="group" aria-label="Период оплаты">
           {Object.values(BILLING_PERIODS).map((period) => (
-            <button key={period.id} type="button" className={billingId === period.id ? 'is-active' : ''} onClick={() => setBillingId(period.id)}>
+            <button key={period.id} type="button" className={billingId === period.id ? 'is-active' : ''} onClick={() => selectBillingPeriod(period.id)}>
               {period.label}{period.discount ? <span>−15%</span> : null}
             </button>
           ))}
         </div>
         <div className="pricing-hero__trust">
-          <span>14-дневный Pro trial после регистрации</span>
-          <span>Usage предупреждения на 70% / 90% / 100%</span>
-          <span>Managed services подключаются отдельно</span>
+          <span>14 дней Pro после регистрации</span>
+          <span>Предупредим о приближении к лимитам</span>
+          <span>Услуги специалистов подключаются отдельно</span>
         </div>
         {catalogState === 'fallback' ? (
-          <div className="pricing-catalogNotice" role="status">Показываем зафиксированную публичную матрицу. Серверный каталог временно недоступен.</div>
+          <div className="pricing-catalogNotice" role="status">Показываем актуальные тарифы из интерфейса. Серверный каталог временно недоступен.</div>
         ) : null}
+        {pageMessage ? <div className="pricing-catalogNotice" role="alert">{pageMessage}</div> : null}
       </section>
 
       <section className="pricing-section" id="plans">
         <div className="pricing-section__heading">
           <span>Тарифы</span>
-          <h2>От одной точки до multi-location governance</h2>
-          <p>Каждый пакет показывает outcome и единицы потребления — locations, sources, reviews, users, AI и retention.</p>
+          <h2>От одной точки до сети филиалов</h2>
+          <p>Сравните количество точек, источников отзывов, пользователей, объём работы с ИИ и срок хранения данных.</p>
         </div>
         <div className="pricing-grid pricing-grid--four">
           {plans.map((plan) => <PlanCard key={plan.id} plan={plan} billingId={billingId} onSelect={openPlan} />)}
@@ -299,8 +323,8 @@ export default function PricingWorkspace() {
       <ExtrasSection />
 
       <section className="pricing-security">
-        <div><span className="pricing-security__icon">✓</span><strong>Backend определяет entitlement и usage</strong><p>UI показывает лимиты, но не выдаёт себе права. Ограничения проверяются сервером в контексте организации.</p></div>
-        <div><span className="pricing-security__icon">↺</span><strong>Критический reply workflow не блокируется внезапно</strong><p>Review/AI volume сначала даёт предупреждение и grace/overage путь; hard limits применяются к расширению ресурсов вроде новых локаций.</p></div>
+        <div><span className="pricing-security__icon">✓</span><strong>Лимиты проверяются на сервере</strong><p>Кабинет показывает доступные возможности, а сервер дополнительно проверяет тариф и права организации.</p></div>
+        <div><span className="pricing-security__icon">↺</span><strong>О приближении к лимиту предупредим заранее</strong><p>Для отзывов и ИИ сначала показываем предупреждения. Жёсткие ограничения применяются только там, где нельзя безопасно добавить новый ресурс.</p></div>
       </section>
 
       {selectedPlan ? (

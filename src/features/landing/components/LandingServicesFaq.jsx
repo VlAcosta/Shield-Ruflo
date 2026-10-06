@@ -3,42 +3,42 @@ import { useNavigate } from 'react-router-dom';
 import LandingIcon from './LandingIcon';
 
 const MANAGED_SERVICE_CARDS = Object.freeze([
-  { title: 'Managed Replies', text: 'Ответы специалистами продаются отдельным объёмным пакетом с понятным SLA, а не как безлимитная функция тарифа.', icon: 'message', tone: 'blue' },
-  { title: 'Legal review', text: 'Юридический разбор подключается как отдельный retainer или scope сложного кейса.', icon: 'shield', tone: 'purple' },
-  { title: 'Design / Content credits', text: 'Креативные задачи считаются по credits, часам или deliverables и не входят скрыто в SaaS COGS.', icon: 'palette', tone: 'pink' },
-  { title: 'Reputation Strategy', text: 'Стратегия и QBR — отдельный сервисный слой для клиентов, которым нужен экспертный action plan.', icon: 'chart', tone: 'orange' },
+  { title: 'Ответы на отзывы', text: 'Подготовка ответов специалистами. Количество отзывов и сроки работы согласовываются отдельно.', icon: 'message', tone: 'blue' },
+  { title: 'Юридическая помощь', text: 'Разбор спорных отзывов и сложных обращений. Стоимость зависит от задачи и объёма работы.', icon: 'shield', tone: 'purple' },
+  { title: 'Дизайн и тексты', text: 'Материалы для вашего бизнеса: тексты, баннеры и оформление. Объём и стоимость согласовываются до начала работы.', icon: 'palette', tone: 'pink' },
+  { title: 'Стратегия репутации', text: 'Разбор текущей ситуации и план действий для работы с репутацией вашего бизнеса.', icon: 'chart', tone: 'orange' },
 ]);
 
 const STRATEGY_FAQ = Object.freeze([
   {
     category: 'Старт',
-    question: 'Что должно произойти в первые 14 дней?',
-    answer: 'Создайте организацию, подключите доступный production-ready источник, настройте response policy и SLA, получите первый review event и выполните первое действие. Trial должен довести до first value, а не показывать искусственный demo-режим.',
+    question: 'Можно начать без сложной настройки?',
+    answer: 'Начните с выбора тарифа и создания организации. Затем подключите доступную площадку, добавьте сотрудников и определите, кто отвечает на отзывы. Возможности подключения можно проверить в кабинете.',
   },
   {
     category: 'Площадки',
-    question: 'Какие площадки реально поддерживаются?',
-    answer: 'Business Shield показывает capability отдельно для каждого provider. Read, reply и sync считаются доступными только после того, как production adapter установлен, настроен и подтверждает соответствующую capability. Planned-интеграция не выдаётся за рабочую.',
+    question: 'С какими площадками работает система?',
+    answer: 'Список площадок и доступных действий можно посмотреть в разделе подключений. Сбор отзывов и публикация ответов поддерживаются не на всех площадках одинаково. Перед началом работы проверьте возможности и статус выбранного подключения.',
   },
   {
     category: 'Ответы',
-    question: 'Можно ли согласовывать сложные ответы?',
-    answer: 'Да, если текущий тариф и permission-контекст разрешают approval workflow. Команда может использовать AI draft, согласование и публикацию как отдельные этапы с историей действий.',
+    question: 'Можно работать командой и согласовывать ответы?',
+    answer: 'Да. Сотрудникам можно назначать роли и права доступа. Если согласование включено в тариф, подготовленный ответ передаётся на проверку перед публикацией. Действия команды сохраняются в истории.',
   },
   {
     category: 'Тарифы',
-    question: 'Почему цена зависит не только от функций?',
-    answer: 'План задаёт capability и governance, а масштаб измеряется locations, review volume, users, AI и automation usage. Человеческий труд — managed replies, legal, content или strategy — продаётся отдельно.',
+    question: 'Чем отличаются тарифы?',
+    answer: 'Тарифы отличаются инструментами, количеством точек и сотрудников, объёмом отзывов и использования ИИ. Подробные лимиты указаны на странице тарифов. Ответы специалистами, юридическая помощь, дизайн и тексты оплачиваются отдельно.',
   },
   {
     category: 'Лимиты',
-    question: 'Что происходит при приближении к лимиту?',
-    answer: 'Usage должен быть виден заранее с предупреждениями на 70%, 90% и 100%. Расширение ресурсов может требовать upgrade или add-on, но критический reply workflow не должен внезапно отключаться из-за месячного review/AI volume.',
+    question: 'Где посмотреть лимиты тарифа?',
+    answer: 'До выбора подписки сравните лимиты на странице тарифов. В кабинете можно проверить условия своего плана и использование ресурсов. Если объёма недостаточно, уточните возможность расширения или выберите другой тариф.',
   },
   {
     category: 'Безопасность',
-    question: 'Решает ли интерфейс, к каким данным у меня есть доступ?',
-    answer: 'Нет. Интерфейс только отображает доступ. Организация, роль, permission, entitlement и ownership ресурса проверяются серверным контуром.',
+    question: 'Кто может видеть данные моей компании?',
+    answer: 'Доступ зависит от организации, роли сотрудника и выданных ему разрешений. Сотрудники других организаций не получают доступ к вашим данным. Проверка прав выполняется при каждом запросе к данным.',
   },
 ]);
 
@@ -47,9 +47,9 @@ export function ServicesSection() {
     <section className="landing-section landing-services" id="managed-services">
       <div className="landing-shell">
         <div className="landing-sectionHead" data-landing-reveal>
-          <span className="landing-kicker">Managed services · отдельно от SaaS</span>
-          <h2>Экспертиза людей — <span>add-on, а не скрытый «безлимит».</span></h2>
-          <p>Платформа отвечает за software workflow. Ручная работа имеет отдельный объём, SLA и capacity model.</p>
+          <span className="landing-kicker">Дополнительные услуги</span>
+          <h2>Нужна помощь специалистов? <span>Обсудим вашу задачу.</span></h2>
+          <p>Услуги специалистов не входят в подписку. Возможность выполнения, объём, сроки и стоимость согласовываются отдельно.</p>
         </div>
         <div className="landing-services__grid">
           {MANAGED_SERVICE_CARDS.map((item, index) => (
@@ -75,19 +75,19 @@ export function FaqSection() {
       <div className="landing-shell landing-faq__grid">
         <div className="landing-faq__copy" data-landing-reveal>
           <span className="landing-kicker">Частые вопросы</span>
-          <h2>Что платформа обещает — <span>и где проходит граница.</span></h2>
-          <p>Ответы про first value, provider capabilities, тарифы, лимиты и серверный контроль доступа.</p>
+          <h2>Коротко. По делу. <span>Без мелкого шрифта.</span></h2>
+          <p>Как начать работу, подключить площадки, выбрать тариф и организовать работу команды.</p>
 
           <div className="landing-faq__meta" aria-label="Разделы частых вопросов">
             <span><strong>{STRATEGY_FAQ.length}</strong> вопросов</span>
-            <span><i /> product truth</span>
-            <span><i /> billing</span>
-            <span><i /> security</span>
+            <span><i /> подключения</span>
+            <span><i /> тарифы</span>
+            <span><i /> доступ</span>
           </div>
 
-          <a className="landing-faq__support" href="#contact">
+          <a className="landing-faq__support" href="#pricing">
             <span className="landing-faq__supportIcon"><LandingIcon name="message" size={21} /></span>
-            <div><strong>Нужен другой сценарий?</strong><span>Оставьте заявку — отдельно обсудим locations, sources, volume, API и SLA.</span></div>
+            <div><strong>Какой тариф подойдёт?</strong><span>Сравните возможности и выберите подходящий объём работы.</span></div>
             <LandingIcon name="arrow" size={16} className="landing-faq__supportArrow" />
           </a>
         </div>
@@ -95,10 +95,10 @@ export function FaqSection() {
         <div className="landing-faq__panel" data-landing-reveal>
           <div className="landing-faq__panelHead">
             <div>
-              <span>FAQ / {String(STRATEGY_FAQ.length).padStart(2, '0')}</span>
+              <span>ВОПРОСЫ / {String(STRATEGY_FAQ.length).padStart(2, '0')}</span>
               <strong>{opened?.category || 'Выберите вопрос'}</strong>
             </div>
-            <span className="landing-faq__panelStatus"><i /> Product truth</span>
+            <span className="landing-faq__panelStatus"><i /> О сервисе</span>
           </div>
 
           <div className="landing-faq__list">
@@ -136,16 +136,16 @@ export function FinalCtaSection() {
       <div className="landing-finalCta__glow landing-finalCta__glow--two" />
       <div className="landing-shell landing-finalCta__inner" data-landing-reveal>
         <div>
-          <span className="landing-kicker landing-kicker--light">Первый результат — не через месяцы</span>
-          <h2>Подключите источник. Настройте SLA. <span>Закройте первый reputation event.</span></h2>
-          <p>Trial строится вокруг first value: реальное событие, действие команды и понятный следующий шаг.</p>
+          <span className="landing-kicker landing-kicker--light">Начните с первого шага</span>
+          <h2>Работайте спокойно. <span>Репутацию держим под контролем.</span></h2>
+          <p>Выберите тариф, подключите площадку и начните работать с отзывами вместе с командой.</p>
         </div>
         <div className="landing-finalCta__actions">
           <div className="landing-finalCta__chips">
-            <span><LandingIcon name="checkCircle" size={16} /> 14-дневный trial</span>
-            <span><LandingIcon name="checkCircle" size={16} /> Capability-aware sources</span>
-            <span><LandingIcon name="checkCircle" size={16} /> SLA & approval workflow</span>
-            <span><LandingIcon name="checkCircle" size={16} /> Прозрачные usage limits</span>
+            <span><LandingIcon name="checkCircle" size={16} /> Выбор тарифа под ваши задачи</span>
+            <span><LandingIcon name="checkCircle" size={16} /> Подключение площадок</span>
+            <span><LandingIcon name="checkCircle" size={16} /> Контроль ответов команды</span>
+            <span><LandingIcon name="checkCircle" size={16} /> Понятные лимиты</span>
           </div>
           <div className="landing-finalCta__buttons">
             <button className="landing-btn landing-btn--light landing-btn--large" type="button" onClick={() => navigate('/pricing')}>Посмотреть тарифы <LandingIcon name="arrow" size={18} /></button>

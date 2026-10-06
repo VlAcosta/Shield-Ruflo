@@ -14,7 +14,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = 'Бизнес Щит — Reputation Operations System';
+    document.title = 'Бизнес Щит — управление отзывами и репутацией';
     return () => { document.title = previousTitle; };
   }, []);
 
