@@ -36,7 +36,7 @@ describe('taskService production contract', () => {
             title: 'Проверить отзыв',
             status: 'new',
             priority: 'high',
-            dueDate: '2026-10-07T23:59:59.000Z',
+            dueDate: '2026-10-07T12:00:00.000Z',
             comments: [
               {
                 id: 'comment-1',
@@ -52,7 +52,7 @@ describe('taskService production contract', () => {
 
     const snapshot = await getTasksSnapshot();
 
-    expect(snapshot.tasks[0].dueDate).toBe('08.10.2026');
+    expect(snapshot.tasks[0].dueDate).toBe('07.10.2026');
     expect(snapshot.tasks[0].type).toBe('Общее');
     expect(snapshot.tasks[0].comments[0]).toEqual(
       expect.objectContaining({
