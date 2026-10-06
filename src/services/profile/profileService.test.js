@@ -22,11 +22,15 @@ vi.mock('../activity/companyActivityService', () => ({
   recordCompanyActivity: vi.fn(),
 }));
 
-vi.mock('./companyInvitationService', () => ({
-  createCompanyInvitation: vi.fn(),
-  readCurrentMembership: vi.fn(() => null),
-  saveCurrentMembership: vi.fn(),
-}));
+vi.mock('./companyInvitationService', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    createCompanyInvitation: vi.fn(),
+    readCurrentMembership: vi.fn(() => null),
+    saveCurrentMembership: vi.fn(),
+  };
+});
 
 describe('profileService server contract', () => {
   beforeEach(() => {
