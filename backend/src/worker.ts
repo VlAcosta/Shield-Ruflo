@@ -24,6 +24,11 @@ import { hasReportsEntitlement } from './modules/reports/report-entitlement.serv
 import { REPORT_BLOCKS, type ReportBlock } from './modules/reports/reports.service.js';
 import { processSuggestionDeliveryJob } from './modules/feedback/feedback.service.js';
 import { createNotificationForOrganization } from './modules/notifications/notifications.service.js';
+import {
+  completeJobLease,
+  failJobLease,
+  renewJobLease,
+} from './core/jobs/job-lease.js';
 
 registerIntegrationProviders();
 registerAiProviders();
@@ -32,6 +37,7 @@ const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 const workerId = crypto.randomUUID();
 const JOB_LEASE_TIMEOUT_MS = 5 * 60_000;
+const JOB_LEASE_HEARTBEAT_MS = Math.max(10_000, Math.floor(JOB_LEASE_TIMEOUT_MS / 3));
 const JOB_CANDIDATE_BATCH = 25;
 let stopping = false;
 let lastIntegrationSchedulerAt = 0;
@@ -485,10 +491,7 @@ async function claimNextJob() {
 }
 
 async function finishSuccess(id: string) {
-  await prisma.job.update({
-    where: { id },
-    data: { status: 'SUCCEEDED', completedAt: new Date(), lockedAt: null, lockToken: null, lastError: null },
-  });
+  return completeJobLease(prisma, { jobId: id, workerId });
 }
 
 async function finishFailure(job: any, error: unknown) {
@@ -504,25 +507,23 @@ async function finishFailure(job: any, error: unknown) {
   const exhausted = explicitlyNonRetryable || job.attempts >= job.maxAttempts;
   const delaySeconds = Math.min(3600, 5 * 2 ** Math.max(0, job.attempts - 1));
   const nextRunAt = exhausted ? null : new Date(Date.now() + delaySeconds * 1000);
-  await prisma.job.update({
-    where: { id: job.id },
-    data: exhausted
-      ? {
-          status: 'DEAD',
-          completedAt: new Date(),
-          lastError: message.slice(0, 4000),
-          lockedAt: null,
-          lockToken: null,
-        }
-      : {
-          status: 'QUEUED',
-          completedAt: null,
-          lastError: message.slice(0, 4000),
-          lockedAt: null,
-          lockToken: null,
-          runAt: nextRunAt!,
-        },
+  const ownsLease = await failJobLease(prisma, {
+    jobId: job.id,
+    workerId,
+    exhausted,
+    message,
+    nextRunAt,
   });
+  if (!ownsLease) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      message: 'Skipped stale job failure finalization because worker lease ownership was lost',
+      jobId: job.id,
+      type: job.type,
+      workerId,
+    }));
+    return;
+  }
 
   await syncIntegrationRunJobFailure(job, {
     exhausted,
@@ -595,6 +596,39 @@ async function maybeRunSchedulers() {
   }
 }
 
+function startJobLeaseHeartbeat(jobId: string) {
+  let stopped = false;
+  const timer = setInterval(() => {
+    if (stopped) return;
+    void renewJobLease(prisma, { jobId, workerId })
+      .then((owned) => {
+        if (!owned) {
+          console.warn(JSON.stringify({
+            level: 'warn',
+            message: 'Job lease heartbeat lost ownership',
+            jobId,
+            workerId,
+          }));
+        }
+      })
+      .catch((error) => {
+        console.error(JSON.stringify({
+          level: 'error',
+          message: 'Job lease heartbeat failed',
+          jobId,
+          workerId,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      });
+  }, JOB_LEASE_HEARTBEAT_MS);
+  timer.unref?.();
+
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
+
 async function main() {
   console.log(JSON.stringify({ level: 'info', message: 'Business Shield worker started', workerId }));
   while (!stopping) {
@@ -604,12 +638,24 @@ async function main() {
       await sleep(1500);
       continue;
     }
+    const stopHeartbeat = startJobLeaseHeartbeat(job.id);
     try {
       await processJob(job);
-      await finishSuccess(job.id);
+      const finished = await finishSuccess(job.id);
+      if (!finished) {
+        console.warn(JSON.stringify({
+          level: 'warn',
+          message: 'Skipped stale job success finalization because worker lease ownership was lost',
+          jobId: job.id,
+          type: job.type,
+          workerId,
+        }));
+      }
     } catch (error) {
       console.error(JSON.stringify({ level: 'error', message: 'Job failed', jobId: job.id, type: job.type, error: error instanceof Error ? error.message : String(error) }));
       await finishFailure(job, error);
+    } finally {
+      stopHeartbeat();
     }
   }
 }
