@@ -11,11 +11,18 @@ type ReportActor = {
   userId: string;
 };
 
+export const REPORT_BLOCKS = ['rating', 'reviews', 'reputation', 'platforms', 'competitors', 'tasks', 'recommendations'] as const;
+export type ReportBlock = typeof REPORT_BLOCKS[number];
+
+const DEFAULT_REPORT_BLOCKS: ReportBlock[] = ['rating', 'reviews', 'reputation', 'platforms', 'tasks'];
+
 type GenerateReportInput = {
   type: string;
   title: string;
   periodStart: Date;
   periodEnd: Date;
+  requestedBlocks?: ReportBlock[];
+  idempotencyKey?: string | null;
 };
 
 export type ReportScheduleInput = {
@@ -43,7 +50,7 @@ function readSchedules(value: Prisma.JsonValue | null | undefined): ReportSchedu
   return value.filter((item): item is ReportScheduleInput => Boolean(item && typeof item === 'object')) as ReportScheduleInput[];
 }
 
-function deliveryCapabilities() {
+export function getReportDeliveryCapabilities() {
   const emailAvailable = env.REPORT_EMAIL_PROVIDER === 'resend'
     ? Boolean(env.REPORT_EMAIL_API_KEY && env.REPORT_EMAIL_FROM)
     : env.REPORT_EMAIL_PROVIDER === 'webhook'
@@ -75,7 +82,7 @@ export async function listReports(app: FastifyInstance, organizationId: string) 
   return {
     reports,
     schedules: readSchedules(metadata?.value),
-    deliveryCapabilities: deliveryCapabilities(),
+    deliveryCapabilities: getReportDeliveryCapabilities(),
   };
 }
 
@@ -100,6 +107,28 @@ export async function enqueueReport(
   actor: ReportActor,
   input: GenerateReportInput,
 ) {
+  const normalizedBlocks = [...new Set(input.requestedBlocks?.length ? input.requestedBlocks : DEFAULT_REPORT_BLOCKS)];
+  const requestKey = String(input.idempotencyKey || '').trim().slice(0, 160);
+  if (requestKey) {
+    const existingJob = await app.prisma.job.findFirst({
+      where: {
+        organizationId: actor.organizationId,
+        dedupeKey: `report.manual:${requestKey}`,
+      },
+      select: { payload: true },
+    });
+    const payload = existingJob?.payload && typeof existingJob.payload === 'object' && !Array.isArray(existingJob.payload)
+      ? existingJob.payload as Record<string, unknown>
+      : {};
+    const reportId = typeof payload.reportId === 'string' ? payload.reportId : '';
+    if (reportId) {
+      const existingReport = await app.prisma.report.findFirst({
+        where: { id: reportId, organizationId: actor.organizationId },
+      });
+      if (existingReport) return existingReport;
+    }
+  }
+
   const existing = await app.prisma.report.findFirst({
     where: {
       organizationId: actor.organizationId,
@@ -129,8 +158,8 @@ export async function enqueueReport(
       data: {
         organizationId: actor.organizationId,
         type: 'report.generate',
-        payload: { reportId: created.id },
-        dedupeKey: `report.generate:${created.id}`,
+        payload: { reportId: created.id, requestedBlocks: normalizedBlocks },
+        dedupeKey: requestKey ? `report.manual:${requestKey}` : `report.generate:${created.id}`,
         maxAttempts: 3,
       },
     });
@@ -139,6 +168,8 @@ export async function enqueueReport(
       type: created.type,
       periodStart: created.periodStart.toISOString(),
       periodEnd: created.periodEnd.toISOString(),
+      requestedBlocks: normalizedBlocks,
+      idempotentRequest: Boolean(requestKey),
     });
 
     await tx.auditLog.create({
@@ -167,6 +198,47 @@ export async function enqueueReport(
   });
 
   return report;
+}
+
+export async function validateReportSchedules(
+  app: FastifyInstance,
+  organizationId: string,
+  schedules: ReportScheduleInput[],
+) {
+  const capabilities = getReportDeliveryCapabilities();
+  for (const schedule of schedules) {
+    if (!schedule.enabled) continue;
+    const capability = capabilities[schedule.channel];
+    if (!capability.available) {
+      throw new AppError({
+        code: capability.reasonCode || 'REPORT_DELIVERY_PROVIDER_NOT_CONFIGURED',
+        message: schedule.channel === 'email'
+          ? 'Email-доставка отчётов пока не настроена'
+          : 'Telegram-доставка отчётов пока не настроена',
+        statusCode: 409,
+      });
+    }
+    if (schedule.channel === 'email' && !String(schedule.destination || '').trim()) {
+      const fallback = await app.prisma.organizationMember.findFirst({
+        where: {
+          organizationId,
+          status: 'ACTIVE',
+          role: { in: ['OWNER', 'ADMIN'] },
+          user: { status: 'ACTIVE', email: { not: null } },
+        },
+        select: { user: { select: { email: true } } },
+        orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+      });
+      if (!String(fallback?.user.email || '').trim()) {
+        throw new AppError({
+          code: 'REPORT_EMAIL_DESTINATION_REQUIRED',
+          message: 'Укажите email для доставки отчёта',
+          statusCode: 422,
+        });
+      }
+    }
+  }
+  return schedules;
 }
 
 export async function saveReportSchedules(
