@@ -188,19 +188,67 @@ export async function revokeOwnSession(app: FastifyInstance, request: FastifyReq
   if (sessionId === request.auth.sessionId) {
     throw new AppError({ code: 'CURRENT_SESSION_PROTECTED', message: 'Текущую сессию завершайте через кнопку «Выйти»', statusCode: 409 });
   }
-  const result = await app.prisma.session.updateMany({
-    where: { id: sessionId, userId: request.auth.userId, revokedAt: null },
-    data: { revokedAt: new Date() },
+
+  const now = new Date();
+  const revoked = await app.prisma.$transaction(async (tx) => {
+    const session = await tx.session.findFirst({
+      where: { id: sessionId, userId: request.auth!.userId, revokedAt: null },
+      select: { id: true, activeOrganizationId: true },
+    });
+    if (!session) {
+      throw new AppError({ code: 'SESSION_NOT_FOUND', message: 'Сессия не найдена', statusCode: 404 });
+    }
+
+    await tx.session.update({ where: { id: session.id }, data: { revokedAt: now } });
+    await tx.auditLog.create({
+      data: {
+        organizationId: request.auth!.organizationId ?? session.activeOrganizationId,
+        actorUserId: request.auth!.userId,
+        action: 'profile.session.revoked',
+        entityType: 'session',
+        entityId: session.id,
+        metadata: { currentSessionId: request.auth!.sessionId },
+        ipAddress: request.ip,
+        userAgent: String(request.headers['user-agent'] ?? '').slice(0, 2048),
+      },
+    });
+    return session.id;
   });
-  if (!result.count) throw new AppError({ code: 'SESSION_NOT_FOUND', message: 'Сессия не найдена', statusCode: 404 });
+
+  request.log.info({ authEvent: 'session_revoked', sessionId: revoked, userId: request.auth.userId }, 'User session revoked');
   return getProfileSnapshot(app, request);
 }
 
 export async function revokeOtherOwnSessions(app: FastifyInstance, request: FastifyRequest) {
   if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
-  await app.prisma.session.updateMany({
-    where: { userId: request.auth.userId, id: { not: request.auth.sessionId }, revokedAt: null },
-    data: { revokedAt: new Date() },
+
+  const now = new Date();
+  const revoked = await app.prisma.$transaction(async (tx) => {
+    const sessions = await tx.session.findMany({
+      where: { userId: request.auth!.userId, id: { not: request.auth!.sessionId }, revokedAt: null },
+      select: { id: true },
+    });
+    if (!sessions.length) return 0;
+
+    const result = await tx.session.updateMany({
+      where: { id: { in: sessions.map((session) => session.id) }, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    await tx.auditLog.create({
+      data: {
+        organizationId: request.auth!.organizationId,
+        actorUserId: request.auth!.userId,
+        action: 'profile.sessions.revoked',
+        entityType: 'user',
+        entityId: request.auth!.userId,
+        metadata: { revokedCount: result.count, protectedSessionId: request.auth!.sessionId },
+        ipAddress: request.ip,
+        userAgent: String(request.headers['user-agent'] ?? '').slice(0, 2048),
+      },
+    });
+    return result.count;
   });
+
+  request.log.info({ authEvent: 'other_sessions_revoked', revokedCount: revoked, userId: request.auth.userId }, 'Other user sessions revoked');
   return getProfileSnapshot(app, request);
 }
