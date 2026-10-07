@@ -180,9 +180,11 @@ async function processReport(payload: any) {
   }
 
   const requestedBlocks: ReportBlock[] = Array.isArray(payload?.requestedBlocks)
-    ? [...new Set(payload.requestedBlocks.filter((value: unknown): value is ReportBlock => (
-        typeof value === 'string' && (REPORT_BLOCKS as readonly string[]).includes(value)
-      )))]
+    ? ([...new Set(
+        payload.requestedBlocks.filter((value: unknown) => (
+          typeof value === 'string' && (REPORT_BLOCKS as readonly string[]).includes(value)
+        )),
+      )] as ReportBlock[])
     : ['rating', 'reviews', 'reputation', 'platforms', 'tasks'];
   const blocks = requestedBlocks.length ? requestedBlocks : ['rating', 'reviews', 'reputation', 'platforms', 'tasks'];
   const periodMs = Math.max(1, report.periodEnd.getTime() - report.periodStart.getTime());
@@ -312,7 +314,7 @@ async function processReport(payload: any) {
 
   await prisma.report.update({
     where: { id: report.id },
-    data: { status: 'READY', data, generatedAt: new Date(), errorMessage: null },
+    data: { status: 'READY', data: JSON.parse(JSON.stringify(data)), generatedAt: new Date(), errorMessage: null },
   });
 
   await createNotificationForOrganization(prisma, {
