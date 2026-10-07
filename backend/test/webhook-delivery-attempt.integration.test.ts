@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { processWebhookDeliveryJob } from '../src/modules/webhooks/webhook-delivery.service.js';
+import { retryWebhookDelivery } from '../src/modules/webhooks/webhook.service.js';
 import { encryptCredentialSecret } from '../src/shared/security/credential-cipher.js';
 
 const integrationDatabaseUrl = process.env.TEST_DATABASE_URL ?? '';
@@ -117,4 +118,75 @@ describeWithPostgres('webhook delivery attempt persistence', () => {
     expect(storedEndpoint.lastDeliveryStatus).toBe('DELIVERED');
     expect(storedEndpoint.lastDeliveryAt).not.toBeNull();
   });
+
+  it('requeues a dead delivery under the retry advisory lock', async () => {
+    const endpoint = await app.prisma.webhookEndpoint.create({
+      data: {
+        organizationId,
+        name: 'Retry endpoint',
+        url: 'https://hooks.example.test/retry',
+        events: ['REVIEW_CREATED'],
+        secretEncrypted: encryptCredentialSecret('whsec_test_retry_secret'),
+        secretHint: 'whsec_retry…',
+        createdByUserId: userId,
+      },
+    });
+    const delivery = await app.prisma.webhookDelivery.create({
+      data: {
+        organizationId,
+        endpointId: endpoint.id,
+        eventId: randomUUID(),
+        eventType: 'REVIEW_CREATED',
+        payload: { retry: true },
+        requestBody: JSON.stringify({ retry: true }),
+        status: 'DEAD',
+        attempts: 3,
+        deadAt: new Date(),
+        lastError: 'WEBHOOK_HTTP_500',
+      },
+    });
+
+    const request = {
+      auth: {
+        organizationId,
+        userId,
+        accessMode: 'DIRECT',
+      },
+      ip: '127.0.0.1',
+      headers: { 'user-agent': 'vitest' },
+    } as unknown as FastifyRequest;
+
+    const result = await retryWebhookDelivery(app, request, delivery.id);
+    expect(result.delivery).toMatchObject({
+      id: delivery.id,
+      status: 'queued',
+      attempts: 3,
+      lastError: null,
+    });
+
+    const stored = await app.prisma.webhookDelivery.findUniqueOrThrow({ where: { id: delivery.id } });
+    expect(stored.status).toBe('QUEUED');
+    expect(stored.deadAt).toBeNull();
+    expect(stored.nextAttemptAt).not.toBeNull();
+
+    const jobs = await app.prisma.job.findMany({
+      where: {
+        organizationId,
+        type: 'webhook.deliver',
+        payload: { path: ['deliveryId'], equals: delivery.id },
+      },
+    });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.status).toBe('QUEUED');
+
+    const audit = await app.prisma.auditLog.findFirst({
+      where: {
+        organizationId,
+        action: 'webhook.delivery.retried',
+        entityId: delivery.id,
+      },
+    });
+    expect(audit).not.toBeNull();
+  });
+
 });
