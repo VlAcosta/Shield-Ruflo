@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { AppError } from '../../core/errors/app-error.js';
 import { env } from '../../config/env.js';
 
+export type OtpDeliveryOutcome = 'accepted' | 'unknown';
+
 type OtpDeliveryInput = {
   phone: string;
   code: string;
@@ -12,6 +14,12 @@ type OtpDeliveryInput = {
 type ExolveMakeVoiceMessageResponse = {
   call_id?: string;
 };
+
+export function classifyOtpHttpStatus(status: number): 'accepted' | 'unknown' | 'rejected' {
+  if (status >= 200 && status < 300) return 'accepted';
+  if (status >= 500) return 'unknown';
+  return 'rejected';
+}
 
 function deliveryError(): AppError {
   return new AppError({
@@ -38,7 +46,7 @@ export function buildExolveOtpText(code: string, ttlSeconds: number): string {
   return `Business Shield. Код подтверждения: ${spokenCode}. Повторяю: ${spokenCode}. Код действует ${minutes} минут.`;
 }
 
-async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInput): Promise<void> {
+async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInput): Promise<OtpDeliveryOutcome> {
   let destination: string;
   try {
     destination = normalizeExolvePhone(input.phone);
@@ -73,8 +81,8 @@ async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInp
       signal: AbortSignal.timeout(env.EXOLVE_TIMEOUT_MS),
     });
   } catch (error) {
-    app.log.error({ err: error, challengeId: input.challengeId }, 'OTP Exolve request failed');
-    throw deliveryError();
+    app.log.warn({ err: error, challengeId: input.challengeId }, 'OTP Exolve request outcome is unknown');
+    return 'unknown';
   }
 
   let payload: ExolveMakeVoiceMessageResponse | null = null;
@@ -84,7 +92,19 @@ async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInp
     payload = null;
   }
 
-  if (!response.ok || !payload?.call_id) {
+  const httpOutcome = classifyOtpHttpStatus(response.status);
+  if (httpOutcome === 'unknown' || (httpOutcome === 'accepted' && !payload?.call_id)) {
+    app.log.warn(
+      {
+        statusCode: response.status,
+        challengeId: input.challengeId,
+        providerAccepted: Boolean(payload?.call_id),
+      },
+      'OTP Exolve delivery outcome is unknown',
+    );
+    return 'unknown';
+  }
+  if (httpOutcome === 'rejected') {
     app.log.error(
       {
         statusCode: response.status,
@@ -106,9 +126,10 @@ async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInp
     },
     'OTP voice delivery accepted by provider',
   );
+  return 'accepted';
 }
 
-async function deliverViaWebhook(app: FastifyInstance, input: OtpDeliveryInput): Promise<void> {
+async function deliverViaWebhook(app: FastifyInstance, input: OtpDeliveryInput): Promise<OtpDeliveryOutcome> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (env.AUTH_OTP_WEBHOOK_TOKEN) {
     headers.authorization = `Bearer ${env.AUTH_OTP_WEBHOOK_TOKEN}`;
@@ -128,20 +149,29 @@ async function deliverViaWebhook(app: FastifyInstance, input: OtpDeliveryInput):
       signal: AbortSignal.timeout(env.AUTH_OTP_WEBHOOK_TIMEOUT_MS),
     });
   } catch (error) {
-    app.log.error({ err: error, challengeId: input.challengeId }, 'OTP webhook request failed');
-    throw deliveryError();
+    app.log.warn({ err: error, challengeId: input.challengeId }, 'OTP webhook request outcome is unknown');
+    return 'unknown';
   }
 
-  if (!response.ok) {
+  const outcome = classifyOtpHttpStatus(response.status);
+  if (outcome === 'unknown') {
+    app.log.warn(
+      { statusCode: response.status, challengeId: input.challengeId },
+      'OTP webhook delivery outcome is unknown',
+    );
+    return 'unknown';
+  }
+  if (outcome === 'rejected') {
     app.log.error(
       { statusCode: response.status, challengeId: input.challengeId },
       'OTP webhook rejected delivery',
     );
     throw deliveryError();
   }
+  return 'accepted';
 }
 
-export async function deliverOtp(app: FastifyInstance, input: OtpDeliveryInput): Promise<void> {
+export async function deliverOtp(app: FastifyInstance, input: OtpDeliveryInput): Promise<OtpDeliveryOutcome> {
   if (env.AUTH_OTP_PROVIDER === 'console') {
     app.log.warn(
       {
@@ -152,13 +182,12 @@ export async function deliverOtp(app: FastifyInstance, input: OtpDeliveryInput):
       },
       'Development OTP delivery. Never use console delivery in production.',
     );
-    return;
+    return 'accepted';
   }
 
   if (env.AUTH_OTP_PROVIDER === 'exolve_voice') {
-    await deliverViaExolveVoice(app, input);
-    return;
+    return deliverViaExolveVoice(app, input);
   }
 
-  await deliverViaWebhook(app, input);
+  return deliverViaWebhook(app, input);
 }
