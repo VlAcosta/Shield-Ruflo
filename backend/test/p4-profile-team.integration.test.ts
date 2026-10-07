@@ -254,6 +254,60 @@ describeWithPostgres('P4 profile and team production flows', () => {
     expect(sessionB.revokedAt).toBeNull();
   });
 
+  it('audits revocation of individual and all other own sessions', async () => {
+    const individualToken = `p4-owner-individual-${randomUUID()}`;
+    const bulkToken = `p4-owner-bulk-${randomUUID()}`;
+    const [individualSession, bulkSession] = await Promise.all([
+      app.prisma.session.create({
+        data: {
+          userId: ownerAId,
+          activeOrganizationId: organizationAId,
+          tokenHash: hashSessionToken(individualToken),
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        },
+      }),
+      app.prisma.session.create({
+        data: {
+          userId: ownerAId,
+          activeOrganizationId: organizationAId,
+          tokenHash: hashSessionToken(bulkToken),
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        },
+      }),
+    ]);
+
+    const individual = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/profile/sessions/${individualSession.id}`,
+      headers: { cookie: ownerACookie },
+    });
+    expect(individual.statusCode).toBe(200);
+    expect((await app.prisma.session.findUniqueOrThrow({ where: { id: individualSession.id } })).revokedAt).not.toBeNull();
+
+    const bulk = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/profile/sessions',
+      headers: { cookie: ownerACookie },
+    });
+    expect(bulk.statusCode).toBe(200);
+    expect((await app.prisma.session.findUniqueOrThrow({ where: { id: bulkSession.id } })).revokedAt).not.toBeNull();
+
+    const current = await app.prisma.session.findFirstOrThrow({ where: { tokenHash: hashSessionToken(ownerAToken) } });
+    expect(current.revokedAt).toBeNull();
+
+    const lifecycleAudit = await app.prisma.auditLog.findMany({
+      where: {
+        actorUserId: ownerAId,
+        action: { in: ['profile.session.revoked', 'profile.sessions.revoked'] },
+      },
+      select: { action: true, entityId: true, metadata: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(lifecycleAudit.map((row) => row.action)).toEqual(['profile.session.revoked', 'profile.sessions.revoked']);
+    expect(lifecycleAudit[0]?.entityId).toBe(individualSession.id);
+    expect(lifecycleAudit[1]?.metadata).toMatchObject({ revokedCount: 1 });
+  });
+
   it('writes audit events for invitation acceptance and team security actions', async () => {
     const actions = await app.prisma.auditLog.findMany({
       where: { organizationId: organizationAId },
