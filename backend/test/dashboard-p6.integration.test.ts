@@ -302,7 +302,7 @@ describeWithPostgres('Dashboard P6 truthful tenant analytics', () => {
         time: '09:00',
         channel: 'email',
         channelLabel: 'Email',
-        enabled: true,
+        enabled: false,
       },
     ];
     const saveSchedules = await app.inject({
