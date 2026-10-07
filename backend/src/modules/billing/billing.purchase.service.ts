@@ -74,6 +74,31 @@ function validateIdempotencyKey(value: string): string {
   return normalized;
 }
 
+function assertIdempotentPurchaseMatch(
+  existing: {
+    organizationId: string;
+    requestedByUserId: string;
+    planCode: string;
+    billingInterval: string;
+  },
+  input: Pick<PurchaseRequestInput, 'organizationId' | 'userId' | 'planCode' | 'billingInterval'>,
+): void {
+  if (existing.organizationId !== input.organizationId || existing.requestedByUserId !== input.userId) {
+    throw new AppError({
+      code: 'IDEMPOTENCY_KEY_CONFLICT',
+      message: 'Idempotency-Key уже использован другим запросом',
+      statusCode: 409,
+    });
+  }
+  if (existing.planCode !== input.planCode || existing.billingInterval !== input.billingInterval) {
+    throw new AppError({
+      code: 'IDEMPOTENCY_PAYLOAD_CONFLICT',
+      message: 'Idempotency-Key уже использован с другими параметрами тарифа',
+      statusCode: 409,
+    });
+  }
+}
+
 export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, input: PurchaseRequestInput) {
   if (!PUBLIC_PLAN_CODES.includes(input.planCode)) {
     throw new AppError({ code: 'BILLING_PLAN_NOT_FOUND', message: 'Тариф недоступен для подключения', statusCode: 404 });
@@ -82,13 +107,7 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
   const idempotencyKey = validateIdempotencyKey(input.idempotencyKey);
   const existing = await app.prisma.billingPurchaseRequest.findUnique({ where: { idempotencyKey } });
   if (existing) {
-    if (existing.organizationId !== input.organizationId || existing.requestedByUserId !== input.userId) {
-      throw new AppError({
-        code: 'IDEMPOTENCY_KEY_CONFLICT',
-        message: 'Idempotency-Key уже использован другим запросом',
-        statusCode: 409,
-      });
-    }
+    assertIdempotentPurchaseMatch(existing, input);
     return {
       mode: 'SALES_ASSISTED' as const,
       paymentCreated: false,
@@ -119,14 +138,17 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
     // Reuse the project's proven PostgreSQL advisory-lock pattern: the lock is
     // transaction-scoped and the SELECT is executed through $queryRaw, not the
     // mutation-oriented $executeRaw API.
-    const lockKey = `billing:purchase:${input.organizationId}`;
+    const lockKey = `billing:purchase:${idempotencyKey}`;
     await tx.$queryRaw<Array<{ acquired: number }>>`
       SELECT 1::int AS acquired
       FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock
     `;
 
     const afterLock = await tx.billingPurchaseRequest.findUnique({ where: { idempotencyKey } });
-    if (afterLock) return afterLock;
+    if (afterLock) {
+      assertIdempotentPurchaseMatch(afterLock, input);
+      return afterLock;
+    }
 
     const created = await tx.billingPurchaseRequest.create({
       data: {
