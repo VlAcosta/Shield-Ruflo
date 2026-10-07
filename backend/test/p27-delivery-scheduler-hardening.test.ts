@@ -125,7 +125,10 @@ describe('P27 delivery idempotency', () => {
           plan: { entitlements: [{ key: 'reports', value: true }] },
         }]),
       },
-      auditLog: { create: auditCreate },
+      auditLog: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: auditCreate,
+      },
     } as unknown as PrismaClient;
 
     const input = {
@@ -149,6 +152,181 @@ describe('P27 delivery idempotency', () => {
     expect(headers['Idempotency-Key']).toBe(expectedEventId);
     expect(headers['X-Business-Shield-Event-Id']).toBe(expectedEventId);
     expect(JSON.parse(String(request?.body))).toMatchObject({ eventId: expectedEventId, to: 'owner@example.test' });
+  });
+
+  it('treats a confirmed report delivery as an idempotent no-op after a worker replay', async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const eventId = reportDeliveryIdempotencyKey({
+      organizationId: '11111111-1111-4111-8111-111111111111',
+      reportId: '22222222-2222-4222-8222-222222222222',
+      delivery: {
+        scheduleId: 'weekly-owner',
+        channel: 'telegram',
+        destination: '123456789',
+        slot: '2026-08-26T13:00',
+      },
+    });
+    const auditCreate = vi.fn();
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce({ id: 'delivered-audit' });
+
+    const prisma = {
+      report: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: '22222222-2222-4222-8222-222222222222',
+          title: 'Weekly reputation',
+          periodStart: new Date('2026-08-19T12:00:00.000Z'),
+          periodEnd: new Date('2026-08-26T12:00:00.000Z'),
+          status: 'READY',
+          generatedAt: new Date('2026-08-26T12:01:00.000Z'),
+          data: {},
+        }),
+      },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId: '11111111-1111-4111-8111-111111111111',
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: true }] },
+        }]),
+      },
+      auditLog: { findFirst, create: auditCreate },
+    } as unknown as PrismaClient;
+
+    await expect(processReportDeliveryJob(prisma, {
+      organizationId: '11111111-1111-4111-8111-111111111111',
+      reportId: '22222222-2222-4222-8222-222222222222',
+      delivery: {
+        scheduleId: 'weekly-owner',
+        channel: 'telegram',
+        destination: '123456789',
+        slot: '2026-08-26T13:00',
+      },
+    })).resolves.toBeUndefined();
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        action: 'report.schedule.delivered',
+        metadata: { path: ['eventId'], equals: eventId },
+      }),
+      select: { id: true },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(auditCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not automatically replay Telegram after an attempted delivery with unknown outcome', async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const auditCreate = vi.fn().mockResolvedValue({ id: 'unknown-audit' });
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'attempted-audit' })
+      .mockResolvedValueOnce(null);
+
+    const prisma = {
+      report: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: '22222222-2222-4222-8222-222222222222',
+          title: 'Weekly reputation',
+          periodStart: new Date('2026-08-19T12:00:00.000Z'),
+          periodEnd: new Date('2026-08-26T12:00:00.000Z'),
+          status: 'READY',
+          generatedAt: new Date('2026-08-26T12:01:00.000Z'),
+          data: {},
+        }),
+      },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId: '11111111-1111-4111-8111-111111111111',
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: true }] },
+        }]),
+      },
+      auditLog: { findFirst, create: auditCreate },
+    } as unknown as PrismaClient;
+
+    let thrown: unknown;
+    try {
+      await processReportDeliveryJob(prisma, {
+        organizationId: '11111111-1111-4111-8111-111111111111',
+        reportId: '22222222-2222-4222-8222-222222222222',
+        delivery: {
+          scheduleId: 'weekly-owner',
+          channel: 'telegram',
+          destination: '123456789',
+          slot: '2026-08-26T13:00',
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject({
+      message: 'REPORT_TELEGRAM_DELIVERY_OUTCOME_UNKNOWN',
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+    expect(auditCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'report.schedule.delivery_outcome_unknown',
+        metadata: expect.objectContaining({
+          reasonCode: 'REPORT_TELEGRAM_DELIVERY_OUTCOME_UNKNOWN',
+        }),
+      }),
+    });
+  });
+
+  it('allows email replay after an uncertain local crash because the receiver gets the stable idempotency key', async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue(new Response(null, { status: 202 }));
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'attempted-audit' });
+    const auditCreate = vi.fn().mockResolvedValue({ id: 'audit' });
+
+    const prisma = {
+      report: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: '22222222-2222-4222-8222-222222222222',
+          title: 'Weekly reputation',
+          periodStart: new Date('2026-08-19T12:00:00.000Z'),
+          periodEnd: new Date('2026-08-26T12:00:00.000Z'),
+          status: 'READY',
+          generatedAt: new Date('2026-08-26T12:01:00.000Z'),
+          data: {},
+        }),
+      },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{
+          organizationId: '11111111-1111-4111-8111-111111111111',
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+          plan: { entitlements: [{ key: 'reports', value: true }] },
+        }]),
+      },
+      auditLog: { findFirst, create: auditCreate },
+    } as unknown as PrismaClient;
+
+    const input = {
+      organizationId: '11111111-1111-4111-8111-111111111111',
+      reportId: '22222222-2222-4222-8222-222222222222',
+      delivery: {
+        scheduleId: 'weekly-owner',
+        channel: 'email' as const,
+        destination: 'owner@example.test',
+        slot: '2026-08-26T13:00',
+      },
+    };
+
+    await processReportDeliveryJob(prisma, input);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, request] = fetchMock.mock.calls[0]!;
+    const headers = request?.headers as Record<string, string>;
+    expect(headers['Idempotency-Key']).toBe(reportDeliveryIdempotencyKey(input));
+    expect(auditCreate).toHaveBeenCalledTimes(2);
   });
 
   it('blocks an already queued external delivery after reports entitlement is removed', async () => {
