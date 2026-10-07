@@ -56,7 +56,13 @@ describe('P27 report scheduler pagination', () => {
       $transaction: vi.fn(async (callback: (client: typeof tx) => Promise<boolean>) => callback(tx)),
     } as unknown as PrismaClient;
 
-    const result = await scheduleDueReports(prisma, { now });
+    const result = await scheduleDueReports(prisma, {
+      now,
+      deliveryCapabilities: {
+        email: { available: true, provider: 'webhook', reasonCode: null },
+        telegram: { available: true, reasonCode: null },
+      },
+    });
 
     expect(result).toEqual({ scheduled: 1, skipped: 0 });
     expect(findMetadata).toHaveBeenCalledTimes(2);
