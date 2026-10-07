@@ -168,23 +168,87 @@ describeWithPostgres('Operations P10 tenant isolation and permissions', () => {
     });
     expect(analystCreate.statusCode).toBe(403);
 
+    const idempotencyKey = `report-create-${randomUUID()}`;
+    const createPayload = {
+      type: 'weekly_reputation',
+      title: 'Weekly reputation report',
+      periodStart: '2026-08-01T00:00:00.000Z',
+      periodEnd: '2026-08-08T00:00:00.000Z',
+      requestedBlocks: ['rating', 'reviews', 'tasks', 'recommendations'],
+    };
     const ownerCreate = await app.inject({
+      method: 'POST',
+      url: '/api/v1/reports',
+      headers: { cookie: ownerCookie, 'idempotency-key': idempotencyKey },
+      payload: createPayload,
+    });
+    expect(ownerCreate.statusCode).toBe(202);
+    const reportId = ownerCreate.json().report.id as string;
+
+    const repeatedCreate = await app.inject({
+      method: 'POST',
+      url: '/api/v1/reports',
+      headers: { cookie: ownerCookie, 'idempotency-key': idempotencyKey },
+      payload: createPayload,
+    });
+    expect(repeatedCreate.statusCode).toBe(202);
+    expect(repeatedCreate.json().report.id).toBe(reportId);
+
+    const generationJob = await app.prisma.job.findFirstOrThrow({
+      where: {
+        organizationId: organizationAId,
+        type: 'report.generate',
+        dedupeKey: `report.manual:${idempotencyKey}`,
+      },
+    });
+    expect(generationJob).toMatchObject({ status: 'QUEUED', maxAttempts: 3 });
+    expect(generationJob.payload).toMatchObject({
+      reportId,
+      requestedBlocks: ['rating', 'reviews', 'tasks', 'recommendations'],
+    });
+    await expect(app.prisma.report.count({
+      where: {
+        organizationId: organizationAId,
+        type: 'weekly_reputation',
+        periodStart: new Date('2026-08-01T00:00:00.000Z'),
+        periodEnd: new Date('2026-08-08T00:00:00.000Z'),
+      },
+    })).resolves.toBe(1);
+    await expect(app.prisma.auditLog.findFirstOrThrow({ where: { organizationId: organizationAId, action: 'report.created', entityId: reportId } }))
+      .resolves.toMatchObject({ actorUserId: ownerAId });
+
+    const unsupportedBlock = await app.inject({
       method: 'POST',
       url: '/api/v1/reports',
       headers: { cookie: ownerCookie },
       payload: {
-        type: 'weekly_reputation',
-        title: 'Weekly reputation report',
-        periodStart: '2026-08-01T00:00:00.000Z',
-        periodEnd: '2026-08-08T00:00:00.000Z',
+        ...createPayload,
+        title: 'Invalid report blocks',
+        requestedBlocks: ['rating', 'server-secrets'],
       },
     });
-    expect(ownerCreate.statusCode).toBe(202);
-    const reportId = ownerCreate.json().report.id as string;
-    await expect(app.prisma.job.findFirstOrThrow({ where: { organizationId: organizationAId, type: 'report.generate', payload: { path: ['reportId'], equals: reportId } } }))
-      .resolves.toMatchObject({ status: 'QUEUED', maxAttempts: 3 });
-    await expect(app.prisma.auditLog.findFirstOrThrow({ where: { organizationId: organizationAId, action: 'report.created', entityId: reportId } }))
-      .resolves.toMatchObject({ actorUserId: ownerAId });
+    expect(unsupportedBlock.statusCode).toBe(400);
+
+    const unavailableDelivery = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/reports/schedules',
+      headers: { cookie: ownerCookie },
+      payload: {
+        schedules: [{
+          id: 'weekly-email',
+          title: 'Weekly delivery',
+          day: 'mon',
+          dayLabel: 'Пн',
+          time: '09:00',
+          channel: 'email',
+          channelLabel: 'Email',
+          destination: 'owner@example.test',
+          enabled: true,
+        }],
+      },
+    });
+    expect(unavailableDelivery.statusCode).toBe(409);
+    expect(unavailableDelivery.json().error.code).toBe('REPORT_EMAIL_PROVIDER_NOT_CONFIGURED');
 
     const foreign = await app.inject({
       method: 'GET',
