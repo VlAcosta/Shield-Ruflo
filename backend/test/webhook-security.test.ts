@@ -3,6 +3,7 @@ import {
   isBlockedWebhookAddress,
   resolveSafeWebhookTarget,
   validateWebhookUrlShape,
+  webhookDeliveryHeaders,
 } from '../src/modules/webhooks/webhook-security.js';
 
 describe('webhook SSRF target validation', () => {
@@ -29,6 +30,23 @@ describe('webhook SSRF target validation', () => {
       { address: '203.0.113.10', family: 4 },
       { address: '127.0.0.1', family: 4 },
     ])).rejects.toThrow('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
+  });
+
+  it('uses the stable event id as the webhook retry idempotency key', () => {
+    const headers = webhookDeliveryHeaders({
+      body: '{"id":"event-1"}',
+      eventId: '11111111-1111-4111-8111-111111111111',
+      eventType: 'review.created',
+      timestamp: 1_800_000_000,
+      attempt: 3,
+      signature: 'v1=abc123',
+    });
+
+    expect(headers['idempotency-key']).toBe('11111111-1111-4111-8111-111111111111');
+    expect(headers['x-business-shield-event-id']).toBe('11111111-1111-4111-8111-111111111111');
+    expect(headers['x-business-shield-attempt']).toBe('3');
+    expect(headers['x-business-shield-timestamp']).toBe('1800000000');
+    expect(headers['x-business-shield-signature']).toBe('v1=abc123');
   });
 
   it('keeps HTTPS and credential restrictions intact', () => {
