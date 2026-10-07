@@ -34,7 +34,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/profile/sessions', { preHandler: app.authenticate }, async (request) => revokeOtherOwnSessions(app, request));
 
   app.patch('/profile/users/:memberId', {
-    preHandler: [app.authenticate, app.authorize('team.manage_roles')],
+    preHandler: [app.authenticate, app.authorize('team.manage'), app.authorize('team.manage_roles')],
   }, async (request) => {
     const { memberId } = memberIdParamsSchema.parse(request.params);
     const body = updateMemberSchema.parse(request.body);
@@ -52,7 +52,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.delete('/profile/users/:memberId', {
-    preHandler: [app.authenticate, app.authorize('team.remove')],
+    preHandler: [app.authenticate, app.authorize('team.manage'), app.authorize('team.remove')],
   }, async (request) => {
     const { memberId } = memberIdParamsSchema.parse(request.params);
     await removeTeamMember(app, request, memberId);
