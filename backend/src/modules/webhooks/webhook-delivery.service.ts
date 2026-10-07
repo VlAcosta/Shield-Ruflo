@@ -230,6 +230,7 @@ export async function syncWebhookDeliveryJobFailure(
   prisma: PrismaClient,
   input: {
     deliveryId: string;
+    jobId: string;
     retryable: boolean;
     exhausted: boolean;
     nextRunAt: Date | null;
@@ -238,13 +239,31 @@ export async function syncWebhookDeliveryJobFailure(
 ) {
   const dead = !input.retryable || input.exhausted;
   const now = new Date();
-  await prisma.webhookDelivery.updateMany({
-    where: { id: input.deliveryId, status: { in: ['QUEUED', 'RETRYING', 'DEAD'] } },
-    data: {
-      status: dead ? 'DEAD' : 'RETRYING',
-      deadAt: dead ? now : null,
-      nextAttemptAt: dead ? null : input.nextRunAt,
-      lastError: snippet(input.error),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired
+      FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-failure-sync:${input.deliveryId}`}, 0))) AS advisory_lock
+    `;
+
+    const activeReplacement = await tx.job.findFirst({
+      where: {
+        id: { not: input.jobId },
+        type: 'webhook.deliver',
+        status: { in: ['QUEUED', 'RUNNING'] },
+        payload: { path: ['deliveryId'], equals: input.deliveryId },
+      },
+      select: { id: true },
+    });
+    if (activeReplacement) return;
+
+    await tx.webhookDelivery.updateMany({
+      where: { id: input.deliveryId, status: { in: ['QUEUED', 'RETRYING', 'DEAD'] } },
+      data: {
+        status: dead ? 'DEAD' : 'RETRYING',
+        deadAt: dead ? now : null,
+        nextAttemptAt: dead ? null : input.nextRunAt,
+        lastError: snippet(input.error),
+      },
+    });
   });
 }
