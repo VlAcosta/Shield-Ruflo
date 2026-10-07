@@ -93,8 +93,9 @@ External HTTPS:
 
 The smoke script checks:
 
-- `https://bis-shield.ru/` → `200`;
+- `https://bis-shield.ru/` → `200` and contains the Business Shield frontend shell marker;
 - `https://bis-shield.ru/reviews` → `200` to prove SPA fallback routing;
+- `https://bis-shield.ru/api/v1/meta` → `200`, reports `environment=production` and `apiVersion=v1`;
 - `https://bis-shield.ru/api/v1/me` → `401` for an unauthenticated request, proving that HTTPS/nginx reaches the API authorization boundary.
 
 To smoke-test another release hostname without editing the script:
