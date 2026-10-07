@@ -93,12 +93,13 @@ async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInp
   }
 
   const httpOutcome = classifyOtpHttpStatus(response.status);
-  if (httpOutcome === 'unknown' || (httpOutcome === 'accepted' && !payload?.call_id)) {
+  const providerCallId = payload?.call_id ?? '';
+  if (httpOutcome === 'unknown' || (httpOutcome === 'accepted' && !providerCallId)) {
     app.log.warn(
       {
         statusCode: response.status,
         challengeId: input.challengeId,
-        providerAccepted: Boolean(payload?.call_id),
+        providerAccepted: Boolean(providerCallId),
       },
       'OTP Exolve delivery outcome is unknown',
     );
@@ -109,7 +110,7 @@ async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInp
       {
         statusCode: response.status,
         challengeId: input.challengeId,
-        providerAccepted: Boolean(payload?.call_id),
+        providerAccepted: Boolean(providerCallId),
       },
       'OTP Exolve rejected delivery',
     );
@@ -122,7 +123,7 @@ async function deliverViaExolveVoice(app: FastifyInstance, input: OtpDeliveryInp
       provider: 'exolve',
       phone: input.phone.replace(/.(?=.{4})/g, '*'),
       challengeId: input.challengeId,
-      providerCallId: payload.call_id,
+      providerCallId,
     },
     'OTP voice delivery accepted by provider',
   );
