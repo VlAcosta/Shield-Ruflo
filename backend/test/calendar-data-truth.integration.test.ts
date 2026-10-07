@@ -164,7 +164,7 @@ describeWithPostgres('dashboard calendar data truth', () => {
 
     const analystAfter = await app.inject({ method: 'GET', url: '/api/v1/calendar/events', headers: bearer(analystToken) });
     expect(analystAfter.statusCode).toBe(200);
-    expect(analystAfter.json().items).toHaveLength(1);
+    expect(analystAfter.json().items).toHaveLength(2);
     expect(analystAfter.json().items[0]).toMatchObject({ id: created.id, title: payload.title, date: payload.date });
 
     const crossTenantDelete = await app.inject({
@@ -181,6 +181,14 @@ describeWithPostgres('dashboard calendar data truth', () => {
     });
     expect(deleteResponse.statusCode).toBe(200);
     expect(deleteResponse.json()).toEqual({ deleted: true });
+    expect(await app.prisma.calendarEvent.count({ where: { organizationId: organization.id } })).toBe(1);
+
+    const concurrentDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/calendar/events/${concurrentA.json().event.id}`,
+      headers: bearer(ownerToken),
+    });
+    expect(concurrentDeleteResponse.statusCode).toBe(200);
     expect(await app.prisma.calendarEvent.count({ where: { organizationId: organization.id } })).toBe(0);
 
     const auditRows = await app.prisma.auditLog.findMany({
