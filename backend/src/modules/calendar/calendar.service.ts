@@ -87,6 +87,18 @@ export async function createCalendarEvent(
   }
 
   const created = await app.prisma.$transaction(async (tx) => {
+    if (idempotencyKey) {
+      const lockKey = `calendar-event:${actor.organizationId}:${idempotencyKey}`;
+      await tx.$queryRaw<Array<{ acquired: number }>>`
+        SELECT 1::int AS acquired FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock
+      `;
+
+      const duplicate = await tx.calendarEvent.findFirst({
+        where: { organizationId: actor.organizationId, idempotencyKey },
+      });
+      if (duplicate) return duplicate;
+    }
+
     const event = await tx.calendarEvent.create({
       data: {
         organizationId: actor.organizationId,
