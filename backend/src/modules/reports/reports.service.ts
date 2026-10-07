@@ -143,6 +143,30 @@ export async function enqueueReport(
   if (existing) return existing;
 
   const report = await app.prisma.$transaction(async (tx) => {
+    if (requestKey) {
+      const lockKey = `report-manual:${actor.organizationId}:${requestKey}`;
+      await tx.$queryRaw<Array<{ acquired: number }>>`
+        SELECT 1::int AS acquired FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock
+      `;
+      const duplicateJob = await tx.job.findFirst({
+        where: {
+          organizationId: actor.organizationId,
+          dedupeKey: `report.manual:${requestKey}`,
+        },
+        select: { payload: true },
+      });
+      const duplicatePayload = duplicateJob?.payload && typeof duplicateJob.payload === 'object' && !Array.isArray(duplicateJob.payload)
+        ? duplicateJob.payload as Record<string, unknown>
+        : {};
+      const duplicateReportId = typeof duplicatePayload.reportId === 'string' ? duplicatePayload.reportId : '';
+      if (duplicateReportId) {
+        const duplicateReport = await tx.report.findFirst({
+          where: { id: duplicateReportId, organizationId: actor.organizationId },
+        });
+        if (duplicateReport) return duplicateReport;
+      }
+    }
+
     const created = await tx.report.create({
       data: {
         organizationId: actor.organizationId,
