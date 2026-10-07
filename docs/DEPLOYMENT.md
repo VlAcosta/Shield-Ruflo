@@ -132,11 +132,13 @@ The tenant budget must be greater than or equal to the per-user budget. A reject
 
 ## Production preflight
 
-Before a GA/production-mode release:
+Before a GA/production-mode release, pass the exact approved release commit:
 
 ```bash
-./scripts/production-preflight.sh
+EXPECTED_SHA=<approved-release-sha> ./scripts/production-preflight.sh
 ```
+
+The preflight rejects tracked local modifications and fails if `HEAD` does not resolve to the supplied `EXPECTED_SHA`. Running without `EXPECTED_SHA` remains useful for diagnostics, but an actual production rollout should always provide the approved full release SHA.
 
 The preflight must reject at least:
 
@@ -147,7 +149,9 @@ The preflight must reject at least:
 - a missing/default operations metrics token;
 - invalid expensive-AI budget configuration;
 - missing production build artifacts;
-- unavailable database/API/worker prerequisites.
+- unavailable database/API/worker prerequisites;
+- tracked local modifications in the production checkout;
+- a deployed Git commit that does not match the approved `EXPECTED_SHA`.
 
 A production gate is complete only when **both** `production-preflight.sh` on the host and `production-smoke.sh` against the public HTTPS origin pass.
 

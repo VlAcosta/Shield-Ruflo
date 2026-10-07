@@ -20,6 +20,20 @@ ok() {
 [[ -f "$BACKEND/dist/worker.js" ]] || fail "Backend worker build is missing"
 [[ -f "$BACKEND/.env" ]] || fail "Backend .env is missing"
 
+CURRENT_SHA="$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null)" || fail "Project directory is not a valid Git checkout"
+TRACKED_DIRTY="$(git -C "$ROOT" status --porcelain --untracked-files=no)" || fail "Unable to inspect Git working tree"
+[[ -z "$TRACKED_DIRTY" ]] || fail "Tracked production files contain local modifications"
+
+if [[ -n "${EXPECTED_SHA:-}" ]]; then
+  EXPECTED_COMMIT="$(git -C "$ROOT" rev-parse --verify "${EXPECTED_SHA}^{commit}" 2>/dev/null)" \
+    || fail "EXPECTED_SHA does not resolve to a commit in the production checkout: $EXPECTED_SHA"
+  [[ "$CURRENT_SHA" == "$EXPECTED_COMMIT" ]] \
+    || fail "Production SHA mismatch: expected $EXPECTED_COMMIT, found $CURRENT_SHA"
+  ok "Production Git SHA matches EXPECTED_SHA ($CURRENT_SHA)"
+else
+  ok "Production Git checkout is clean at $CURRENT_SHA (EXPECTED_SHA not provided)"
+fi
+
 ok "Production artifacts exist"
 
 NODE_MAJOR="$(node -p "Number(process.versions.node.split('.')[0])")"
