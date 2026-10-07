@@ -240,7 +240,10 @@ export async function syncWebhookDeliveryJobFailure(
   const dead = !input.retryable || input.exhausted;
   const now = new Date();
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-failure-sync:${input.deliveryId}`}, 0))`;
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired
+      FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-failure-sync:${input.deliveryId}`}, 0))) AS advisory_lock
+    `;
 
     const activeReplacement = await tx.job.findFirst({
       where: {
