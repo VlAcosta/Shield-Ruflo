@@ -76,7 +76,7 @@ describeWithPostgres('billing purchase idempotency isolation', () => {
     expect((rejected[0]?.reason as AppError).code).toBe('IDEMPOTENCY_KEY_CONFLICT');
 
     const stored = await app.prisma.billingPurchaseRequest.findUniqueOrThrow({ where: { idempotencyKey } });
-    expect(stored.organizationId).toBe(fulfilled[0]!.value.request.id === stored.id ? stored.organizationId : stored.organizationId);
+    expect(fulfilled[0]!.value.request.id).toBe(stored.id);
     expect([first.organizationId, second.organizationId]).toContain(stored.organizationId);
   });
 
