@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { reportEntitledOrganizationIds } from './report-entitlement.service.js';
+import { getReportDeliveryCapabilities } from './reports.service.js';
 
 const REPORT_SCHEDULE_KEY_PREFIX = 'reports:schedules:';
 const REPORT_SCHEDULE_PAGE_SIZE = 500;
@@ -121,8 +122,15 @@ async function scheduleMetadataBatch(
       continue;
     }
 
+    const deliveryCapabilities = getReportDeliveryCapabilities();
     for (const schedule of schedules) {
-      if (!schedule.enabled || !validSchedule(schedule) || local.day !== schedule.day || local.time < schedule.time) {
+      if (
+        !schedule.enabled
+        || !validSchedule(schedule)
+        || !deliveryCapabilities[schedule.channel].available
+        || local.day !== schedule.day
+        || local.time < schedule.time
+      ) {
         skipped += 1;
         continue;
       }
