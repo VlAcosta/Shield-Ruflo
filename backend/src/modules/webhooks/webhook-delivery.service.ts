@@ -73,7 +73,10 @@ async function recordAttempt(
   },
 ) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-attempt:${input.deliveryId}`}, 0))`;
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired
+      FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-attempt:${input.deliveryId}`}, 0))) AS advisory_lock
+    `;
     const current = await tx.webhookDelivery.findUnique({ where: { id: input.deliveryId } });
     if (!current) throw new Error('WEBHOOK_DELIVERY_NOT_FOUND');
     const attemptNumber = current.attempts + 1;

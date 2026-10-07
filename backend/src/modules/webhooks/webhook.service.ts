@@ -372,7 +372,10 @@ export async function retryWebhookDelivery(app: FastifyInstance, request: Fastif
   const now = new Date();
 
   const result = await app.prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-retry:${deliveryId}`}, 0))`;
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired
+      FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`webhook-retry:${deliveryId}`}, 0))) AS advisory_lock
+    `;
     const delivery = await tx.webhookDelivery.findFirst({
       where: { id: deliveryId, organizationId },
       include: { endpoint: true },
