@@ -160,6 +160,62 @@ export async function enqueueReportDelivery(
   });
 }
 
+async function deliveryAuditExists(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    reportId: string;
+    action: 'report.schedule.delivery_attempted' | 'report.schedule.delivered' | 'report.schedule.delivery_outcome_unknown';
+    eventId: string;
+  },
+): Promise<boolean> {
+  const row = await prisma.auditLog.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      action: input.action,
+      entityType: 'Report',
+      entityId: input.reportId,
+      metadata: { path: ['eventId'], equals: input.eventId },
+    },
+    select: { id: true },
+  });
+  return Boolean(row);
+}
+
+async function markUnknownTelegramDelivery(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    reportId: string;
+    delivery: ScheduledReportDelivery;
+    eventId: string;
+  },
+) {
+  const exists = await deliveryAuditExists(prisma, {
+    organizationId: input.organizationId,
+    reportId: input.reportId,
+    action: 'report.schedule.delivery_outcome_unknown',
+    eventId: input.eventId,
+  });
+  if (exists) return;
+
+  await prisma.auditLog.create({
+    data: {
+      organizationId: input.organizationId,
+      action: 'report.schedule.delivery_outcome_unknown',
+      entityType: 'Report',
+      entityId: input.reportId,
+      metadata: {
+        scheduleId: input.delivery.scheduleId,
+        channel: input.delivery.channel,
+        slot: input.delivery.slot,
+        eventId: input.eventId,
+        reasonCode: 'REPORT_TELEGRAM_DELIVERY_OUTCOME_UNKNOWN',
+      },
+    },
+  }).catch(() => null);
+}
+
 export async function processReportDeliveryJob(
   prisma: PrismaClient,
   input: { organizationId: string; reportId: string; delivery: ScheduledReportDelivery },
@@ -186,6 +242,35 @@ export async function processReportDeliveryJob(
 
   const eventId = reportDeliveryIdempotencyKey(input);
   const text = reportText(report);
+
+  const alreadyDelivered = await deliveryAuditExists(prisma, {
+    organizationId: input.organizationId,
+    reportId: report.id,
+    action: 'report.schedule.delivered',
+    eventId,
+  });
+  if (alreadyDelivered) return;
+
+  const previousAttempt = await deliveryAuditExists(prisma, {
+    organizationId: input.organizationId,
+    reportId: report.id,
+    action: 'report.schedule.delivery_attempted',
+    eventId,
+  });
+
+  // Telegram sendMessage has no receiver idempotency key. If a previous worker
+  // persisted "attempted" but never persisted "delivered", the remote outcome is
+  // unknowable after a crash. Automatic replay could duplicate the report, so
+  // fence the delivery as terminal/unknown and require explicit operator action.
+  if (input.delivery.channel === 'telegram' && previousAttempt) {
+    await markUnknownTelegramDelivery(prisma, {
+      organizationId: input.organizationId,
+      reportId: report.id,
+      delivery: input.delivery,
+      eventId,
+    });
+    throw new ReportDeliveryError('REPORT_TELEGRAM_DELIVERY_OUTCOME_UNKNOWN');
+  }
 
   // Persist the attempt before the external side effect. If the post-send audit
   // fails, the already successful delivery must not be retried solely because
