@@ -256,15 +256,23 @@ export async function processReplyPublishJob(
       reason: 'PROVIDER_REPLY_OUTCOME_UNKNOWN',
     });
   } catch (error) {
-    if (error instanceof ProviderAdapterError && error.retryable) {
+    if (!(error instanceof ProviderAdapterError) || error.retryable) {
       await enqueueReplyReconciliationAfterUnknown(prisma, {
         ...input,
-        reason: error.code,
+        reason: error instanceof ProviderAdapterError
+          ? error.code
+          : 'PROVIDER_REPLY_OUTCOME_UNKNOWN',
       });
       return;
     }
-    const message = error instanceof ProviderAdapterError ? error.code : error instanceof Error ? error.message : 'PROVIDER_REPLY_FAILED';
-    await prisma.reviewReply.update({ where: { id: input.replyId }, data: { status: 'PUBLISH_FAILED', failedReason: message.slice(0, 1000), retryCount: { increment: 1 } } });
+    await prisma.reviewReply.update({
+      where: { id: input.replyId },
+      data: {
+        status: 'PUBLISH_FAILED',
+        failedReason: error.code.slice(0, 1000),
+        retryCount: { increment: 1 },
+      },
+    });
   }
 }
 
