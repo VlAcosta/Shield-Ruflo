@@ -71,8 +71,32 @@ function isPrivateIpv4(address: string): boolean {
     || (a >= 224 && a <= 255);
 }
 
+function normalizeIpLiteral(address: string): string {
+  const value = address.trim();
+  if (value.startsWith('[') && value.endsWith(']')) return value.slice(1, -1);
+  return value;
+}
+
 function normalizeIpv6(address: string): string {
-  return address.toLowerCase().split('%')[0] ?? address.toLowerCase();
+  const literal = normalizeIpLiteral(address);
+  return literal.toLowerCase().split('%')[0] ?? literal.toLowerCase();
+}
+
+function mappedIpv4FromIpv6(address: string): string | null {
+  const value = normalizeIpv6(address);
+  const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(value)?.[1];
+  if (dotted) return dotted;
+
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(value);
+  if (!hex) return null;
+  const high = Number.parseInt(hex[1]!, 16);
+  const low = Number.parseInt(hex[2]!, 16);
+  return [
+    (high >> 8) & 0xff,
+    high & 0xff,
+    (low >> 8) & 0xff,
+    low & 0xff,
+  ].join('.');
 }
 
 function isPrivateIpv6(address: string): boolean {
@@ -81,14 +105,15 @@ function isPrivateIpv6(address: string): boolean {
   if (value.startsWith('fc') || value.startsWith('fd')) return true;
   if (/^fe[89ab]/.test(value)) return true;
   if (value.startsWith('ff')) return true;
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(value)?.[1];
+  const mapped = mappedIpv4FromIpv6(value);
   return mapped ? isPrivateIpv4(mapped) : false;
 }
 
 export function isBlockedWebhookAddress(address: string): boolean {
-  const family = net.isIP(address);
-  if (family === 4) return isPrivateIpv4(address);
-  if (family === 6) return isPrivateIpv6(address);
+  const literal = normalizeIpLiteral(address);
+  const family = net.isIP(literal);
+  if (family === 4) return isPrivateIpv4(literal);
+  if (family === 6) return isPrivateIpv6(literal);
   return true;
 }
 
@@ -104,8 +129,9 @@ export function validateWebhookUrlShape(rawUrl: string): URL {
   if (url.hostname.toLowerCase() === 'localhost' || url.hostname.toLowerCase().endsWith('.localhost')) {
     throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
   }
-  const literalFamily = net.isIP(url.hostname);
-  if (literalFamily && isBlockedWebhookAddress(url.hostname)) throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
+  const literalHostname = normalizeIpLiteral(url.hostname);
+  const literalFamily = net.isIP(literalHostname);
+  if (literalFamily && isBlockedWebhookAddress(literalHostname)) throw new Error('WEBHOOK_PRIVATE_TARGET_FORBIDDEN');
   return url;
 }
 
@@ -121,10 +147,11 @@ const defaultResolver: WebhookResolver = async (hostname) => dns.lookup(hostname
 
 export async function resolveSafeWebhookTarget(rawUrl: string, resolver: WebhookResolver = defaultResolver): Promise<ResolvedWebhookTarget> {
   const url = validateWebhookUrlShape(rawUrl);
-  const literalFamily = net.isIP(url.hostname);
-  if (literalFamily) return { url, address: url.hostname, family: literalFamily as 4 | 6 };
+  const hostname = normalizeIpLiteral(url.hostname);
+  const literalFamily = net.isIP(hostname);
+  if (literalFamily) return { url, address: hostname, family: literalFamily as 4 | 6 };
 
-  const addresses = await resolver(url.hostname);
+  const addresses = await resolver(hostname);
   if (!addresses.length) throw new Error('WEBHOOK_DNS_EMPTY');
   const normalized = addresses.map((item) => ({
     address: item.address,
