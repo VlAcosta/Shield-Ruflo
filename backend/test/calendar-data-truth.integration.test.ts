@@ -124,6 +124,44 @@ describeWithPostgres('dashboard calendar data truth', () => {
     expect(replayResponse.json().event.id).toBe(created.id);
     expect(await app.prisma.calendarEvent.count({ where: { organizationId: organization.id } })).toBe(1);
 
+    const concurrentKey = `calendar-concurrent-${randomUUID()}`;
+    const concurrentPayload = {
+      title: 'Concurrent planning review',
+      date: '2026-08-22',
+      time: '09:15',
+      type: 'work',
+      tone: 'cyan',
+      note: 'Must be created exactly once',
+    };
+    const [concurrentA, concurrentB] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/calendar/events',
+        headers: { ...bearer(ownerToken), 'idempotency-key': concurrentKey },
+        payload: concurrentPayload,
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/calendar/events',
+        headers: { ...bearer(ownerToken), 'idempotency-key': concurrentKey },
+        payload: concurrentPayload,
+      }),
+    ]);
+    expect(concurrentA.statusCode).toBe(201);
+    expect(concurrentB.statusCode).toBe(201);
+    expect(concurrentA.json().event.id).toBe(concurrentB.json().event.id);
+    expect(await app.prisma.calendarEvent.count({
+      where: { organizationId: organization.id, idempotencyKey: concurrentKey },
+    })).toBe(1);
+    expect(await app.prisma.auditLog.count({
+      where: {
+        organizationId: organization.id,
+        entityType: 'calendar_event',
+        entityId: concurrentA.json().event.id,
+        action: 'calendar.event.created',
+      },
+    })).toBe(1);
+
     const analystAfter = await app.inject({ method: 'GET', url: '/api/v1/calendar/events', headers: bearer(analystToken) });
     expect(analystAfter.statusCode).toBe(200);
     expect(analystAfter.json().items).toHaveLength(1);
