@@ -7,6 +7,8 @@ import {
   getReport,
   listReports,
   saveReportSchedules,
+  validateReportSchedules,
+  REPORT_BLOCKS,
   type ReportScheduleInput,
 } from './reports.service.js';
 
@@ -16,7 +18,7 @@ const generateSchema = z.object({
   title: z.string().trim().min(1).max(240),
   periodStart: z.string().datetime(),
   periodEnd: z.string().datetime(),
-  requestedBlocks: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
+  requestedBlocks: z.array(z.enum(REPORT_BLOCKS)).min(1).max(REPORT_BLOCKS.length).optional(),
 }).strict();
 const scheduleSchema = z.object({
   id: z.string().trim().min(1).max(120),
@@ -40,6 +42,13 @@ const scheduleSchema = z.object({
   }
 });
 const schedulesSchema = z.object({ schedules: z.array(scheduleSchema).max(50) }).strict();
+
+function requestIdempotencyKey(request: FastifyRequest) {
+  const header = request.headers['idempotency-key'];
+  const value = Array.isArray(header) ? header[0] : header;
+  const normalized = String(value || '').trim();
+  return normalized ? normalized.slice(0, 160) : null;
+}
 
 function actor(request: FastifyRequest) {
   const organizationId = request.auth?.organizationId;
@@ -110,6 +119,8 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
       title: body.title,
       periodStart,
       periodEnd,
+      ...(body.requestedBlocks !== undefined ? { requestedBlocks: body.requestedBlocks } : {}),
+      idempotencyKey: requestIdempotencyKey(request),
     });
     return reply.code(202).send({ report });
   };
@@ -128,6 +139,8 @@ export const reportsRoutes: FastifyPluginAsync = async (app) => {
     const tenant = actor(request);
     await requireReportsEntitlement(app, tenant.organizationId);
     const { schedules } = schedulesSchema.parse(request.body);
-    return { schedules: await saveReportSchedules(app, tenant, normalizeScheduleInputs(schedules)) };
+    const normalized = normalizeScheduleInputs(schedules);
+    await validateReportSchedules(app, tenant.organizationId, normalized);
+    return { schedules: await saveReportSchedules(app, tenant, normalized) };
   });
 };
