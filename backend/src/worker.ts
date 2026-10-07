@@ -10,6 +10,10 @@ import {
   finishJobLeaseSuccess,
   renewJobLease,
 } from './core/jobs/job-lease.service.js';
+import {
+  recoverExpiredJobLeases,
+  syncJobDomainTerminalFailure,
+} from './core/jobs/job-recovery.service.js';
 import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
 import { registerIntegrationProviders } from './modules/integrations/providers/index.js';
 import { scheduleDueIntegrationSyncs } from './modules/integrations/integration-scheduler.service.js';
@@ -414,22 +418,20 @@ async function processJob(job: any) {
 }
 
 async function recoverExpiredLeases() {
-  const cutoff = new Date(Date.now() - JOB_LEASE_TIMEOUT_MS);
-  const result = await prisma.job.updateMany({
-    where: {
-      status: 'RUNNING',
-      lockedAt: { lt: cutoff },
-    },
-    data: {
-      status: 'QUEUED',
-      lockedAt: null,
-      lockToken: null,
-      runAt: new Date(),
-      lastError: 'WORKER_LEASE_EXPIRED',
-    },
+  const now = new Date();
+  const result = await recoverExpiredJobLeases(prisma, {
+    cutoff: new Date(now.getTime() - JOB_LEASE_TIMEOUT_MS),
+    now,
+    limit: JOB_CANDIDATE_BATCH,
   });
-  if (result.count > 0) {
-    console.warn(JSON.stringify({ level: 'warn', message: 'Recovered expired job leases', count: result.count }));
+  if (result.recovered > 0) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      message: 'Recovered expired job leases',
+      count: result.recovered,
+      requeued: result.requeued,
+      reconciled: result.reconciled,
+    }));
   }
 }
 
@@ -459,6 +461,10 @@ async function claimNextJob() {
         },
       });
       if (dead.count !== 1) continue;
+      await syncJobDomainTerminalFailure(prisma, candidate, {
+        errorCode: 'JOB_MAX_ATTEMPTS_EXHAUSTED',
+        error: message,
+      });
       await syncIntegrationRunJobFailure(candidate, {
         exhausted: true,
         error: message,
@@ -530,6 +536,12 @@ async function finishFailure(job: any, error: unknown): Promise<boolean> {
   });
   if (!finalized) return false;
 
+  if (exhausted) {
+    await syncJobDomainTerminalFailure(prisma, job, {
+      errorCode: jobErrorCode(error),
+      error: message,
+    });
+  }
   await syncIntegrationRunJobFailure(job, {
     exhausted,
     error: message,
