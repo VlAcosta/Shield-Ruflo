@@ -169,6 +169,27 @@ export type WebhookHttpResult = {
   durationMs: number;
 };
 
+export function webhookDeliveryHeaders(input: {
+  body: string;
+  eventId: string;
+  eventType: WebhookEventName;
+  timestamp: number;
+  attempt: number;
+  signature: string;
+}): Record<string, string | number> {
+  return {
+    'content-type': 'application/json',
+    'content-length': Buffer.byteLength(input.body),
+    'user-agent': 'Business-Shield-Webhooks/1.0',
+    'idempotency-key': input.eventId,
+    'x-business-shield-event-id': input.eventId,
+    'x-business-shield-event': input.eventType,
+    'x-business-shield-timestamp': String(input.timestamp),
+    'x-business-shield-attempt': String(input.attempt),
+    'x-business-shield-signature': input.signature,
+  };
+}
+
 export async function postSignedWebhook(input: {
   target: ResolvedWebhookTarget;
   body: string;
@@ -186,16 +207,7 @@ export async function postSignedWebhook(input: {
     const request = https.request(input.target.url, {
       method: 'POST',
       servername: input.target.url.hostname,
-      headers: {
-        'content-type': 'application/json',
-        'content-length': Buffer.byteLength(input.body),
-        'user-agent': 'Business-Shield-Webhooks/1.0',
-        'x-business-shield-event-id': input.eventId,
-        'x-business-shield-event': input.eventType,
-        'x-business-shield-timestamp': String(input.timestamp),
-        'x-business-shield-attempt': String(input.attempt),
-        'x-business-shield-signature': input.signature,
-      },
+      headers: webhookDeliveryHeaders(input),
       lookup: (_hostname, _options, callback) => callback(null, input.target.address, input.target.family),
     }, (response) => {
       const chunks: Buffer[] = [];
