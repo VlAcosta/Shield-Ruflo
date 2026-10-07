@@ -152,6 +152,79 @@ async function markPublished(
   });
 }
 
+async function enqueueReplyReconciliationAfterUnknown(
+  prisma: PrismaClient,
+  input: { organizationId: string; reviewId: string; replyId: string; reason: string },
+) {
+  const runAt = new Date(Date.now() + 5_000);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1::int AS acquired
+      FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`provider-reply-reconcile:${input.replyId}`}, 0))) AS advisory_lock
+    `;
+
+    const current = await tx.reviewReply.findFirst({
+      where: {
+        id: input.replyId,
+        organizationId: input.organizationId,
+        reviewId: input.reviewId,
+      },
+      select: { status: true, retryCount: true },
+    });
+    if (!current || current.status === 'PUBLISHED') return null;
+
+    const existing = await tx.job.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        type: 'provider.reconcileReply',
+        status: { in: ['QUEUED', 'RUNNING'] },
+        payload: { path: ['replyId'], equals: input.replyId },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      if (current.status !== 'PUBLISH_UNKNOWN') {
+        await tx.reviewReply.update({
+          where: { id: input.replyId },
+          data: { status: 'PUBLISH_UNKNOWN', failedReason: input.reason.slice(0, 1000) },
+        });
+      }
+      return existing;
+    }
+
+    const updated = current.status === 'PUBLISH_UNKNOWN'
+      ? await tx.reviewReply.update({
+          where: { id: input.replyId },
+          data: { failedReason: input.reason.slice(0, 1000) },
+          select: { retryCount: true },
+        })
+      : await tx.reviewReply.update({
+          where: { id: input.replyId },
+          data: {
+            status: 'PUBLISH_UNKNOWN',
+            failedReason: input.reason.slice(0, 1000),
+            retryCount: { increment: 1 },
+          },
+          select: { retryCount: true },
+        });
+
+    return tx.job.create({
+      data: {
+        organizationId: input.organizationId,
+        type: 'provider.reconcileReply',
+        payload: {
+          organizationId: input.organizationId,
+          reviewId: input.reviewId,
+          replyId: input.replyId,
+        },
+        dedupeKey: `provider:reply-reconcile:${input.replyId}:${updated.retryCount}`,
+        runAt,
+        maxAttempts: 5,
+      },
+    });
+  });
+}
+
 export async function processReplyPublishJob(
   prisma: PrismaClient,
   input: { organizationId: string; reviewId: string; replyId: string },
@@ -178,30 +251,28 @@ export async function processReplyPublishJob(
       return;
     }
 
-    const runAt = new Date(Date.now() + 5_000);
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.reviewReply.update({
-        where: { id: input.replyId },
-        data: { status: 'PUBLISH_UNKNOWN', failedReason: 'PROVIDER_REPLY_OUTCOME_UNKNOWN', retryCount: { increment: 1 } },
-      });
-      await tx.job.create({
-        data: {
-          organizationId: input.organizationId,
-          type: 'provider.reconcileReply',
-          payload: input,
-          dedupeKey: `provider:reply-reconcile:${input.replyId}:${updated.retryCount}`,
-          runAt,
-          maxAttempts: 5,
-        },
-      });
+    await enqueueReplyReconciliationAfterUnknown(prisma, {
+      ...input,
+      reason: 'PROVIDER_REPLY_OUTCOME_UNKNOWN',
     });
   } catch (error) {
-    if (error instanceof ProviderAdapterError && error.retryable) {
-      await prisma.reviewReply.update({ where: { id: input.replyId }, data: { status: 'PUBLISH_QUEUED', failedReason: error.code, retryCount: { increment: 1 } } });
-      throw error;
+    if (!(error instanceof ProviderAdapterError) || error.retryable) {
+      await enqueueReplyReconciliationAfterUnknown(prisma, {
+        ...input,
+        reason: error instanceof ProviderAdapterError
+          ? error.code
+          : 'PROVIDER_REPLY_OUTCOME_UNKNOWN',
+      });
+      return;
     }
-    const message = error instanceof ProviderAdapterError ? error.code : error instanceof Error ? error.message : 'PROVIDER_REPLY_FAILED';
-    await prisma.reviewReply.update({ where: { id: input.replyId }, data: { status: 'PUBLISH_FAILED', failedReason: message.slice(0, 1000), retryCount: { increment: 1 } } });
+    await prisma.reviewReply.update({
+      where: { id: input.replyId },
+      data: {
+        status: 'PUBLISH_FAILED',
+        failedReason: error.code.slice(0, 1000),
+        retryCount: { increment: 1 },
+      },
+    });
   }
 }
 
@@ -235,9 +306,17 @@ export async function processReplyReconciliationJob(
   if (result.status === 'ABSENT') {
     await prisma.reviewReply.update({
       where: { id: input.replyId },
-      data: { status: 'PUBLISH_FAILED', failedReason: 'PROVIDER_REPLY_NOT_FOUND_AFTER_RECONCILIATION', lastReconciledAt: new Date() },
+      data: { failedReason: 'PROVIDER_REPLY_NOT_FOUND_YET', lastReconciledAt: new Date() },
     });
-    return;
+    throw new ProviderAdapterError({
+      code: 'PROVIDER_REPLY_NOT_FOUND_YET',
+      message: 'Provider reply is not visible yet; reconciliation will be retried',
+      retryable: true,
+    });
   }
+  await prisma.reviewReply.update({
+    where: { id: input.replyId },
+    data: { failedReason: 'PROVIDER_RECONCILIATION_INCONCLUSIVE', lastReconciledAt: new Date() },
+  });
   throw new ProviderAdapterError({ code: 'PROVIDER_RECONCILIATION_INCONCLUSIVE', message: 'Provider reply state is still unknown', retryable: true });
 }
