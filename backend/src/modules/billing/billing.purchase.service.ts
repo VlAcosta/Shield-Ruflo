@@ -115,18 +115,27 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
     ? plan.annualPriceCents
     : plan.priceCents;
 
-  const request = await app.prisma.$transaction(async (tx) => {
-    // Reuse the project's proven PostgreSQL advisory-lock pattern: the lock is
-    // transaction-scoped and the SELECT is executed through $queryRaw, not the
-    // mutation-oriented $executeRaw API.
-    const lockKey = `billing:purchase:${input.organizationId}`;
+  const transactionResult = await app.prisma.$transaction(async (tx) => {
+    // Idempotency keys are globally unique, therefore the lock must be keyed by
+    // the idempotency key itself rather than by tenant. Otherwise two tenants
+    // can race through different locks with the same globally unique key.
+    const lockKey = `billing:purchase:idempotency:${idempotencyKey}`;
     await tx.$queryRaw<Array<{ acquired: number }>>`
       SELECT 1::int AS acquired
       FROM (SELECT pg_advisory_xact_lock(hashtext(${lockKey}), 0)) AS advisory_lock
     `;
 
     const afterLock = await tx.billingPurchaseRequest.findUnique({ where: { idempotencyKey } });
-    if (afterLock) return afterLock;
+    if (afterLock) {
+      if (afterLock.organizationId !== input.organizationId || afterLock.requestedByUserId !== input.userId) {
+        throw new AppError({
+          code: 'IDEMPOTENCY_KEY_CONFLICT',
+          message: 'Idempotency-Key уже использован другим запросом',
+          statusCode: 409,
+        });
+      }
+      return { request: afterLock, deduplicated: true };
+    }
 
     const created = await tx.billingPurchaseRequest.create({
       data: {
@@ -168,16 +177,16 @@ export async function createSalesAssistedPurchaseRequest(app: FastifyInstance, i
       },
     });
 
-    return created;
+    return { request: created, deduplicated: false };
   });
 
   return {
     mode: 'SALES_ASSISTED' as const,
     paymentCreated: false,
     subscriptionActivated: false,
-    deduplicated: false,
-    request: publicRequest(request),
-    nextAction: salesNextAction(request.id),
+    deduplicated: transactionResult.deduplicated,
+    request: publicRequest(transactionResult.request),
+    nextAction: salesNextAction(transactionResult.request.id),
   };
 }
 
