@@ -138,6 +138,41 @@ describeWithPostgres('P4 profile and team production flows', () => {
     });
   });
 
+  it('audits own-session revocation and keeps the current session active', async () => {
+    const extraToken = `p4-owner-extra-${randomUUID()}`;
+    const extraSession = await app.prisma.session.create({
+      data: {
+        userId: ownerAId,
+        activeOrganizationId: organizationAId,
+        tokenHash: hashSessionToken(extraToken),
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+      },
+    });
+
+    const revoked = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/profile/sessions/${extraSession.id}`,
+      headers: { cookie: ownerACookie },
+    });
+    expect(revoked.statusCode).toBe(200);
+
+    const stored = await app.prisma.session.findUniqueOrThrow({ where: { id: extraSession.id } });
+    expect(stored.revokedAt).not.toBeNull();
+
+    const current = await app.prisma.session.findFirstOrThrow({ where: { tokenHash: hashSessionToken(ownerAToken) } });
+    expect(current.revokedAt).toBeNull();
+
+    const audit = await app.prisma.auditLog.findFirst({
+      where: {
+        organizationId: organizationAId,
+        actorUserId: ownerAId,
+        action: 'profile.session.revoked',
+        entityId: extraSession.id,
+      },
+    });
+    expect(audit).not.toBeNull();
+  });
+
   it('supports a hashed one-time invitation accepted by a second account', async () => {
     const invitedUser = await app.prisma.user.findUniqueOrThrow({ where: { id: invitedUserId } });
 

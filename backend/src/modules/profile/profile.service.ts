@@ -188,9 +188,26 @@ export async function revokeOwnSession(app: FastifyInstance, request: FastifyReq
   if (sessionId === request.auth.sessionId) {
     throw new AppError({ code: 'CURRENT_SESSION_PROTECTED', message: 'Текущую сессию завершайте через кнопку «Выйти»', statusCode: 409 });
   }
-  const result = await app.prisma.session.updateMany({
-    where: { id: sessionId, userId: request.auth.userId, revokedAt: null },
-    data: { revokedAt: new Date() },
+  const now = new Date();
+  const result = await app.prisma.$transaction(async (tx) => {
+    const updated = await tx.session.updateMany({
+      where: { id: sessionId, userId: request.auth!.userId, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    if (!updated.count) return updated;
+    await tx.auditLog.create({
+      data: {
+        organizationId: request.auth!.organizationId,
+        actorUserId: request.auth!.userId,
+        action: 'profile.session.revoked',
+        entityType: 'session',
+        entityId: sessionId,
+        metadata: { currentSessionId: request.auth!.sessionId },
+        ipAddress: request.ip,
+        userAgent: String(request.headers['user-agent'] ?? '').slice(0, 2048),
+      },
+    });
+    return updated;
   });
   if (!result.count) throw new AppError({ code: 'SESSION_NOT_FOUND', message: 'Сессия не найдена', statusCode: 404 });
   return getProfileSnapshot(app, request);
@@ -198,9 +215,25 @@ export async function revokeOwnSession(app: FastifyInstance, request: FastifyReq
 
 export async function revokeOtherOwnSessions(app: FastifyInstance, request: FastifyRequest) {
   if (!request.auth) throw new AppError({ code: 'UNAUTHENTICATED', message: 'Требуется авторизация', statusCode: 401 });
-  await app.prisma.session.updateMany({
-    where: { userId: request.auth.userId, id: { not: request.auth.sessionId }, revokedAt: null },
-    data: { revokedAt: new Date() },
+  const now = new Date();
+  await app.prisma.$transaction(async (tx) => {
+    const updated = await tx.session.updateMany({
+      where: { userId: request.auth!.userId, id: { not: request.auth!.sessionId }, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    if (!updated.count) return;
+    await tx.auditLog.create({
+      data: {
+        organizationId: request.auth!.organizationId,
+        actorUserId: request.auth!.userId,
+        action: 'profile.sessions.revoked',
+        entityType: 'user',
+        entityId: request.auth!.userId,
+        metadata: { revokedCount: updated.count, currentSessionId: request.auth!.sessionId },
+        ipAddress: request.ip,
+        userAgent: String(request.headers['user-agent'] ?? '').slice(0, 2048),
+      },
+    });
   });
   return getProfileSnapshot(app, request);
 }
