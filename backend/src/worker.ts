@@ -3,6 +3,13 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.js';
 import { env } from './config/env.js';
 import { AppError } from './core/errors/app-error.js';
+import {
+  JOB_LEASE_HEARTBEAT_MS,
+  JOB_LEASE_TIMEOUT_MS,
+  finishJobLeaseFailure,
+  finishJobLeaseSuccess,
+  renewJobLease,
+} from './core/jobs/job-lease.service.js';
 import { processIntegrationReviewSync } from './modules/integrations/review-ingestion.service.js';
 import { registerIntegrationProviders } from './modules/integrations/providers/index.js';
 import { scheduleDueIntegrationSyncs } from './modules/integrations/integration-scheduler.service.js';
@@ -31,7 +38,6 @@ registerAiProviders();
 const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 const workerId = crypto.randomUUID();
-const JOB_LEASE_TIMEOUT_MS = 5 * 60_000;
 const JOB_CANDIDATE_BATCH = 25;
 let stopping = false;
 let lastIntegrationSchedulerAt = 0;
@@ -475,24 +481,31 @@ async function claimNextJob() {
       continue;
     }
 
+    const claimToken = crypto.randomUUID();
     const claimed = await prisma.job.updateMany({
       where: { id: candidate.id, status: 'QUEUED', lockedAt: null, attempts: candidate.attempts },
-      data: { status: 'RUNNING', lockedAt: new Date(), lockToken: workerId, attempts: { increment: 1 } },
+      data: { status: 'RUNNING', lockedAt: new Date(), lockToken: claimToken, attempts: { increment: 1 } },
     });
-    if (claimed.count === 1) return prisma.job.findUnique({ where: { id: candidate.id } });
+    if (claimed.count === 1) {
+      return prisma.job.findFirst({
+        where: { id: candidate.id, status: 'RUNNING', lockToken: claimToken },
+      });
+    }
   }
 
   return null;
 }
 
-async function finishSuccess(id: string) {
-  await prisma.job.update({
-    where: { id },
-    data: { status: 'SUCCEEDED', completedAt: new Date(), lockedAt: null, lockToken: null, lastError: null },
+async function finishSuccess(job: any): Promise<boolean> {
+  const lockToken = String(job?.lockToken || '');
+  if (!lockToken) return false;
+  return finishJobLeaseSuccess(prisma, {
+    jobId: String(job.id),
+    lockToken,
   });
 }
 
-async function finishFailure(job: any, error: unknown) {
+async function finishFailure(job: any, error: unknown): Promise<boolean> {
   const message = error instanceof Error ? error.message : String(error);
   const providerMarkedNonRetryable = Boolean(
     error
@@ -505,25 +518,17 @@ async function finishFailure(job: any, error: unknown) {
   const exhausted = explicitlyNonRetryable || job.attempts >= job.maxAttempts;
   const delaySeconds = Math.min(3600, 5 * 2 ** Math.max(0, job.attempts - 1));
   const nextRunAt = exhausted ? null : new Date(Date.now() + delaySeconds * 1000);
-  await prisma.job.update({
-    where: { id: job.id },
-    data: exhausted
-      ? {
-          status: 'DEAD',
-          completedAt: new Date(),
-          lastError: message.slice(0, 4000),
-          lockedAt: null,
-          lockToken: null,
-        }
-      : {
-          status: 'QUEUED',
-          completedAt: null,
-          lastError: message.slice(0, 4000),
-          lockedAt: null,
-          lockToken: null,
-          runAt: nextRunAt!,
-        },
+  const lockToken = String(job?.lockToken || '');
+  if (!lockToken) return false;
+
+  const finalized = await finishJobLeaseFailure(prisma, {
+    jobId: String(job.id),
+    lockToken,
+    exhausted,
+    error: message,
+    nextRunAt,
   });
+  if (!finalized) return false;
 
   await syncIntegrationRunJobFailure(job, {
     exhausted,
@@ -545,6 +550,8 @@ async function finishFailure(job: any, error: unknown) {
       error: message,
     });
   }
+
+  return true;
 }
 
 async function notifyReportDeliveryFailure(job: any, error: string) {
@@ -597,6 +604,52 @@ async function maybeRunSchedulers() {
   }
 }
 
+function startJobLeaseHeartbeat(job: any): () => Promise<void> {
+  const jobId = String(job?.id || '');
+  const lockToken = String(job?.lockToken || '');
+  let stopped = false;
+  let inFlight: Promise<void> | null = null;
+
+  const heartbeat = () => {
+    if (stopped || !jobId || !lockToken || inFlight) return;
+    inFlight = (async () => {
+      try {
+        const renewed = await renewJobLease(prisma, { jobId, lockToken });
+        if (!renewed) {
+          console.warn(JSON.stringify({
+            level: 'warn',
+            message: 'Job lease heartbeat lost ownership',
+            jobId,
+            type: job?.type,
+            workerId,
+          }));
+        }
+      } catch (error) {
+        console.error(JSON.stringify({
+          level: 'error',
+          message: 'Job lease heartbeat failed',
+          jobId,
+          type: job?.type,
+          workerId,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      } finally {
+        inFlight = null;
+      }
+    })();
+  };
+
+  const timer = setInterval(heartbeat, JOB_LEASE_HEARTBEAT_MS);
+  timer.unref();
+
+  return async () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer);
+    if (inFlight) await inFlight.catch(() => undefined);
+  };
+}
+
 async function main() {
   console.log(JSON.stringify({ level: 'info', message: 'Business Shield worker started', workerId }));
   while (!stopping) {
@@ -606,12 +659,33 @@ async function main() {
       await sleep(1500);
       continue;
     }
+    const stopHeartbeat = startJobLeaseHeartbeat(job);
     try {
       await processJob(job);
-      await finishSuccess(job.id);
+      await stopHeartbeat();
+      const finalized = await finishSuccess(job);
+      if (!finalized) {
+        console.warn(JSON.stringify({
+          level: 'warn',
+          message: 'Skipped stale job success finalization after lease loss',
+          jobId: job.id,
+          type: job.type,
+          workerId,
+        }));
+      }
     } catch (error) {
+      await stopHeartbeat();
       console.error(JSON.stringify({ level: 'error', message: 'Job failed', jobId: job.id, type: job.type, error: error instanceof Error ? error.message : String(error) }));
-      await finishFailure(job, error);
+      const finalized = await finishFailure(job, error);
+      if (!finalized) {
+        console.warn(JSON.stringify({
+          level: 'warn',
+          message: 'Skipped stale job failure finalization after lease loss',
+          jobId: job.id,
+          type: job.type,
+          workerId,
+        }));
+      }
     }
   }
 }
