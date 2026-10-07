@@ -135,6 +135,30 @@ describeWithPostgres('P1 auth and session security', () => {
     expect(cooldown.json().error.details.retryAfter).toBeGreaterThan(0);
   });
 
+  it('enforces resend cooldown even when the previous challenge was already consumed', async () => {
+    const phone = phoneFor(9);
+    await app.prisma.verificationCode.create({
+      data: {
+        phone,
+        purpose: 'SIGN_IN',
+        codeHash: 'b'.repeat(64),
+        requestIp: '127.0.0.1',
+        consumedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/request-code',
+      payload: { phone, mode: 'login' },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({ error: { code: 'OTP_COOLDOWN' } });
+    expect(response.json().error.details.retryAfter).toBeGreaterThan(0);
+  });
+
   it('serializes simultaneous request-code calls for the same phone and IP', async () => {
     const phone = phoneFor(7);
     const before = await app.prisma.verificationCode.count({ where: { phone } });
@@ -144,7 +168,9 @@ describeWithPostgres('P1 auth and session security', () => {
       payload: { phone, mode: 'login' },
     })));
 
-    expect(responses.filter((response) => response.statusCode === 200)).toHaveLength(1);
+    const successfulRequests = responses.filter((response) => response.statusCode === 200);
+    expect(successfulRequests).toHaveLength(1);
+    expect(successfulRequests[0]?.json()).toMatchObject({ delivery_status: 'accepted' });
     expect(responses.filter((response) => response.statusCode === 429)).toHaveLength(5);
     for (const response of responses.filter((candidate) => candidate.statusCode === 429)) {
       expect(response.json()).toMatchObject({ error: { code: 'OTP_COOLDOWN' } });
