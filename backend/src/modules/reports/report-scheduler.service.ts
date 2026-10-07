@@ -79,10 +79,13 @@ function validSchedule(schedule: StoredSchedule): boolean {
   return !destination || EMAIL_RE.test(destination);
 }
 
+type DeliveryCapabilities = ReturnType<typeof getReportDeliveryCapabilities>;
+
 async function scheduleMetadataBatch(
   prisma: PrismaClient,
   now: Date,
   metadataRows: ScheduleMetadataRow[],
+  deliveryCapabilities: DeliveryCapabilities,
 ): Promise<{ scheduled: number; skipped: number }> {
   const organizationIds = [...new Set(metadataRows
     .map((metadata) => metadata.key.slice(REPORT_SCHEDULE_KEY_PREFIX.length))
@@ -122,7 +125,6 @@ async function scheduleMetadataBatch(
       continue;
     }
 
-    const deliveryCapabilities = getReportDeliveryCapabilities();
     for (const schedule of schedules) {
       if (
         !schedule.enabled
@@ -202,9 +204,10 @@ async function scheduleMetadataBatch(
 
 export async function scheduleDueReports(
   prisma: PrismaClient,
-  input: { now?: Date },
+  input: { now?: Date; deliveryCapabilities?: DeliveryCapabilities },
 ): Promise<{ scheduled: number; skipped: number }> {
   const now = input.now ?? new Date();
+  const deliveryCapabilities = input.deliveryCapabilities ?? getReportDeliveryCapabilities();
   let scheduled = 0;
   let skipped = 0;
   let cursorKey: string | null = null;
@@ -226,7 +229,7 @@ export async function scheduleDueReports(
 
     if (!metadataRows.length) break;
 
-    const page = await scheduleMetadataBatch(prisma, now, metadataRows);
+    const page = await scheduleMetadataBatch(prisma, now, metadataRows, deliveryCapabilities);
     scheduled += page.scheduled;
     skipped += page.skipped;
 
