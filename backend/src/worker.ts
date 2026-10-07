@@ -465,6 +465,7 @@ async function claimNextJob() {
       if (deliveryId) {
         await syncWebhookDeliveryJobFailure(prisma, {
           deliveryId,
+          jobId: candidate.id,
           retryable: true,
           exhausted: true,
           nextRunAt: null,
@@ -537,6 +538,7 @@ async function finishFailure(job: any, error: unknown) {
   if (deliveryId) {
     await syncWebhookDeliveryJobFailure(prisma, {
       deliveryId,
+      jobId: job.id,
       retryable: !explicitlyNonRetryable,
       exhausted,
       nextRunAt,
