@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { reportEntitledOrganizationIds } from './report-entitlement.service.js';
+import { getReportDeliveryCapabilities } from './reports.service.js';
 
 const REPORT_SCHEDULE_KEY_PREFIX = 'reports:schedules:';
 const REPORT_SCHEDULE_PAGE_SIZE = 500;
@@ -78,10 +79,13 @@ function validSchedule(schedule: StoredSchedule): boolean {
   return !destination || EMAIL_RE.test(destination);
 }
 
+type DeliveryCapabilities = ReturnType<typeof getReportDeliveryCapabilities>;
+
 async function scheduleMetadataBatch(
   prisma: PrismaClient,
   now: Date,
   metadataRows: ScheduleMetadataRow[],
+  deliveryCapabilities: DeliveryCapabilities,
 ): Promise<{ scheduled: number; skipped: number }> {
   const organizationIds = [...new Set(metadataRows
     .map((metadata) => metadata.key.slice(REPORT_SCHEDULE_KEY_PREFIX.length))
@@ -122,7 +126,13 @@ async function scheduleMetadataBatch(
     }
 
     for (const schedule of schedules) {
-      if (!schedule.enabled || !validSchedule(schedule) || local.day !== schedule.day || local.time < schedule.time) {
+      if (
+        !schedule.enabled
+        || !validSchedule(schedule)
+        || !deliveryCapabilities[schedule.channel].available
+        || local.day !== schedule.day
+        || local.time < schedule.time
+      ) {
         skipped += 1;
         continue;
       }
@@ -194,9 +204,10 @@ async function scheduleMetadataBatch(
 
 export async function scheduleDueReports(
   prisma: PrismaClient,
-  input: { now?: Date },
+  input: { now?: Date; deliveryCapabilities?: DeliveryCapabilities },
 ): Promise<{ scheduled: number; skipped: number }> {
   const now = input.now ?? new Date();
+  const deliveryCapabilities = input.deliveryCapabilities ?? getReportDeliveryCapabilities();
   let scheduled = 0;
   let skipped = 0;
   let cursorKey: string | null = null;
@@ -218,7 +229,7 @@ export async function scheduleDueReports(
 
     if (!metadataRows.length) break;
 
-    const page = await scheduleMetadataBatch(prisma, now, metadataRows);
+    const page = await scheduleMetadataBatch(prisma, now, metadataRows, deliveryCapabilities);
     scheduled += page.scheduled;
     skipped += page.skipped;
 

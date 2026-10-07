@@ -21,6 +21,7 @@ import {
 import { scheduleDueReports, type ScheduledReportDelivery } from './modules/reports/report-scheduler.service.js';
 import { enqueueReportDelivery, processReportDeliveryJob } from './modules/reports/report-delivery.service.js';
 import { hasReportsEntitlement } from './modules/reports/report-entitlement.service.js';
+import { REPORT_BLOCKS, type ReportBlock } from './modules/reports/reports.service.js';
 import { processSuggestionDeliveryJob } from './modules/feedback/feedback.service.js';
 import { createNotificationForOrganization } from './modules/notifications/notifications.service.js';
 
@@ -95,7 +96,7 @@ async function syncReportGenerationJobFailure(
   const reportId = reportGenerationId(job);
   if (!reportId) return;
   const message = input.error.slice(0, 4000);
-  await prisma.report.updateMany({
+  const updated = await prisma.report.updateMany({
     where: {
       id: reportId,
       status: { in: input.exhausted ? ['QUEUED', 'GENERATING'] : ['GENERATING'] },
@@ -104,6 +105,24 @@ async function syncReportGenerationJobFailure(
       ? { status: 'FAILED', errorMessage: message }
       : { status: 'QUEUED', errorMessage: message },
   });
+
+  if (input.exhausted && updated.count > 0) {
+    const report = await prisma.report.findUnique({ where: { id: reportId }, select: { organizationId: true, title: true } });
+    if (report) {
+      await createNotificationForOrganization(prisma, {
+        organizationId: report.organizationId,
+        type: 'reports',
+        title: 'Не удалось сформировать отчёт',
+        body: `Отчёт «${report.title}» завершился с ошибкой. Попробуйте сформировать его повторно.`,
+        payload: {
+          reportId,
+          actionLabel: 'Открыть отчёты',
+          actionRoute: `/reports?report=${reportId}`,
+          tone: 'red',
+        },
+      }).catch(() => null);
+    }
+  }
 }
 
 async function syncFeedbackDeliveryJobFailure(job: any, input: { exhausted: boolean; error: string }) {
@@ -160,35 +179,142 @@ async function processReport(payload: any) {
     return;
   }
 
+  const requestedBlocks: ReportBlock[] = Array.isArray(payload?.requestedBlocks)
+    ? ([...new Set(
+        payload.requestedBlocks.filter((value: unknown) => (
+          typeof value === 'string' && (REPORT_BLOCKS as readonly string[]).includes(value)
+        )),
+      )] as ReportBlock[])
+    : ['rating', 'reviews', 'reputation', 'platforms', 'tasks'];
+  const blocks = requestedBlocks.length ? requestedBlocks : ['rating', 'reviews', 'reputation', 'platforms', 'tasks'];
+  const periodMs = Math.max(1, report.periodEnd.getTime() - report.periodStart.getTime());
+  const previousStart = new Date(report.periodStart.getTime() - periodMs);
+  const previousEnd = new Date(report.periodStart.getTime() - 1);
+
   await prisma.report.update({ where: { id: report.id }, data: { status: 'GENERATING', errorMessage: null } });
-  const [aggregate, positive, negative, answered] = await Promise.all([
-    prisma.review.aggregate({
-      where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd } },
-      _count: { _all: true },
-      _avg: { rating: true },
-    }),
-    prisma.review.count({ where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd }, rating: { gte: 4 } } }),
-    prisma.review.count({ where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd }, rating: { lte: 2 } } }),
-    prisma.review.count({
-      where: {
-        organizationId: report.organizationId,
-        receivedAt: { gte: report.periodStart, lte: report.periodEnd },
-        replies: { some: { status: 'PUBLISHED' } },
-      },
-    }),
+
+  const wantsReviews = blocks.some((block) => ['rating', 'reviews', 'reputation', 'platforms', 'recommendations'].includes(block));
+  const [aggregate, positive, negative, answered, previousAggregate, taskCreated, taskCompleted, platformGroups] = await Promise.all([
+    wantsReviews
+      ? prisma.review.aggregate({
+          where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd } },
+          _count: { _all: true },
+          _avg: { rating: true },
+        })
+      : Promise.resolve({ _count: { _all: 0 }, _avg: { rating: null as number | null } }),
+    wantsReviews
+      ? prisma.review.count({ where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd }, rating: { gte: 4 } } })
+      : Promise.resolve(0),
+    wantsReviews
+      ? prisma.review.count({ where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd }, rating: { lte: 2 } } })
+      : Promise.resolve(0),
+    wantsReviews
+      ? prisma.review.count({
+          where: {
+            organizationId: report.organizationId,
+            receivedAt: { gte: report.periodStart, lte: report.periodEnd },
+            replies: { some: { status: 'PUBLISHED' } },
+          },
+        })
+      : Promise.resolve(0),
+    blocks.includes('reputation')
+      ? prisma.review.aggregate({
+          where: { organizationId: report.organizationId, receivedAt: { gte: previousStart, lte: previousEnd } },
+          _count: { _all: true },
+          _avg: { rating: true },
+        })
+      : Promise.resolve({ _count: { _all: 0 }, _avg: { rating: null as number | null } }),
+    blocks.includes('tasks')
+      ? prisma.task.count({ where: { organizationId: report.organizationId, createdAt: { gte: report.periodStart, lte: report.periodEnd } } })
+      : Promise.resolve(0),
+    blocks.includes('tasks')
+      ? prisma.task.count({ where: { organizationId: report.organizationId, completedAt: { gte: report.periodStart, lte: report.periodEnd } } })
+      : Promise.resolve(0),
+    blocks.includes('platforms')
+      ? prisma.review.groupBy({
+          by: ['sourceId'],
+          where: { organizationId: report.organizationId, receivedAt: { gte: report.periodStart, lte: report.periodEnd } },
+          _count: { _all: true },
+          _avg: { rating: true },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const sourceIds = platformGroups.map((group) => group.sourceId);
+  const sources = sourceIds.length
+    ? await prisma.reviewSource.findMany({
+        where: { organizationId: report.organizationId, id: { in: sourceIds } },
+        select: { id: true, name: true, provider: true },
+      })
+    : [];
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
+
   const total = aggregate._count._all;
+  const averageRating = aggregate._avg.rating ? Number(aggregate._avg.rating.toFixed(2)) : null;
+  const previousAverageRating = previousAggregate._avg.rating
+    ? Number(previousAggregate._avg.rating.toFixed(2))
+    : null;
+  const ratingDelta = averageRating !== null && previousAverageRating !== null
+    ? Number((averageRating - previousAverageRating).toFixed(2))
+    : null;
+  const positiveShare = total ? Number(((positive / total) * 100).toFixed(1)) : 0;
+  const negativeShare = total ? Number(((negative / total) * 100).toFixed(1)) : 0;
+  const responseCoverage = total ? Number(((answered / total) * 100).toFixed(1)) : 0;
+
+  const sections: Record<string, unknown> = {};
+  if (blocks.includes('rating')) sections.rating = { averageRating };
+  if (blocks.includes('reviews')) sections.reviews = { reviewCount: total, positiveShare, negativeShare, responseCoverage };
+  if (blocks.includes('reputation')) {
+    sections.reputation = {
+      averageRating,
+      previousAverageRating,
+      ratingDelta,
+      previousReviewCount: previousAggregate._count._all,
+    };
+  }
+  if (blocks.includes('platforms')) {
+    sections.platforms = platformGroups.map((group) => {
+      const source = sourceById.get(group.sourceId);
+      return {
+        sourceId: group.sourceId,
+        name: source?.name || source?.provider || 'Источник',
+        provider: source?.provider || null,
+        reviewCount: group._count._all,
+        averageRating: group._avg.rating ? Number(group._avg.rating.toFixed(2)) : null,
+      };
+    });
+  }
+  if (blocks.includes('tasks')) sections.tasks = { created: taskCreated, completed: taskCompleted };
+  if (blocks.includes('competitors')) {
+    sections.competitors = { available: false, reasonCode: 'COMPETITOR_REPORT_DATA_NOT_CONNECTED' };
+  }
+  if (blocks.includes('recommendations')) {
+    const recommendations: string[] = [];
+    if (!total) recommendations.push('Подключите источники отзывов, чтобы отчёт содержал измеряемую динамику.');
+    if (total && responseCoverage < 80) recommendations.push('Увеличьте долю отзывов с опубликованными ответами.');
+    if (total && negativeShare >= 20) recommendations.push('Разберите причины негативных отзывов и заведите корректирующие задачи.');
+    if (ratingDelta !== null && ratingDelta < 0) recommendations.push('Рейтинг снизился относительно предыдущего сопоставимого периода — проверьте ключевые причины.');
+    if (!recommendations.length) recommendations.push('Критичных отклонений по выбранному периоду не обнаружено.');
+    sections.recommendations = recommendations;
+  }
+
   const data = {
     measured: total > 0,
+    requestedBlocks: blocks,
+    sections,
     reviewCount: total,
-    averageRating: aggregate._avg.rating ? Number(aggregate._avg.rating.toFixed(2)) : null,
-    positiveShare: total ? Number(((positive / total) * 100).toFixed(1)) : 0,
-    negativeShare: total ? Number(((negative / total) * 100).toFixed(1)) : 0,
-    responseCoverage: total ? Number(((answered / total) * 100).toFixed(1)) : 0,
+    averageRating,
+    positiveShare,
+    negativeShare,
+    responseCoverage,
+    taskCreated,
+    taskCompleted,
+    ratingDelta,
   };
+
   await prisma.report.update({
     where: { id: report.id },
-    data: { status: 'READY', data, generatedAt: new Date(), errorMessage: null },
+    data: { status: 'READY', data: JSON.parse(JSON.stringify(data)), generatedAt: new Date(), errorMessage: null },
   });
 
   await createNotificationForOrganization(prisma, {
@@ -334,6 +460,7 @@ async function claimNextJob() {
       });
       await syncReportGenerationJobFailure(candidate, { exhausted: true, error: message });
       await syncFeedbackDeliveryJobFailure(candidate, { exhausted: true, error: message });
+      await notifyReportDeliveryFailure(candidate, message);
       const deliveryId = webhookDeliveryId(candidate);
       if (deliveryId) {
         await syncWebhookDeliveryJobFailure(prisma, {
@@ -404,6 +531,7 @@ async function finishFailure(job: any, error: unknown) {
   });
   await syncReportGenerationJobFailure(job, { exhausted, error: message });
   await syncFeedbackDeliveryJobFailure(job, { exhausted, error: message });
+  if (exhausted) await notifyReportDeliveryFailure(job, message);
 
   const deliveryId = webhookDeliveryId(job);
   if (deliveryId) {
@@ -415,6 +543,31 @@ async function finishFailure(job: any, error: unknown) {
       error: message,
     });
   }
+}
+
+async function notifyReportDeliveryFailure(job: any, error: string) {
+  if (job?.type !== 'report.deliver') return;
+  const reportId = String(job.payload?.reportId || '');
+  const organizationId = String(job.organizationId || '');
+  if (!reportId || !organizationId) return;
+  const report = await prisma.report.findFirst({
+    where: { id: reportId, organizationId },
+    select: { title: true },
+  });
+  if (!report) return;
+  await createNotificationForOrganization(prisma, {
+    organizationId,
+    type: 'reports',
+    title: 'Не удалось отправить отчёт',
+    body: `Отчёт «${report.title}» сформирован, но доставка по расписанию завершилась ошибкой.`,
+    payload: {
+      reportId,
+      actionLabel: 'Открыть отчёты',
+      actionRoute: `/reports?report=${reportId}`,
+      tone: 'red',
+      errorCode: error.slice(0, 160),
+    },
+  }).catch(() => null);
 }
 
 async function maybeRunSchedulers() {
