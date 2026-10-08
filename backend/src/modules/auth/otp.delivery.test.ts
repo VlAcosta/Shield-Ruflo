@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildExolveOtpText, normalizeExolvePhone } from './otp.delivery.js';
+import { buildExolveOtpText, classifyOtpHttpStatus, normalizeExolvePhone } from './otp.delivery.js';
 
 describe('Exolve voice OTP helpers', () => {
   it('normalizes Russian +7 phone to digits', () => {
@@ -22,6 +22,14 @@ describe('Exolve voice OTP helpers', () => {
     expect(buildExolveOtpText('4821', 300)).toBe(
       'Business Shield. Код подтверждения: 4. 8. 2. 1. Повторяю: 4. 8. 2. 1. Код действует 5 минут.',
     );
+  });
+
+  it('classifies provider HTTP outcomes conservatively', () => {
+    expect(classifyOtpHttpStatus(202)).toBe('accepted');
+    expect(classifyOtpHttpStatus(400)).toBe('rejected');
+    expect(classifyOtpHttpStatus(429)).toBe('rejected');
+    expect(classifyOtpHttpStatus(500)).toBe('unknown');
+    expect(classifyOtpHttpStatus(503)).toBe('unknown');
   });
 
   it('rounds TTL up to a full minute', () => {

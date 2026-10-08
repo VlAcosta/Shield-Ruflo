@@ -104,7 +104,7 @@ export async function requestVerificationCode(
     }
 
     const recent = await tx.verificationCode.findFirst({
-      where: { phone: input.phone, createdAt: { gt: cooldownAfter }, consumedAt: null },
+      where: { phone: input.phone, createdAt: { gt: cooldownAfter } },
       orderBy: { createdAt: 'desc' },
     });
     if (recent) {
@@ -138,8 +138,9 @@ export async function requestVerificationCode(
     });
   });
 
+  let deliveryStatus: 'accepted' | 'unknown';
   try {
-    await deliverOtp(app, {
+    deliveryStatus = await deliverOtp(app, {
       phone: input.phone,
       code,
       challengeId,
@@ -159,6 +160,7 @@ export async function requestVerificationCode(
       phone: input.phone.replace(/.(?=.{4})/g, '*'),
       sessionId: challengeId,
       provider: env.AUTH_OTP_PROVIDER,
+      deliveryStatus,
     },
     'OTP challenge created',
   );
@@ -167,6 +169,7 @@ export async function requestVerificationCode(
     session_id: challengeId,
     ttl: env.AUTH_OTP_TTL_SECONDS,
     delivery: env.AUTH_OTP_PROVIDER,
+    delivery_status: deliveryStatus,
     ...(env.AUTH_EXPOSE_DEBUG_CODE ? { debug_code: code } : {}),
   };
 }
