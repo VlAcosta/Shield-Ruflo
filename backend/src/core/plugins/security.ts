@@ -36,7 +36,10 @@ export async function registerSecurity(app: FastifyInstance): Promise<void> {
         return;
       }
 
-      callback(new Error('Origin is not allowed by CORS'), false);
+      // Deny CORS without turning a rejected browser origin into an
+      // application 500. The response deliberately omits CORS permission,
+      // so browsers still block the cross-origin request.
+      callback(null, false);
     },
   });
 }
