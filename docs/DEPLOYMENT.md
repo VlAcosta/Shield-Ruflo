@@ -98,6 +98,23 @@ The smoke script checks:
 - `https://bis-shield.ru/api/v1/meta` → `200`, reports `environment=production` and `apiVersion=v1`;
 - `https://bis-shield.ru/api/v1/me` → `401` for an unauthenticated request, proving that HTTPS/nginx reaches the API authorization boundary.
 
+### nginx/browser security
+
+The version-controlled nginx hardening snippets live under
+`deploy/nginx/`. Apply them only after backing up the active site config and
+reviewing any existing overlapping `location` blocks. The detailed rollout
+steps are in `deploy/nginx/README.md`.
+
+After nginx syntax validation and reload, run:
+
+```bash
+./scripts/production-security-smoke.sh
+```
+
+This is a separate gate from the normal production smoke. It verifies frontend
+security headers, hashed-asset cache policy, HTTP→HTTPS, and that private/source
+paths are not accidentally exposed through SPA fallback.
+
 To smoke-test another release hostname without editing the script:
 
 ```bash
