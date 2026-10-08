@@ -58,7 +58,8 @@ describe('browser mutation CORS boundary', () => {
       },
     });
 
+    expect(response.statusCode).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBeUndefined();
-    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
   });
 });
