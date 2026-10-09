@@ -23,7 +23,7 @@ export default defineConfig({
   build: {
     outDir: 'build',
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: false,
   },
   test: {
     globals: true,
