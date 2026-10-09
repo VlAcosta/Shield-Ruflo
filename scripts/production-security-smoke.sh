@@ -93,6 +93,12 @@ cache_control="$(header_value "$asset_headers" 'Cache-Control')"
   || fail "Hashed asset cache policy is not immutable for one year: $cache_control"
 ok "Hashed frontend assets use immutable one-year caching"
 
+source_map_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  --connect-timeout "$CONNECT_TIMEOUT" --max-time "$MAX_TIME" "$BASE_URL${asset_path}.map")"
+[[ "$source_map_status" == "404" ]] \
+  || fail "Production source maps must not be publicly reachable, got HTTP $source_map_status"
+ok "Production source maps are not publicly reachable"
+
 for path in '/.env' '/.git/config' '/backend/.env' '/internal/metrics'; do
   status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --connect-timeout "$CONNECT_TIMEOUT" --max-time "$MAX_TIME" "$BASE_URL$path")"
