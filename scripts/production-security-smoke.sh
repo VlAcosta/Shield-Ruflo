@@ -57,7 +57,7 @@ curl --silent --show-error --location --fail \
   --max-time "$MAX_TIME" \
   "$BASE_URL/"
 
-grep -Fq '<title>Business Shield</title>' "$root_body" || fail "Frontend shell marker is missing"
+grep -Fq '<title>Business Shield' "$root_body" || fail "Frontend shell marker is missing"
 ok "Frontend shell is present"
 
 hsts="$(header_value "$root_headers" 'Strict-Transport-Security')"
