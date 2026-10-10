@@ -93,9 +93,13 @@ if [[ -d build ]]; then
   cp -a build "$BACKUP_ROOT/frontend-build-prev"
 fi
 
-rm -rf "build.rollback.$STAMP"
-mv build "build.rollback.$STAMP"
-mv build.next build
+ROLLBACK_BUILD="build.rollback.$STAMP"
+rm -rf "$ROLLBACK_BUILD"
+mv build "$ROLLBACK_BUILD"
+if ! mv build.next build; then
+  mv "$ROLLBACK_BUILD" build
+  fail "Frontend activation failed; previous build restored"
+fi
 ok "Frontend build activated"
 
 systemctl --no-ask-password restart "$API_SERVICE"
@@ -121,7 +125,7 @@ branch=$BRANCH
 base_url=$BASE_URL
 META
 
-rm -rf "build.rollback.$STAMP"
+rm -rf "$ROLLBACK_BUILD"
 
 echo
 ok "Production deployment completed at $TARGET_SHA"
