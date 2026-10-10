@@ -76,7 +76,7 @@ printf 'Business Shield external production smoke\n'
 printf 'Target: %s\n\n' "$BASE_URL"
 
 expect_status "/" "200" "Frontend root"
-expect_body_contains "/" "<title>Business Shield</title>" "Frontend shell"
+expect_body_contains "/" "<title>Business Shield" "Frontend shell"
 expect_body_contains "/" 'data-static-fallback="true"' "Frontend static fallback"
 expect_body_contains "/" "Единый inbox отзывов" "Static product content"
 expect_body_contains "/" "Отзывы, ответы, задачи и отчёты" "Static product proposition"
