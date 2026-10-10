@@ -49,6 +49,14 @@ function planLimitDetails(error: unknown): Record<string, unknown> | undefined {
   }
 }
 
+export type AppErrorLogLevel = 'info' | 'warn' | 'error';
+
+export function appErrorLogLevel(statusCode: number): AppErrorLogLevel {
+  if (statusCode >= 500) return 'error';
+  if (statusCode === 409 || statusCode === 429) return 'warn';
+  return 'info';
+}
+
 function retryAfterSeconds(error: AppError): number | null {
   if (error.statusCode !== 429 || !error.details || typeof error.details !== 'object') return null;
   const retryAfter = (error.details as { retryAfter?: unknown }).retryAfter;
@@ -60,10 +68,20 @@ function retryAfterSeconds(error: AppError): number | null {
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
-      request.log.warn(
-        { err: error, code: error.code, details: error.details },
-        'Application error',
-      );
+      const level = appErrorLogLevel(error.statusCode);
+      const context = {
+        code: error.code,
+        statusCode: error.statusCode,
+        ...(error.details === undefined ? {} : { details: error.details }),
+      };
+
+      if (level === 'error') {
+        request.log.error({ err: error, ...context }, 'Application error');
+      } else if (level === 'warn') {
+        request.log.warn(context, 'Application request rejected');
+      } else {
+        request.log.info(context, 'Application request rejected');
+      }
 
       const retryAfter = retryAfterSeconds(error);
       if (retryAfter !== null) reply.header('retry-after', String(retryAfter));
