@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - release/p27-security-unified-2026-08-28
       - feat/autonomous-p0-p12
       - feat/product-v2-p13-p26
   pull_request:
