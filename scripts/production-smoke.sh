@@ -77,6 +77,7 @@ printf 'Target: %s\n\n' "$BASE_URL"
 
 expect_status "/" "200" "Frontend root"
 expect_body_contains "/" "<title>Business Shield</title>" "Frontend shell"
+expect_body_contains "/" 'data-static-fallback="true"' "Frontend static fallback"
 expect_status "/reviews" "200" "SPA reviews route"
 expect_status "/api/v1/meta" "200" "Public API metadata"
 expect_body_contains "/api/v1/meta" "\"environment\":\"production\"" "API production environment"
