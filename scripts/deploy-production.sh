@@ -9,6 +9,7 @@ BASE_URL="${BASE_URL:-https://bis-shield.ru}"
 BACKUP_BASE="${BACKUP_BASE:-$HOME/business-shield-backups}"
 API_SERVICE="${API_SERVICE:-bis-shield-api.service}"
 WORKER_SERVICE="${WORKER_SERVICE:-bis-shield-worker.service}"
+GIT_FETCH_TIMEOUT="${GIT_FETCH_TIMEOUT:-60s}"
 
 fail() {
   echo "❌ $*" >&2
@@ -21,7 +22,7 @@ ok() {
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "TARGET_SHA must be a full 40-character commit SHA"
 
-for command_name in git node npm curl systemctl sha256sum; do
+for command_name in git node npm curl systemctl sha256sum timeout; do
   command -v "$command_name" >/dev/null 2>&1 || fail "$command_name is required"
 done
 
@@ -43,7 +44,10 @@ echo "Current:  $PREVIOUS_SHA"
 echo "Target:   $TARGET_SHA"
 echo "Backup:   $BACKUP_ROOT"
 
-GIT_TERMINAL_PROMPT=0 git fetch origin "+refs/heads/$BRANCH:$REMOTE_REF"
+if ! timeout "$GIT_FETCH_TIMEOUT" env GIT_TERMINAL_PROMPT=0 \
+  git fetch origin "+refs/heads/$BRANCH:$REMOTE_REF"; then
+  fail "Git fetch failed or timed out after $GIT_FETCH_TIMEOUT"
+fi
 REMOTE_SHA="$(git rev-parse "$REMOTE_REF")"
 [[ "$REMOTE_SHA" == "$TARGET_SHA" ]]   || fail "Remote branch head is $REMOTE_SHA, expected $TARGET_SHA"
 ok "Exact release SHA verified"
