@@ -13,6 +13,9 @@ if (!favicon.parentNode) document.head.appendChild(favicon);
 
 document.documentElement.style.setProperty('--business-shield-brand-mark', `url(${brandMark})`);
 
+const staticFallback = document.querySelector<HTMLElement>('[data-static-fallback="true"]');
+if (staticFallback) staticFallback.remove();
+
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Business Shield root element was not found');
 
