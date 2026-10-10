@@ -1,6 +1,9 @@
 name: Business Shield Dependency Security
 
 on:
+  push:
+    branches:
+      - release/p27-security-unified-2026-08-28
   pull_request:
   workflow_dispatch:
 
