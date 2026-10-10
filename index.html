@@ -9,9 +9,51 @@
       content="Business Shield — Reputation Operations SaaS для управления отзывами, репутационными рисками и операционными действиями."
     />
     <title>Business Shield</title>
+    <style>
+      .bs-static-fallback {
+        box-sizing: border-box;
+        max-width: 720px;
+        margin: 8vh auto;
+        padding: 32px;
+        font-family: Inter, Arial, sans-serif;
+        color: #f5f7ff;
+        background: #0b1020;
+        border-radius: 24px;
+      }
+      .bs-static-fallback h1 {
+        margin: 0 0 12px;
+        font-size: 32px;
+      }
+      .bs-static-fallback p {
+        margin: 0 0 18px;
+        line-height: 1.6;
+        color: #c8d0e3;
+      }
+      .bs-static-fallback nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .bs-static-fallback a {
+        color: #ffffff;
+      }
+    </style>
   </head>
   <body>
-    <noscript>Для работы Business Shield необходимо включить JavaScript.</noscript>
+    <noscript>
+      <main class="bs-static-fallback" data-static-fallback="true">
+        <h1>Business Shield</h1>
+        <p>
+          Платформа для управления отзывами, репутационными рисками,
+          аналитикой и операционными действиями бизнеса.
+        </p>
+        <nav aria-label="Доступные разделы">
+          <a href="/login">Вход</a>
+          <a href="/register">Регистрация</a>
+          <a href="/api/v1/meta">Статус API</a>
+        </nav>
+      </main>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
