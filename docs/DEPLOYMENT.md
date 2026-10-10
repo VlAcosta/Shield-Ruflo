@@ -13,6 +13,26 @@ Before touching production:
 5. confirm the previous release SHA for rollback;
 6. confirm the latest isolated backup/restore drill passed CI.
 
+## Guarded production deploy
+
+For the normal production path, use the version-controlled deploy runner with the exact approved commit SHA:
+
+```bash
+TARGET_SHA=<approved-full-sha> bash scripts/deploy-production.sh
+```
+
+The runner fails closed unless the production checkout has no tracked modifications and the requested SHA exactly matches the configured release branch head. It then:
+
+1. creates and validates a PostgreSQL backup plus a protected copy of `backend/.env`;
+2. updates the checkout to the exact approved release SHA;
+3. builds the frontend into a staging directory and rejects source maps;
+4. installs/builds the backend, checks Prisma status, and applies committed migrations;
+5. preserves the previous frontend build before activation;
+6. restarts only `bis-shield-api.service` and `bis-shield-worker.service`;
+7. verifies local health/readiness, exact-SHA preflight, public smoke, and security smoke.
+
+The production service account must already have narrowly scoped non-interactive permission to restart those two systemd units. The runner does not grant privileges, modify nginx, run fixture-writing integration tests, or attempt automatic database rollback.
+
 ## Build
 
 Frontend:
