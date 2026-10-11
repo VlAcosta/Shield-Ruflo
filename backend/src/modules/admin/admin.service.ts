@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { SubscriptionStatus } from '../../generated/prisma/client.js';
+import type { Prisma, SubscriptionStatus } from '../../generated/prisma/client.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { listAdminSupportTickets } from '../support/support.service.js';
@@ -530,8 +530,8 @@ async function readMetadataRecord(app: FastifyInstance, key: string): Promise<Js
 async function writeMetadataRecord(app: FastifyInstance, key: string, value: JsonRecord) {
   await app.prisma.serviceMetadata.upsert({
     where: { key },
-    create: { key, value },
-    update: { value },
+    create: { key, value: value as Prisma.InputJsonValue },
+    update: { value: value as Prisma.InputJsonValue },
   });
 }
 
@@ -546,8 +546,8 @@ async function readAdminTemplates(app: FastifyInstance): Promise<JsonRecord[]> {
 async function writeAdminTemplates(app: FastifyInstance, templates: JsonRecord[]) {
   await app.prisma.serviceMetadata.upsert({
     where: { key: PLATFORM_TEMPLATES_METADATA_KEY },
-    create: { key: PLATFORM_TEMPLATES_METADATA_KEY, value: templates },
-    update: { value: templates },
+    create: { key: PLATFORM_TEMPLATES_METADATA_KEY, value: templates as Prisma.InputJsonValue },
+    update: { value: templates as Prisma.InputJsonValue },
   });
 }
 
