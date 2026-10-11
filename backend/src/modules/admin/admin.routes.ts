@@ -5,7 +5,9 @@ import { AppError } from '../../core/errors/app-error.js';
 import {
   createAdminClient,
   createAdminPlan,
+  createAdminReplyTemplate,
   createPlatformManager,
+  deleteAdminReplyTemplate,
   getAdminAnalytics,
   getAdminDashboard,
   getAdminSettings,
@@ -13,7 +15,11 @@ import {
   isPlatformManagerUser,
   listAdminClients,
   listPlatformManagers,
+  testAdminEmailProvider,
+  toggleAdminPlatformIntegration,
   updateAdminPlan,
+  updateAdminReplyTemplate,
+  updateAdminSettingsSection,
   updateAdminSubscription,
   updatePlatformManager,
 } from './admin.service.js';
@@ -81,6 +87,28 @@ const managerCreate = z.object({
 }).strict();
 const managerPatch = managerCreate.partial().strict();
 const managerParams = z.object({ managerId: z.string().uuid() });
+const settingsSectionParams = z.object({ section: z.enum(['notifications', 'smtp', 'security']) });
+const integrationParams = z.object({ integrationId: z.string().trim().min(1).max(120) });
+const integrationToggle = z.object({ enabled: z.boolean() }).strict();
+const templateParams = z.object({ templateId: z.string().uuid() });
+const jsonRecord = z.record(z.string(), z.unknown());
+const replyTemplateCreate = z.object({
+  name: z.string().trim().min(1).max(180).optional(),
+  title: z.string().trim().min(1).max(180).optional(),
+  body: z.string().max(20_000).optional(),
+  text: z.string().max(20_000).optional(),
+  tone: z.string().trim().max(80).optional(),
+  enabled: z.boolean().optional(),
+}).passthrough().refine((value) => Boolean(value.name || value.title), { message: 'Укажите название шаблона' })
+  .refine((value) => Boolean(value.body || value.text), { message: 'Укажите текст шаблона' });
+const replyTemplatePatch = z.object({
+  name: z.string().trim().min(1).max(180).optional(),
+  title: z.string().trim().min(1).max(180).optional(),
+  body: z.string().max(20_000).optional(),
+  text: z.string().max(20_000).optional(),
+  tone: z.string().trim().max(80).optional(),
+  enabled: z.boolean().optional(),
+}).passthrough();
 
 function normalizeIdentity(value: string | null | undefined): string {
   return String(value || '').trim().toLowerCase();
@@ -120,14 +148,6 @@ function requestIdempotencyKey(request: FastifyRequest) {
   const value = Array.isArray(header) ? header[0] : header;
   const normalized = String(value || '').trim();
   return normalized ? normalized.slice(0, 160) : null;
-}
-
-function notConfigured(feature: string): never {
-  throw new AppError({
-    code: 'PLATFORM_ADMIN_FEATURE_NOT_CONFIGURED',
-    message: `${feature} ещё не подключён к production backend`,
-    statusCode: 501,
-  });
 }
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
@@ -272,10 +292,34 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/admin/settings', async () => getAdminSettings(app));
-  app.patch('/admin/settings/:section', async () => notConfigured('Platform settings persistence'));
-  app.post('/admin/settings/integrations/:integrationId/toggle', async () => notConfigured('Platform integrations'));
-  app.post('/admin/settings/templates', async () => notConfigured('Platform reply templates'));
-  app.patch('/admin/settings/templates/:templateId', async () => notConfigured('Platform reply templates'));
-  app.delete('/admin/settings/templates/:templateId', async () => notConfigured('Platform reply templates'));
-  app.post('/admin/settings/smtp/test', async () => notConfigured('SMTP provider'));
+
+  app.patch('/admin/settings/:section', async (request) => {
+    const { section } = settingsSectionParams.parse(request.params);
+    const value = jsonRecord.parse(request.body);
+    return updateAdminSettingsSection(app, section, value);
+  });
+
+  app.post('/admin/settings/integrations/:integrationId/toggle', async (request) => {
+    const { integrationId } = integrationParams.parse(request.params);
+    const { enabled } = integrationToggle.parse(request.body);
+    return { integration: await toggleAdminPlatformIntegration(app, integrationId, enabled) };
+  });
+
+  app.post('/admin/settings/templates', async (request, reply) => {
+    const template = await createAdminReplyTemplate(app, replyTemplateCreate.parse(request.body));
+    return reply.code(201).send({ template });
+  });
+
+  app.patch('/admin/settings/templates/:templateId', async (request) => {
+    const { templateId } = templateParams.parse(request.params);
+    return { template: await updateAdminReplyTemplate(app, templateId, replyTemplatePatch.parse(request.body)) };
+  });
+
+  app.delete('/admin/settings/templates/:templateId', async (request, reply) => {
+    const { templateId } = templateParams.parse(request.params);
+    await deleteAdminReplyTemplate(app, templateId);
+    return reply.code(204).send();
+  });
+
+  app.post('/admin/settings/smtp/test', async (request) => testAdminEmailProvider(app, request.auth!.userId));
 };
