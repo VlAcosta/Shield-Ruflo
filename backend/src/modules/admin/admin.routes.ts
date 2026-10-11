@@ -3,14 +3,19 @@ import { z } from 'zod';
 import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
 import {
+  createAdminClient,
   createAdminPlan,
+  createPlatformManager,
   getAdminAnalytics,
   getAdminDashboard,
   getAdminSettings,
   getAdminSubscriptions,
+  isPlatformManagerUser,
   listAdminClients,
+  listPlatformManagers,
   updateAdminPlan,
   updateAdminSubscription,
+  updatePlatformManager,
 } from './admin.service.js';
 import {
   addAdminSupportMessage,
@@ -21,6 +26,18 @@ import {
 const clientParams = z.object({ clientId: z.string().uuid() });
 const planParams = z.object({ planId: z.string().min(1).max(120) });
 const analyticsQuery = z.object({ period: z.enum(['month', 'quarter', 'year']).default('month') });
+const clientCreate = z.object({
+  name: z.string().trim().min(3).max(240),
+  inn: z.string().trim().regex(/^\d{10,12}$/),
+  email: z.string().trim().email(),
+  phone: z.string().trim().min(5).max(64),
+  planId: z.string().trim().min(1).max(120),
+  managerId: z.string().trim().max(120).optional(),
+  status: z.enum(['active', 'trial', 'expired', 'cancelled']).default('active'),
+  city: z.string().trim().max(160).optional(),
+  industry: z.string().trim().max(120).optional(),
+  expiryDate: z.string().trim().max(20).optional(),
+}).strict();
 const clientPatch = z.object({
   status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED', 'active', 'suspended', 'archived']).optional(),
   legalName: z.string().trim().min(1).max(240).nullable().optional(),
@@ -52,6 +69,18 @@ const ticketMessage = z.object({
   text: z.string().trim().min(1).max(10_000),
   internal: z.boolean().optional(),
 }).strict();
+const managerCreate = z.object({
+  name: z.string().trim().min(2).max(180),
+  email: z.string().trim().email(),
+  phone: z.string().trim().min(5).max(64),
+  role: z.string().trim().min(1).max(160).default('Персональный менеджер'),
+  status: z.enum(['active', 'training', 'paused']).default('active'),
+  capacity: z.coerce.number().int().min(1).max(30).default(6),
+  rating: z.coerce.number().min(0).max(5).default(0),
+  openTickets: z.coerce.number().int().min(0).max(10_000).optional(),
+}).strict();
+const managerPatch = managerCreate.partial().strict();
+const managerParams = z.object({ managerId: z.string().uuid() });
 
 function normalizeIdentity(value: string | null | undefined): string {
   return String(value || '').trim().toLowerCase();
@@ -68,39 +97,14 @@ async function assertPlatformAdmin(app: Parameters<FastifyPluginAsync>[0], reque
   }
 
   const identities = new Set([normalizeIdentity(user.email), normalizeIdentity(user.phone)].filter(Boolean));
-  const allowed = env.PLATFORM_ADMIN_IDENTITIES.length > 0
+  const bootstrapAllowed = env.PLATFORM_ADMIN_IDENTITIES.length > 0
     && env.PLATFORM_ADMIN_IDENTITIES.some((identity) => identities.has(identity));
+  const persistedAllowed = await isPlatformManagerUser(app, user.id);
 
-  if (!allowed) {
+  if (!bootstrapAllowed && !persistedAllowed) {
     request.log.warn({ userId: user.id }, 'Denied platform admin access');
     throw new AppError({ code: 'PLATFORM_ADMIN_ACCESS_DENIED', message: 'Доступ к панели администратора запрещён', statusCode: 403 });
   }
-}
-
-async function listPlatformManagers(app: Parameters<FastifyPluginAsync>[0]) {
-  const emailIdentities = env.PLATFORM_ADMIN_IDENTITIES.filter((identity) => identity.includes('@'));
-  const phoneIdentities = env.PLATFORM_ADMIN_IDENTITIES.filter((identity) => !identity.includes('@'));
-  if (!emailIdentities.length && !phoneIdentities.length) return [];
-
-  const users = await app.prisma.user.findMany({
-    where: {
-      status: 'ACTIVE',
-      OR: [
-        ...(emailIdentities.length ? [{ email: { in: emailIdentities, mode: 'insensitive' as const } }] : []),
-        ...(phoneIdentities.length ? [{ phone: { in: phoneIdentities } }] : []),
-      ],
-    },
-    select: { id: true, displayName: true, firstName: true, lastName: true, email: true, phone: true },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  return users.map((user) => ({
-    id: user.id,
-    name: user.displayName || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || user.phone || 'Администратор',
-    email: user.email || '',
-    role: 'Platform admin',
-    status: 'active',
-  }));
 }
 
 async function assertAssignableManager(app: Parameters<FastifyPluginAsync>[0], managerId: string | null | undefined) {
@@ -163,7 +167,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post('/admin/clients', async () => notConfigured('Создание клиента из platform-admin')); 
+  app.post('/admin/clients', async (request, reply) => {
+    const organization = await createAdminClient(app, clientCreate.parse(request.body));
+    const clients = await listAdminClients(app);
+    const client = clients.find((item) => item.id === organization.id);
+    return reply.code(201).send({ client });
+  });
 
   app.patch('/admin/clients/:clientId', async (request) => {
     const { clientId } = clientParams.parse(request.params);
@@ -189,8 +198,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     configured: true,
     source: 'api',
   }));
-  app.post('/admin/managers', async () => notConfigured('Управление platform-менеджерами'));
-  app.patch('/admin/managers/:managerId', async () => notConfigured('Управление platform-менеджерами'));
+  app.post('/admin/managers', async (request, reply) => {
+    const manager = await createPlatformManager(app, managerCreate.parse(request.body));
+    return reply.code(201).send({ manager });
+  });
+  app.patch('/admin/managers/:managerId', async (request) => {
+    const { managerId } = managerParams.parse(request.params);
+    return { manager: await updatePlatformManager(app, managerId, managerPatch.parse(request.body)) };
+  });
 
   app.get('/admin/tickets', async () => ({
     tickets: await listAdminSupportTickets(app),
