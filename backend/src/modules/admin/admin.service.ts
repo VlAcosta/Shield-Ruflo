@@ -16,16 +16,23 @@ type PlatformManagerRecord = {
 async function readPlatformManagerRecords(app: FastifyInstance): Promise<PlatformManagerRecord[]> {
   const row = await app.prisma.serviceMetadata.findUnique({ where: { key: PLATFORM_MANAGERS_METADATA_KEY } });
   if (!row?.value || !Array.isArray(row.value)) return [];
-  return row.value
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
-    .map((item) => ({
-      userId: String(item.userId || ''),
+  const records: PlatformManagerRecord[] = [];
+  for (const value of row.value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const item = value as Record<string, unknown>;
+    const userId = String(item.userId || '');
+    if (!userId) continue;
+    records.push({
+      userId,
       role: String(item.role || 'Персональный менеджер'),
-      status: ['active', 'training', 'paused'].includes(String(item.status)) ? String(item.status) as PlatformManagerRecord['status'] : 'active',
+      status: ['active', 'training', 'paused'].includes(String(item.status))
+        ? String(item.status) as PlatformManagerRecord['status']
+        : 'active',
       capacity: Math.max(1, Math.min(30, Number(item.capacity || 6))),
       rating: Math.max(0, Math.min(5, Number(item.rating || 0))),
-    }))
-    .filter((item) => item.userId);
+    });
+  }
+  return records;
 }
 
 async function writePlatformManagerRecords(app: FastifyInstance, records: PlatformManagerRecord[]) {
@@ -124,13 +131,23 @@ export async function createPlatformManager(
     capacity: input.capacity,
     rating: input.rating,
   }]);
-  return (await listPlatformManagers(app)).find((item) => item?.id === user.id);
+  const created = (await listPlatformManagers(app)).find((item) => item.id === user.id);
+  if (!created) throw new AppError({ code: 'ADMIN_MANAGER_CREATE_FAILED', message: 'Не удалось прочитать созданного менеджера', statusCode: 500 });
+  return created;
 }
 
 export async function updatePlatformManager(
   app: FastifyInstance,
   managerId: string,
-  patch: Partial<{ name: string; email: string; phone: string; role: string; status: 'active' | 'training' | 'paused'; capacity: number; rating: number }>,
+  patch: {
+    name?: string | undefined;
+    email?: string | undefined;
+    phone?: string | undefined;
+    role?: string | undefined;
+    status?: 'active' | 'training' | 'paused' | undefined;
+    capacity?: number | undefined;
+    rating?: number | undefined;
+  },
 ) {
   const records = await readPlatformManagerRecords(app);
   const index = records.findIndex((item) => item.userId === managerId);
@@ -158,7 +175,9 @@ export async function updatePlatformManager(
     ...(patch.rating !== undefined ? { rating: patch.rating } : {}),
   };
   await writePlatformManagerRecords(app, records);
-  return (await listPlatformManagers(app)).find((item) => item?.id === managerId);
+  const updated = (await listPlatformManagers(app)).find((item) => item.id === managerId);
+  if (!updated) throw new AppError({ code: 'ADMIN_MANAGER_UPDATE_FAILED', message: 'Не удалось прочитать обновлённого менеджера', statusCode: 500 });
+  return updated;
 }
 
 const STATUS_LABELS: Record<string, string> = {
