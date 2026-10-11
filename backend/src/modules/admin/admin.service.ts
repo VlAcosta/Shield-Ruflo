@@ -1,9 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { SubscriptionStatus } from '../../generated/prisma/client.js';
+import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { listAdminSupportTickets } from '../support/support.service.js';
+import { ReportDeliveryError, sendReportEmail } from '../reports/report-delivery.service.js';
 
 const PLATFORM_MANAGERS_METADATA_KEY = 'platform.admin.managers';
+const PLATFORM_SETTINGS_METADATA_KEY = 'platform.admin.settings';
+const PLATFORM_TEMPLATES_METADATA_KEY = 'platform.admin.reply-templates';
 
 type PlatformManagerRecord = {
   userId: string;
@@ -511,29 +516,179 @@ export async function updateAdminSubscription(
   });
 }
 
+type JsonRecord = Record<string, unknown>;
+
+function asJsonRecord(value: unknown): JsonRecord {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+async function readMetadataRecord(app: FastifyInstance, key: string): Promise<JsonRecord> {
+  const row = await app.prisma.serviceMetadata.findUnique({ where: { key } });
+  return asJsonRecord(row?.value);
+}
+
+async function writeMetadataRecord(app: FastifyInstance, key: string, value: JsonRecord) {
+  await app.prisma.serviceMetadata.upsert({
+    where: { key },
+    create: { key, value },
+    update: { value },
+  });
+}
+
+async function readAdminTemplates(app: FastifyInstance): Promise<JsonRecord[]> {
+  const row = await app.prisma.serviceMetadata.findUnique({ where: { key: PLATFORM_TEMPLATES_METADATA_KEY } });
+  if (!row?.value || !Array.isArray(row.value)) return [];
+  return row.value.flatMap((value) => value && typeof value === 'object' && !Array.isArray(value)
+    ? [value as JsonRecord]
+    : []);
+}
+
+async function writeAdminTemplates(app: FastifyInstance, templates: JsonRecord[]) {
+  await app.prisma.serviceMetadata.upsert({
+    where: { key: PLATFORM_TEMPLATES_METADATA_KEY },
+    create: { key: PLATFORM_TEMPLATES_METADATA_KEY, value: templates },
+    update: { value: templates },
+  });
+}
+
 export async function getAdminSettings(app: FastifyInstance) {
-  const subscriptions = await getAdminSubscriptions(app);
+  const [subscriptions, stored, templates, managers] = await Promise.all([
+    getAdminSubscriptions(app),
+    readMetadataRecord(app, PLATFORM_SETTINGS_METADATA_KEY),
+    readAdminTemplates(app),
+    listPlatformManagers(app),
+  ]);
+  const storedIntegrations = Array.isArray(stored.integrations) ? stored.integrations : [];
+  const reportEmailConfigured = env.REPORT_EMAIL_PROVIDER !== 'disabled';
+
   return {
-    notifications: {},
-    smtp: { configured: false },
-    integrations: [],
-    templates: [],
+    notifications: asJsonRecord(stored.notifications),
+    smtp: {
+      ...asJsonRecord(stored.smtp),
+      provider: env.REPORT_EMAIL_PROVIDER,
+      configured: reportEmailConfigured,
+      from: env.REPORT_EMAIL_FROM || '',
+    },
+    integrations: storedIntegrations,
+    templates,
     security: {
-      platformAdminAllowlistConfigured: true,
+      ...asJsonRecord(stored.security),
+      platformAdminAllowlistConfigured: env.PLATFORM_ADMIN_IDENTITIES.length > 0 || managers.length > 0,
       otpProvider: 'configured-by-environment',
-      swagger: false,
+      swagger: env.SWAGGER_ENABLED,
     },
     securityLog: [],
     plans: subscriptions.plans,
     source: 'api',
     capabilities: {
-      smtp: false,
-      platformIntegrations: false,
+      smtp: reportEmailConfigured,
+      platformIntegrations: true,
       supportTickets: true,
       supportManagers: true,
-      replyTemplates: false,
+      replyTemplates: true,
+      settingsPersistence: true,
     },
   };
+}
+
+export async function updateAdminSettingsSection(
+  app: FastifyInstance,
+  section: 'notifications' | 'smtp' | 'security',
+  value: JsonRecord,
+) {
+  const stored = await readMetadataRecord(app, PLATFORM_SETTINGS_METADATA_KEY);
+  stored[section] = value;
+  await writeMetadataRecord(app, PLATFORM_SETTINGS_METADATA_KEY, stored);
+  return { section, value };
+}
+
+export async function toggleAdminPlatformIntegration(
+  app: FastifyInstance,
+  integrationId: string,
+  enabled: boolean,
+) {
+  const stored = await readMetadataRecord(app, PLATFORM_SETTINGS_METADATA_KEY);
+  const integrations = Array.isArray(stored.integrations)
+    ? stored.integrations.flatMap((value) => value && typeof value === 'object' && !Array.isArray(value)
+      ? [value as JsonRecord]
+      : [])
+    : [];
+  const index = integrations.findIndex((item) => String(item.id || '') === integrationId);
+  const next = {
+    ...(index >= 0 ? integrations[index] : {}),
+    id: integrationId,
+    enabled,
+    status: enabled ? 'enabled' : 'disabled',
+    updatedAt: new Date().toISOString(),
+  };
+  if (index >= 0) integrations[index] = next;
+  else integrations.push(next);
+  stored.integrations = integrations;
+  await writeMetadataRecord(app, PLATFORM_SETTINGS_METADATA_KEY, stored);
+  return next;
+}
+
+export async function createAdminReplyTemplate(app: FastifyInstance, input: JsonRecord) {
+  const templates = await readAdminTemplates(app);
+  const template = {
+    ...input,
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await writeAdminTemplates(app, [...templates, template]);
+  return template;
+}
+
+export async function updateAdminReplyTemplate(app: FastifyInstance, templateId: string, patch: JsonRecord) {
+  const templates = await readAdminTemplates(app);
+  const index = templates.findIndex((item) => String(item.id || '') === templateId);
+  if (index < 0) throw new AppError({ code: 'ADMIN_TEMPLATE_NOT_FOUND', message: 'Шаблон ответа не найден', statusCode: 404 });
+  const template = {
+    ...templates[index],
+    ...patch,
+    id: templateId,
+    updatedAt: new Date().toISOString(),
+  };
+  templates[index] = template;
+  await writeAdminTemplates(app, templates);
+  return template;
+}
+
+export async function deleteAdminReplyTemplate(app: FastifyInstance, templateId: string) {
+  const templates = await readAdminTemplates(app);
+  if (!templates.some((item) => String(item.id || '') === templateId)) {
+    throw new AppError({ code: 'ADMIN_TEMPLATE_NOT_FOUND', message: 'Шаблон ответа не найден', statusCode: 404 });
+  }
+  await writeAdminTemplates(app, templates.filter((item) => String(item.id || '') !== templateId));
+}
+
+export async function testAdminEmailProvider(app: FastifyInstance, userId: string) {
+  const user = await app.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  const email = String(user?.email || '').trim();
+  if (!email) throw new AppError({ code: 'ADMIN_EMAIL_REQUIRED', message: 'У администратора не указан email для тестовой отправки', statusCode: 400 });
+  if (env.REPORT_EMAIL_PROVIDER === 'disabled') {
+    throw new AppError({ code: 'REPORT_EMAIL_PROVIDER_NOT_CONFIGURED', message: 'Email provider не настроен', statusCode: 503 });
+  }
+  const eventId = `bs-admin-email-test-${randomUUID()}`;
+  try {
+    await sendReportEmail(
+      email,
+      'Бизнес Щит · проверка email provider',
+      'Тестовая отправка из Platform Admin выполнена успешно.',
+      eventId,
+    );
+  } catch (error) {
+    if (error instanceof ReportDeliveryError) {
+      throw new AppError({
+        code: 'ADMIN_EMAIL_TEST_FAILED',
+        message: error.message,
+        statusCode: error.retryable ? 503 : 502,
+      });
+    }
+    throw error;
+  }
+  return { ok: true, provider: env.REPORT_EMAIL_PROVIDER, destination: email };
 }
 
 
