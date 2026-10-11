@@ -62,11 +62,11 @@ export async function listPlatformManagers(app: FastifyInstance) {
   });
   const ticketCounts = new Map(openTickets.map((item) => [item.assignedToUserId || '', item._count._all]));
 
-  return records.map((record) => {
+  return records.flatMap((record) => {
     const user = byId.get(record.userId);
-    if (!user) return null;
+    if (!user) return [];
     const name = user.displayName || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || user.phone || 'Менеджер';
-    return {
+    return [{
       id: user.id,
       initials: managerInitials(name),
       name,
@@ -80,8 +80,8 @@ export async function listPlatformManagers(app: FastifyInstance) {
       rating: record.rating,
       openTickets: ticketCounts.get(user.id) || 0,
       capacity: record.capacity,
-    };
-  }).filter(Boolean);
+    }];
+  });
 }
 
 export async function isPlatformManagerUser(app: FastifyInstance, userId: string): Promise<boolean> {
