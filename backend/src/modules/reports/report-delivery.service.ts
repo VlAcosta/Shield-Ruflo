@@ -76,7 +76,7 @@ async function fallbackEmailDestination(
   return value;
 }
 
-async function sendEmail(to: string, subject: string, text: string, eventId: string) {
+export async function sendReportEmail(to: string, subject: string, text: string, eventId: string) {
   if (env.REPORT_EMAIL_PROVIDER === 'disabled') {
     throw new ReportDeliveryError('REPORT_EMAIL_PROVIDER_NOT_CONFIGURED');
   }
@@ -291,7 +291,7 @@ export async function processReportDeliveryJob(
     },
   });
 
-  if (input.delivery.channel === 'email') await sendEmail(destination, report.title, text, eventId);
+  if (input.delivery.channel === 'email') await sendReportEmail(destination, report.title, text, eventId);
   else await sendTelegram(destination, text);
 
   await prisma.auditLog.create({
