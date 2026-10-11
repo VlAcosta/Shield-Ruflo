@@ -3,6 +3,164 @@ import type { SubscriptionStatus } from '../../generated/prisma/client.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { listAdminSupportTickets } from '../support/support.service.js';
 
+const PLATFORM_MANAGERS_METADATA_KEY = 'platform.admin.managers';
+
+type PlatformManagerRecord = {
+  userId: string;
+  role: string;
+  status: 'active' | 'training' | 'paused';
+  capacity: number;
+  rating: number;
+};
+
+async function readPlatformManagerRecords(app: FastifyInstance): Promise<PlatformManagerRecord[]> {
+  const row = await app.prisma.serviceMetadata.findUnique({ where: { key: PLATFORM_MANAGERS_METADATA_KEY } });
+  if (!row?.value || !Array.isArray(row.value)) return [];
+  return row.value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => ({
+      userId: String(item.userId || ''),
+      role: String(item.role || 'Персональный менеджер'),
+      status: ['active', 'training', 'paused'].includes(String(item.status)) ? String(item.status) as PlatformManagerRecord['status'] : 'active',
+      capacity: Math.max(1, Math.min(30, Number(item.capacity || 6))),
+      rating: Math.max(0, Math.min(5, Number(item.rating || 0))),
+    }))
+    .filter((item) => item.userId);
+}
+
+async function writePlatformManagerRecords(app: FastifyInstance, records: PlatformManagerRecord[]) {
+  await app.prisma.serviceMetadata.upsert({
+    where: { key: PLATFORM_MANAGERS_METADATA_KEY },
+    create: { key: PLATFORM_MANAGERS_METADATA_KEY, value: records },
+    update: { value: records },
+  });
+}
+
+function managerInitials(name: string): string {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'МН';
+}
+
+export async function listPlatformManagers(app: FastifyInstance) {
+  const records = await readPlatformManagerRecords(app);
+  if (!records.length) return [];
+  const users = await app.prisma.user.findMany({
+    where: { id: { in: records.map((item) => item.userId) } },
+    select: { id: true, displayName: true, firstName: true, lastName: true, email: true, phone: true, createdAt: true, status: true },
+  });
+  const byId = new Map(users.map((user) => [user.id, user]));
+  const openTickets = await app.prisma.supportTicket.groupBy({
+    by: ['assignedToUserId'],
+    where: { assignedToUserId: { in: records.map((item) => item.userId) }, status: { not: 'CLOSED' } },
+    _count: { _all: true },
+  });
+  const ticketCounts = new Map(openTickets.map((item) => [item.assignedToUserId || '', item._count._all]));
+
+  return records.map((record) => {
+    const user = byId.get(record.userId);
+    if (!user) return null;
+    const name = user.displayName || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || user.phone || 'Менеджер';
+    return {
+      id: user.id,
+      initials: managerInitials(name),
+      name,
+      shortName: name.split(/\s+/)[0] || name,
+      email: user.email || '',
+      phone: user.phone || '',
+      role: record.role,
+      joinedAt: formatDate(user.createdAt),
+      status: user.status === 'SUSPENDED' ? 'paused' : record.status,
+      statusLabel: user.status === 'SUSPENDED' || record.status === 'paused' ? 'Приостановлен' : record.status === 'training' ? 'Обучение' : 'Активен',
+      rating: record.rating,
+      openTickets: ticketCounts.get(user.id) || 0,
+      capacity: record.capacity,
+    };
+  }).filter(Boolean);
+}
+
+export async function isPlatformManagerUser(app: FastifyInstance, userId: string): Promise<boolean> {
+  const records = await readPlatformManagerRecords(app);
+  return records.some((item) => item.userId === userId && item.status === 'active');
+}
+
+export async function createPlatformManager(
+  app: FastifyInstance,
+  input: { name: string; email: string; phone: string; role: string; status: 'active' | 'training' | 'paused'; capacity: number; rating: number },
+) {
+  const existing = await app.prisma.user.findFirst({
+    where: { OR: [{ email: { equals: input.email, mode: 'insensitive' } }, { phone: input.phone }] },
+  });
+  const [firstName, ...lastParts] = input.name.trim().split(/\s+/);
+  const user = existing
+    ? await app.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          displayName: input.name,
+          firstName: firstName || null,
+          lastName: lastParts.join(' ') || null,
+          email: input.email,
+          phone: input.phone,
+          status: input.status === 'paused' ? 'SUSPENDED' : 'ACTIVE',
+        },
+      })
+    : await app.prisma.user.create({
+        data: {
+          displayName: input.name,
+          firstName: firstName || null,
+          lastName: lastParts.join(' ') || null,
+          email: input.email,
+          phone: input.phone,
+          status: input.status === 'paused' ? 'SUSPENDED' : 'ACTIVE',
+        },
+      });
+
+  const records = await readPlatformManagerRecords(app);
+  if (records.some((item) => item.userId === user.id)) {
+    throw new AppError({ code: 'ADMIN_MANAGER_ALREADY_EXISTS', message: 'Этот пользователь уже добавлен в platform-команду', statusCode: 409 });
+  }
+  await writePlatformManagerRecords(app, [...records, {
+    userId: user.id,
+    role: input.role,
+    status: input.status,
+    capacity: input.capacity,
+    rating: input.rating,
+  }]);
+  return (await listPlatformManagers(app)).find((item) => item?.id === user.id);
+}
+
+export async function updatePlatformManager(
+  app: FastifyInstance,
+  managerId: string,
+  patch: Partial<{ name: string; email: string; phone: string; role: string; status: 'active' | 'training' | 'paused'; capacity: number; rating: number }>,
+) {
+  const records = await readPlatformManagerRecords(app);
+  const index = records.findIndex((item) => item.userId === managerId);
+  if (index < 0) throw new AppError({ code: 'ADMIN_MANAGER_NOT_FOUND', message: 'Менеджер не найден', statusCode: 404 });
+
+  const user = await app.prisma.user.findUnique({ where: { id: managerId } });
+  if (!user) throw new AppError({ code: 'ADMIN_MANAGER_NOT_FOUND', message: 'Менеджер не найден', statusCode: 404 });
+  const nextName = patch.name?.trim();
+  const [firstName, ...lastParts] = nextName ? nextName.split(/\s+/) : [];
+  await app.prisma.user.update({
+    where: { id: managerId },
+    data: {
+      ...(nextName ? { displayName: nextName, firstName: firstName || null, lastName: lastParts.join(' ') || null } : {}),
+      ...(patch.email !== undefined ? { email: patch.email } : {}),
+      ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+      ...(patch.status !== undefined ? { status: patch.status === 'paused' ? 'SUSPENDED' : 'ACTIVE' } : {}),
+    },
+  });
+
+  records[index] = {
+    ...records[index]!,
+    ...(patch.role !== undefined ? { role: patch.role } : {}),
+    ...(patch.status !== undefined ? { status: patch.status } : {}),
+    ...(patch.capacity !== undefined ? { capacity: patch.capacity } : {}),
+    ...(patch.rating !== undefined ? { rating: patch.rating } : {}),
+  };
+  await writePlatformManagerRecords(app, records);
+  return (await listPlatformManagers(app)).find((item) => item?.id === managerId);
+}
+
 const STATUS_LABELS: Record<string, string> = {
   active: 'Активен',
   trial: 'Пробный',
@@ -357,4 +515,107 @@ export async function getAdminSettings(app: FastifyInstance) {
       replyTemplates: false,
     },
   };
+}
+
+
+function normalizedPhone(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) return `+7${digits.slice(1)}`;
+  if (digits.length >= 10 && digits.length <= 15) return `+${digits}`;
+  return trimmed;
+}
+
+function adminClientSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/giu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 72) || 'client';
+  return `${base}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function parseAdminExpiryDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1]), 12, 0, 0));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export async function createAdminClient(
+  app: FastifyInstance,
+  input: {
+    name: string;
+    inn: string;
+    email: string;
+    phone: string;
+    planId: string;
+    status: 'active' | 'trial' | 'expired' | 'cancelled';
+    city?: string | undefined;
+    industry?: string | undefined;
+    expiryDate?: string | undefined;
+  },
+) {
+  const phone = normalizedPhone(input.phone);
+  if (!phone) throw new AppError({ code: 'ADMIN_CLIENT_PHONE_REQUIRED', message: 'Для владельца клиента требуется телефон', statusCode: 400 });
+
+  const plan = await app.prisma.plan.findFirst({
+    where: { OR: [{ code: input.planId.toUpperCase() }, { id: input.planId }] },
+  });
+  if (!plan) throw new AppError({ code: 'PLAN_NOT_FOUND', message: 'Тариф не найден', statusCode: 404 });
+
+  const existingOwner = await app.prisma.user.findFirst({
+    where: { OR: [{ email: { equals: input.email, mode: 'insensitive' } }, { phone }] },
+  });
+  if (existingOwner) {
+    throw new AppError({ code: 'ADMIN_CLIENT_OWNER_ALREADY_EXISTS', message: 'Пользователь с таким email или телефоном уже существует', statusCode: 409 });
+  }
+
+  const subscriptionStatus = input.status === 'active' ? 'ACTIVE'
+    : input.status === 'trial' ? 'TRIALING'
+      : input.status === 'expired' ? 'EXPIRED'
+        : 'CANCELED';
+  const organizationStatus = input.status === 'cancelled' ? 'ARCHIVED' : 'ACTIVE';
+  const expiry = parseAdminExpiryDate(input.expiryDate);
+
+  return app.prisma.$transaction(async (tx) => {
+    const owner = await tx.user.create({
+      data: { email: input.email, phone, displayName: input.name, status: 'ACTIVE' },
+    });
+    const organization = await tx.organization.create({
+      data: {
+        name: input.name,
+        legalName: input.name,
+        slug: adminClientSlug(input.name),
+        inn: input.inn,
+        industry: input.industry || null,
+        status: organizationStatus,
+        onboardingStatus: 'NOT_STARTED',
+      },
+    });
+    await tx.organizationMember.create({
+      data: { organizationId: organization.id, userId: owner.id, role: 'OWNER', status: 'ACTIVE', joinedAt: new Date() },
+    });
+    const business = await tx.business.create({
+      data: { organizationId: organization.id, name: input.name, industry: input.industry || null, isPrimary: true },
+    });
+    if (input.city) {
+      await tx.location.create({
+        data: { businessId: business.id, name: input.city, city: input.city, isPrimary: true },
+      });
+    }
+    await tx.subscription.create({
+      data: {
+        organizationId: organization.id,
+        planId: plan.id,
+        status: subscriptionStatus,
+        autoRenew: input.status === 'active',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: expiry,
+      },
+    });
+    return organization;
+  });
 }
