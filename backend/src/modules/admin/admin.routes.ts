@@ -204,7 +204,18 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
   app.patch('/admin/managers/:managerId', async (request) => {
     const { managerId } = managerParams.parse(request.params);
-    return { manager: await updatePlatformManager(app, managerId, managerPatch.parse(request.body)) };
+    const patch = managerPatch.parse(request.body);
+    return {
+      manager: await updatePlatformManager(app, managerId, {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.email !== undefined ? { email: patch.email } : {}),
+        ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+        ...(patch.role !== undefined ? { role: patch.role } : {}),
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.capacity !== undefined ? { capacity: patch.capacity } : {}),
+        ...(patch.rating !== undefined ? { rating: patch.rating } : {}),
+      }),
+    };
   });
 
   app.get('/admin/tickets', async () => ({
