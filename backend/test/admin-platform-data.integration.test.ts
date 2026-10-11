@@ -120,6 +120,9 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
     await app.prisma.business.deleteMany({ where: { organizationId } });
     await app.prisma.subscription.deleteMany({ where: { organizationId } });
     await app.prisma.plan.deleteMany({ where: { code: planCode } });
+    await app.prisma.serviceMetadata.deleteMany({
+      where: { key: { in: ['platform.admin.settings', 'platform.admin.reply-templates', 'platform.admin.managers'] } },
+    });
     await app.prisma.organizationMember.deleteMany({ where: { organizationId } });
     await app.prisma.organization.deleteMany({ where: { id: organizationId } });
     await app.prisma.session.deleteMany({ where: { userId: { in: [platformAdminId, regularUserId] } } });
@@ -257,13 +260,56 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test('unconfigured admin modules fail truthfully instead of faking success', async () => {
-    const response = await app.inject({
+  test('platform settings and reply templates persist while disabled email delivery fails truthfully', async () => {
+    const settingsPatch = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/admin/settings/notifications',
+      headers: { cookie: platformAdminCookie },
+      payload: { weeklyDigest: true, criticalAlerts: true },
+    });
+    expect(settingsPatch.statusCode).toBe(200);
+    expect(settingsPatch.json()).toMatchObject({
+      section: 'notifications',
+      value: { weeklyDigest: true, criticalAlerts: true },
+    });
+
+    const createdTemplate = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/settings/templates',
+      headers: { cookie: platformAdminCookie },
+      payload: { name: 'Негативный отзыв', body: 'Спасибо за обратную связь.', tone: 'calm', enabled: true },
+    });
+    expect(createdTemplate.statusCode).toBe(201);
+    const templateId = createdTemplate.json().template.id as string;
+
+    const snapshot = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/settings',
+      headers: { cookie: platformAdminCookie },
+    });
+    expect(snapshot.statusCode).toBe(200);
+    expect(snapshot.json().notifications).toMatchObject({ weeklyDigest: true, criticalAlerts: true });
+    expect(snapshot.json().templates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: templateId, name: 'Негативный отзыв' }),
+    ]));
+    expect(snapshot.json().capabilities).toMatchObject({
+      replyTemplates: true,
+      settingsPersistence: true,
+    });
+
+    const deletedTemplate = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/settings/templates/${templateId}`,
+      headers: { cookie: platformAdminCookie },
+    });
+    expect(deletedTemplate.statusCode).toBe(204);
+
+    const emailTest = await app.inject({
       method: 'POST',
       url: '/api/v1/admin/settings/smtp/test',
       headers: { cookie: platformAdminCookie },
     });
-    expect(response.statusCode).toBe(501);
-    expect(response.json().error.code).toBe('PLATFORM_ADMIN_FEATURE_NOT_CONFIGURED');
+    expect(emailTest.statusCode).toBe(503);
+    expect(emailTest.json().error.code).toBe('REPORT_EMAIL_PROVIDER_NOT_CONFIGURED');
   });
 });
