@@ -84,6 +84,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.REPORT_TELEGRAM_BOT_TOKEN',
           '*.SUGGESTION_WEBHOOK_TOKEN',
           '*.AI_OPENAI_API_KEY',
+          '*.AI_SELF_HOSTED_API_KEY',
           '*.refreshToken',
           '*.accessToken',
         ],
