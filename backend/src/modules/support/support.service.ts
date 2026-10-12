@@ -129,7 +129,7 @@ function detectAttachmentMime(buffer: Buffer, claimed: string): string {
   });
 }
 
-function prepareClientAttachments(input: ClientAttachmentInput[] | undefined) {
+function prepareSupportAttachments(input: ClientAttachmentInput[] | undefined) {
   const source = input || [];
   if (source.length > SUPPORT_ATTACHMENT_MAX_FILES) {
     throw new AppError({ code: 'SUPPORT_ATTACHMENT_LIMIT', message: 'Можно прикрепить не более 5 файлов', statusCode: 422 });
@@ -318,7 +318,7 @@ export async function addClientSupportMessage(
   channelId: string,
   input: ClientMessageInput,
 ) {
-  const preparedAttachments = prepareClientAttachments(input.attachments);
+  const preparedAttachments = prepareSupportAttachments(input.attachments);
   if (!input.text.trim() && !preparedAttachments.length) {
     throw new AppError({ code: 'SUPPORT_MESSAGE_EMPTY', message: 'Введите сообщение или прикрепите файл', statusCode: 422 });
   }
@@ -614,9 +614,13 @@ export async function addAdminSupportMessage(
   app: FastifyInstance,
   actorUserId: string,
   ticketId: string,
-  input: { text: string; internal?: boolean; idempotencyKey?: string | null },
+  input: { text: string; internal?: boolean; attachments?: ClientAttachmentInput[]; idempotencyKey?: string | null },
 ) {
   const current = await getAdminTicketOrThrow(app, ticketId);
+  const preparedAttachments = prepareSupportAttachments(input.attachments);
+  if (!input.text.trim() && !preparedAttachments.length) {
+    throw new AppError({ code: 'SUPPORT_MESSAGE_EMPTY', message: 'Введите сообщение или прикрепите файл', statusCode: 422 });
+  }
 
   if (input.idempotencyKey) {
     const existing = await app.prisma.supportMessage.findFirst({
@@ -627,18 +631,44 @@ export async function addAdminSupportMessage(
 
   const now = new Date();
   await app.prisma.$transaction(async (tx) => {
-    const message = await tx.supportMessage.create({
+    let message = await tx.supportMessage.create({
       data: {
         organizationId: current.organizationId,
         ticketId: current.id,
         authorUserId: actorUserId,
         role: input.internal ? 'ADMIN' : 'AGENT',
-        text: input.text,
+        text: input.text.trim(),
         internal: Boolean(input.internal),
         attachments: [],
         idempotencyKey: input.idempotencyKey || null,
       },
     });
+
+    if (preparedAttachments.length) {
+      await tx.supportAttachment.createMany({
+        data: preparedAttachments.map((file) => ({
+          id: file.id,
+          organizationId: current.organizationId,
+          messageId: message.id,
+          name: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          sha256: file.sha256,
+          content: file.content,
+        })),
+      });
+      const routePrefix = input.internal ? '/api/v1/admin/support/attachments' : '/api/v1/support/attachments';
+      message = await tx.supportMessage.update({
+        where: { id: message.id },
+        data: {
+          attachments: preparedAttachments.map((file) => ({
+            ...attachmentMetadata(file),
+            downloadUrl: `${routePrefix}/${file.id}`,
+          })),
+        },
+      });
+    }
+
     await tx.supportTicket.update({
       where: { id: current.id },
       data: input.internal ? {
@@ -659,7 +689,7 @@ export async function addAdminSupportMessage(
         action: input.internal ? 'support.note.admin' : 'support.message.agent',
         entityType: 'SupportTicket',
         entityId: current.id,
-        metadata: { messageId: message.id },
+        metadata: { messageId: message.id, attachmentCount: preparedAttachments.length },
       },
     });
   });
@@ -671,7 +701,7 @@ export async function addAdminSupportMessage(
       eventKey: 'message',
       type: 'chat',
       title: 'Новый ответ от поддержки',
-      body: input.text.slice(0, 500),
+      body: input.text.trim().slice(0, 500) || 'Поддержка отправила вложение.',
       payload: {
         ticketId: current.id,
         actionLabel: 'Открыть чат',
