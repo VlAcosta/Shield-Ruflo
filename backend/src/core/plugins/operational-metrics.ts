@@ -84,12 +84,14 @@ export const operationalMetricsPlugin = fp(async (app) => {
     }
 
     const provider = aiProviderRegistry.active();
-    const availability = provider?.availability() ?? {
-      configured: false,
-      available: false,
-      reasonCode: 'AI_PROVIDER_NOT_REGISTERED',
-      reasonMessage: 'AI provider is not registered.',
-    };
+    const availability = provider
+      ? await provider.healthCheck()
+      : {
+          configured: false,
+          available: false,
+          reasonCode: 'AI_PROVIDER_NOT_REGISTERED',
+          reasonMessage: 'AI provider is not registered.',
+        };
 
     reply.header('cache-control', 'no-store');
     return {
