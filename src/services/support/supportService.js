@@ -82,7 +82,7 @@ export async function saveSupportPreference(activeChannel, snapshot) {
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
-    if (!(file instanceof File)) {
+    if (typeof File === 'undefined' || !(file instanceof File)) {
       reject(new Error('SUPPORT_ATTACHMENT_FILE_MISSING'));
       return;
     }
