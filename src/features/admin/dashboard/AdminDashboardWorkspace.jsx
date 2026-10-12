@@ -23,7 +23,7 @@ function MetricCard({ item, index }) {
       </div>
       <strong>{item.value}</strong>
       <div className="admin-metric__foot">
-        <small className={item.id === 'tickets' ? 'is-danger' : 'is-positive'}>{item.direction === 'down' ? '↓' : '↑'} {item.delta}</small>
+        <small className={item.id === 'tickets' ? 'is-danger' : item.direction === 'down' ? 'is-danger' : 'is-positive'}>{item.direction === 'down' ? '↓' : item.direction === 'up' ? '↑' : '•'} {item.delta}</small>
         <span>за период</span>
       </div>
       <b className="admin-metric__accent" aria-hidden="true" />
@@ -51,11 +51,11 @@ function RevenueChart({ series }) {
   return (
     <section id="admin-revenue" className="admin-card admin-revenue-card">
       <header>
-        <div className="admin-card__heading"><span>ФИНАНСЫ</span><h2>Выручка</h2><small>Динамика MRR по месяцам</small></div>
+        <div className="admin-card__heading"><span>ФИНАНСЫ</span><h2>Оплаченная выручка</h2><small>Подтверждённые платежи по месяцам</small></div>
         <div className="admin-revenue-card__summary">
           <span className="admin-revenue-card__signal"><i /> LIVE</span>
-          <strong>847 500 ₽</strong>
-          <small>+3.2%</small>
+          <strong>{Number(series.currentValue || 0).toLocaleString('ru-RU')} ₽</strong>
+          <small>{Number(series.deltaPercent || 0) >= 0 ? '+' : ''}{Number(series.deltaPercent || 0).toFixed(1)}%</small>
         </div>
       </header>
 
@@ -89,6 +89,7 @@ function RevenueChart({ series }) {
 
 function TariffsCard({ tariffs }) {
   const total = tariffs.reduce((sum, item) => sum + item.count, 0);
+  const divisor = Math.max(1, total);
   let offset = 0;
   return (
     <section id="admin-tariffs" className="admin-card admin-tariffs-card">
@@ -98,7 +99,7 @@ function TariffsCard({ tariffs }) {
           <svg viewBox="0 0 120 120" role="img" aria-label="Распределение тарифов">
             <circle cx="60" cy="60" r="40" fill="none" stroke="#f0f1f6" strokeWidth="16" />
             {tariffs.map((item, index) => {
-              const length = (item.count / total) * 251.2;
+              const length = (item.count / divisor) * 251.2;
               const node = <circle className="admin-tariffs-card__segment" style={{ '--segment-index': index }} key={item.id} cx="60" cy="60" r="40" fill="none" stroke={item.tone} strokeWidth="16" strokeDasharray={`${length} ${251.2 - length}`} strokeDashoffset={-offset} strokeLinecap="butt" transform="rotate(-90 60 60)" />;
               offset += length;
               return node;
@@ -169,6 +170,7 @@ function ManagersCard({ managers, onOpenAll, onOpenManager }) {
   return (
     <section id="admin-managers" className="admin-card admin-managers-card">
       <header><div className="admin-card__heading"><span>КОМАНДА</span><h2>Менеджеры</h2><small>Загрузка и рейтинг</small></div><button type="button" onClick={onOpenAll}>Все <b>→</b></button></header>
+      {!managers.length ? <div className="admin-managers-card__empty">Менеджеры ещё не назначены клиентам.</div> : null}
       {managers.map((manager, index) => (
         <button type="button" className="admin-manager-row" style={{ '--row-index': index }} key={manager.id} onClick={() => onOpenManager(manager.id)}>
           <span className={`admin-avatar admin-avatar--${manager.tone}`}>{manager.initials}</span>
@@ -181,7 +183,7 @@ function ManagersCard({ managers, onOpenAll, onOpenManager }) {
 }
 
 function ManagerRevenue({ managers }) {
-  const max = Math.max(...managers.map((manager) => manager.revenue));
+  const max = Math.max(1, ...managers.map((manager) => manager.revenue));
   const total = managers.reduce((sum, manager) => sum + manager.revenue, 0);
   return (
     <section id="admin-manager-revenue" className="admin-card admin-manager-revenue">
@@ -215,7 +217,7 @@ function AdminDashboardWorkspace({ onRefreshReady }) {
     <div className={`admin-dashboard ${refreshing ? 'is-refreshing' : ''}`}>
       <section className="admin-dashboard__intro">
         <div><span>COMMAND CENTER</span><h2>Система под контролем</h2><p>Ключевые показатели бизнеса, клиентов и поддержки в одном рабочем пространстве.</p></div>
-        <div className="admin-dashboard__health"><i /><span><strong>99.98%</strong><small>стабильность сервисов</small></span></div>
+        <div className="admin-dashboard__health"><i /><span><strong>ONLINE</strong><small>{data.systemHealth?.label || 'API доступен'}</small></span></div>
       </section>
 
       <div className="admin-dashboard__metrics">{data.metrics.map((item, index) => <MetricCard key={item.id} item={item} index={index} />)}</div>
