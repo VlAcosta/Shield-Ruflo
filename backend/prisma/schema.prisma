@@ -1735,11 +1735,30 @@ model SupportMessage {
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author       User?         @relation("SupportMessageAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  files        SupportAttachment[]
 
   @@unique([ticketId, idempotencyKey], map: "support_messages_ticket_idempotency_key")
   @@index([organizationId, createdAt], map: "support_messages_org_created_idx")
   @@index([ticketId, createdAt], map: "support_messages_ticket_created_idx")
   @@map("support_messages")
+}
+
+model SupportAttachment {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  messageId      String         @map("message_id") @db.Uuid
+  name           String         @db.VarChar(180)
+  mimeType       String         @map("mime_type") @db.VarChar(120)
+  sizeBytes      Int            @map("size_bytes")
+  sha256         String         @db.VarChar(64)
+  content        Bytes
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt], map: "support_attachments_org_created_idx")
+  @@index([messageId, createdAt], map: "support_attachments_message_created_idx")
+  @@map("support_attachments")
 }
 
 model Plan {
