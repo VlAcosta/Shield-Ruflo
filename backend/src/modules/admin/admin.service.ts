@@ -664,8 +664,11 @@ async function getAdminMeasuredHistory(
   }
 
   const churnClients = churnSets.map((set) => set.size);
+  const clientBase = buckets.map((bucket) =>
+    organizations.filter((organization) => organization.createdAt < bucket.end).length
+  );
   const churnRate = buckets.map((bucket, index) => {
-    const base = organizations.filter((organization) => organization.createdAt < bucket.end).length;
+    const base = clientBase[index] || 0;
     return base ? Number(((churnClients[index]! / base) * 100).toFixed(1)) : 0;
   });
 
@@ -682,6 +685,7 @@ async function getAdminMeasuredHistory(
     newClients,
     churnClients,
     churnRate,
+    clientBase,
     plans,
     latestRevenueRub: Number(latest.toFixed(2)),
     previousRevenueRub: Number(previous.toFixed(2)),
@@ -774,10 +778,17 @@ export async function getAdminDashboard(app: FastifyInstance) {
 }
 
 export async function getAdminAnalytics(app: FastifyInstance, period: string) {
-  const clients = await listAdminClients(app);
+  const normalizedPeriod: AdminHistoryPeriod = period === 'quarter' || period === 'year' ? period : 'month';
+  const [clients, history] = await Promise.all([
+    listAdminClients(app),
+    getAdminMeasuredHistory(app, normalizedPeriod),
+  ]);
   const active = clients.filter((item) => item.status === 'active');
-  const mrr = active.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
-  const arpu = active.length ? Math.round(mrr / active.length) : 0;
+  const latestIndex = history.months.length - 1;
+  const latestRevenue = history.revenueRub[latestIndex] || 0;
+  const latestNewClients = history.newClients[latestIndex] || 0;
+  const latestChurn = history.churnRate[latestIndex] || 0;
+  const latestClientBase = history.clientBase[latestIndex] || clients.length;
 
   const sourceRows = await app.prisma.review.groupBy({
     by: ['sourceId'],
@@ -786,7 +797,10 @@ export async function getAdminAnalytics(app: FastifyInstance, period: string) {
   });
   const sourceIds = sourceRows.map((row) => row.sourceId);
   const sources = sourceIds.length
-    ? await app.prisma.reviewSource.findMany({ where: { id: { in: sourceIds } }, select: { id: true, name: true, provider: true } })
+    ? await app.prisma.reviewSource.findMany({
+        where: { id: { in: sourceIds } },
+        select: { id: true, name: true, provider: true },
+      })
     : [];
   const sourceById = new Map(sources.map((item) => [item.id, item]));
   const publishedReplies = sourceIds.length
@@ -802,22 +816,78 @@ export async function getAdminAnalytics(app: FastifyInstance, period: string) {
     answeredCountBySource.set(sourceId, (answeredCountBySource.get(sourceId) || 0) + 1);
   }
 
+  const insightRows = [
+    {
+      id: 'revenue',
+      tone: history.revenueDeltaPercent >= 0 ? 'green' : 'orange',
+      title: history.revenueDeltaPercent >= 0 ? 'Оплаченная выручка растёт' : 'Оплаченная выручка снизилась',
+      text: `${history.revenueDeltaPercent >= 0 ? '+' : ''}${history.revenueDeltaPercent}% к предыдущему периоду; сейчас ${latestRevenue.toLocaleString('ru-RU')} ₽.`,
+    },
+    {
+      id: 'clients',
+      tone: latestNewClients > 0 ? 'violet' : 'neutral',
+      title: 'Новые клиенты',
+      text: `За текущий период зарегистрировано ${latestNewClients} новых клиентов.`,
+    },
+    {
+      id: 'churn',
+      tone: latestChurn > 5 ? 'orange' : 'green',
+      title: 'Churn',
+      text: `В текущем периоде churn составляет ${latestChurn}% от клиентской базы.`,
+    },
+  ];
+
   return {
-    period,
+    period: normalizedPeriod,
     measured: true,
+    historyMeasured: true,
     metrics: [
-      { id: 'mrr', label: 'MRR', value: `${mrr.toLocaleString('ru-RU')} ₽`, delta: 'текущий срез', direction: 'flat', tone: 'violet' },
-      { id: 'clients', label: 'Клиентов', value: String(clients.length), delta: `${active.length} активных`, direction: 'flat', tone: 'cyan' },
-      { id: 'inactive', label: 'Неактивных', value: String(clients.length - active.length), delta: 'текущий срез', direction: 'flat', tone: 'orange' },
-      { id: 'arpu', label: 'ARPU активных', value: `${arpu.toLocaleString('ru-RU')} ₽`, delta: 'по текущему MRR', direction: 'flat', tone: 'magenta' },
+      {
+        id: 'paidRevenue',
+        label: 'Оплаченная выручка',
+        value: `${latestRevenue.toLocaleString('ru-RU')} ₽`,
+        delta: `${history.revenueDeltaPercent >= 0 ? '+' : ''}${history.revenueDeltaPercent}%`,
+        direction: history.revenueDeltaPercent >= 0 ? 'up' : 'down',
+        tone: 'violet',
+      },
+      {
+        id: 'newClients',
+        label: 'Новых клиентов',
+        value: String(latestNewClients),
+        delta: `${clients.length} всего`,
+        direction: 'flat',
+        tone: 'cyan',
+      },
+      {
+        id: 'churn',
+        label: 'Churn Rate',
+        value: `${latestChurn}%`,
+        delta: `${history.churnClients[latestIndex] || 0} ушли`,
+        direction: latestChurn > 5 ? 'down' : 'flat',
+        tone: 'green',
+      },
+      {
+        id: 'clientBase',
+        label: 'Клиентская база',
+        value: String(latestClientBase),
+        delta: `${active.length} активных сейчас`,
+        direction: 'flat',
+        tone: 'magenta',
+      },
     ],
-    months: [],
-    mrr: [],
-    newClients: [],
-    churnClients: [],
-    churnRate: [],
-    plans: {},
-    historyMeasured: false,
+    months: history.months,
+    revenue: history.revenueThousands,
+    revenueRub: history.revenueRub,
+    mrr: history.revenueThousands,
+    newClients: history.newClients,
+    churnClients: history.churnClients,
+    churnRate: history.churnRate,
+    clientBase: history.clientBase,
+    plans: {
+      starter: history.plans.starter || history.months.map(() => 0),
+      professional: history.plans.professional || history.months.map(() => 0),
+      business: history.plans.business || history.months.map(() => 0),
+    },
     platforms: sourceRows.map((row) => {
       const source = sourceById.get(row.sourceId);
       const reviews = row._count._all;
@@ -833,7 +903,8 @@ export async function getAdminAnalytics(app: FastifyInstance, period: string) {
         trend: null,
       };
     }).sort((a, b) => b.reviews - a.reviews),
-    insights: [],
+    insights: insightRows,
+    revenueSource: 'completed_billing_purchase_requests',
   };
 }
 
