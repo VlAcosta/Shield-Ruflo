@@ -40,7 +40,7 @@ const clientCreate = z.object({
   email: z.string().trim().email(),
   phone: z.string().trim().min(5).max(64),
   planId: z.string().trim().min(1).max(120),
-  managerId: z.string().trim().max(120).optional(),
+  managerId: z.string().uuid().optional(),
   status: z.enum(['active', 'trial', 'expired', 'cancelled']).default('active'),
   city: z.string().trim().max(160).optional(),
   industry: z.string().trim().max(120).optional(),
@@ -51,6 +51,7 @@ const clientPatch = z.object({
   legalName: z.string().trim().min(1).max(240).nullable().optional(),
   industry: z.string().trim().max(120).nullable().optional(),
   website: z.string().url().nullable().optional(),
+  managerId: z.string().uuid().nullable().optional(),
 }).strict();
 const planPatch = z.object({
   name: z.string().trim().min(1).max(160).optional(),
@@ -150,8 +151,12 @@ async function assertPlatformAdmin(app: Parameters<FastifyPluginAsync>[0], reque
 async function assertAssignableManager(app: Parameters<FastifyPluginAsync>[0], managerId: string | null | undefined) {
   if (!managerId) return;
   const managers = await listPlatformManagers(app);
-  if (!managers.some((manager) => manager.id === managerId)) {
-    throw new AppError({ code: 'ADMIN_MANAGER_NOT_FOUND', message: 'Менеджер поддержки не найден', statusCode: 404 });
+  const manager = managers.find((item) => item.id === managerId);
+  if (!manager) {
+    throw new AppError({ code: 'ADMIN_MANAGER_NOT_FOUND', message: 'Менеджер не найден', statusCode: 404 });
+  }
+  if (manager.status === 'paused') {
+    throw new AppError({ code: 'ADMIN_MANAGER_INACTIVE', message: 'Нельзя назначить приостановленного менеджера', statusCode: 409 });
   }
 }
 
@@ -200,7 +205,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/admin/clients', async (request, reply) => {
-    const organization = await createAdminClient(app, clientCreate.parse(request.body));
+    const input = clientCreate.parse(request.body);
+    await assertAssignableManager(app, input.managerId);
+    const organization = await createAdminClient(app, input);
     const clients = await listAdminClients(app);
     const client = clients.find((item) => item.id === organization.id);
     return reply.code(201).send({ client });
@@ -209,6 +216,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/admin/clients/:clientId', async (request) => {
     const { clientId } = clientParams.parse(request.params);
     const patch = clientPatch.parse(request.body);
+    await assertAssignableManager(app, patch.managerId);
     const current = await app.prisma.organization.findUnique({ where: { id: clientId } });
     if (!current) throw new AppError({ code: 'ADMIN_CLIENT_NOT_FOUND', message: 'Клиент не найден', statusCode: 404 });
     const status = patch.status ? patch.status.toUpperCase() as 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' : undefined;
@@ -219,6 +227,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         ...(patch.legalName !== undefined ? { legalName: patch.legalName } : {}),
         ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
         ...(patch.website !== undefined ? { website: patch.website } : {}),
+        ...(patch.managerId !== undefined ? { accountManagerId: patch.managerId } : {}),
       },
     });
     const clients = await listAdminClients(app);
