@@ -6,7 +6,7 @@ ROOT="${APP_DIR:-/var/www/bis-shield}"
 ENV_FILE="${BACKEND_ENV_FILE:-$ROOT/backend/.env}"
 BACKUP_BASE="${BACKUP_BASE:-/home/acosta/business-shield-backups/daily}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
-LOCK_FILE="${BACKUP_LOCK_FILE:-/var/lock/business-shield-daily-backup.lock}"
+LOCK_FILE="${BACKUP_LOCK_FILE:-$BACKUP_BASE/.daily-backup.lock}"
 
 fail(){ echo "❌ $*" >&2; exit 1; }
 ok(){ echo "✅ $*"; }
