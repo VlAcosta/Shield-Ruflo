@@ -36,12 +36,12 @@ function MultiLineChart({ title, eyebrow, description, months, lines, legend }) 
 }
 
 function BarsChart({ data, months }) {
-  const max = Math.max(...data.newClients, ...data.churnClients);
+  const max = Math.max(1, ...data.newClients, ...data.churnClients);
   return <section className="admin-analytics-card admin-analytics-bars"><header><div><span>GROWTH FLOW</span><h2>Новые клиенты vs Отток</h2><p>Динамика притока и ухода по периодам.</p></div></header><div className="admin-analytics-bars__legend"><span><i className="is-new"/>Новые</span><span><i className="is-churn"/>Отток</span></div><div className="admin-analytics-bars__grid">{months.map((month,index) => <div key={month} className="admin-analytics-bars__group" style={{'--bar-index':index}}><div><i className="is-new" style={{height:`${(data.newClients[index]/max)*100}%`}}><b>{data.newClients[index]}</b></i><i className="is-churn" style={{height:`${(data.churnClients[index]/max)*100}%`}}><b>{data.churnClients[index]}</b></i></div><span>{month}</span></div>)}</div></section>;
 }
 
 function PlatformTable({ platforms }) {
-  return <section className="admin-analytics-card admin-platform-table"><header><div><span>REPUTATION NETWORK</span><h2>Статистика по площадкам</h2><p>Ответы, охват и рейтинг по внешним источникам.</p></div><button type="button" onClick={() => window.print()}>Экспорт</button></header><div className="admin-platform-table__wrap"><table><thead><tr><th>Площадка</th><th>Отзывов</th><th>Ответов</th><th>Охват</th><th>Рейтинг</th><th>Динамика</th></tr></thead><tbody>{platforms.map((platform,index) => <tr key={platform.id} style={{'--row-index':index}}><td><span className={`admin-platform-table__logo is-${platform.id}`}>{platform.name.slice(0,1)}</span><strong>{platform.name}</strong></td><td>{platform.reviews.toLocaleString('ru-RU')}</td><td>{platform.replies.toLocaleString('ru-RU')}</td><td><div className="admin-platform-table__coverage"><span><i style={{width:`${platform.coverage}%`}} /></span><b>{platform.coverage}%</b></div></td><td><strong className="admin-platform-table__rating">★ {platform.rating}</strong></td><td><span className={platform.trend >= 0 ? 'is-positive' : 'is-negative'}>{platform.trend >= 0 ? '↑' : '↓'} {Math.abs(platform.trend)}%</span></td></tr>)}</tbody></table></div></section>;
+  return <section className="admin-analytics-card admin-platform-table"><header><div><span>REPUTATION NETWORK</span><h2>Статистика по площадкам</h2><p>Ответы, охват и рейтинг по внешним источникам.</p></div><button type="button" onClick={() => window.print()}>Экспорт</button></header><div className="admin-platform-table__wrap"><table><thead><tr><th>Площадка</th><th>Отзывов</th><th>Ответов</th><th>Охват</th><th>Рейтинг</th><th>Динамика</th></tr></thead><tbody>{platforms.map((platform,index) => <tr key={platform.id} style={{'--row-index':index}}><td><span className={`admin-platform-table__logo is-${platform.id}`}>{platform.name.slice(0,1)}</span><strong>{platform.name}</strong></td><td>{platform.reviews.toLocaleString('ru-RU')}</td><td>{platform.replies.toLocaleString('ru-RU')}</td><td><div className="admin-platform-table__coverage"><span><i style={{width:`${platform.coverage}%`}} /></span><b>{platform.coverage}%</b></div></td><td><strong className="admin-platform-table__rating">{platform.rating == null ? '—' : `★ ${platform.rating}`}</strong></td><td>{platform.trend == null ? <span>—</span> : <span className={platform.trend >= 0 ? 'is-positive' : 'is-negative'}>{platform.trend >= 0 ? '↑' : '↓'} {Math.abs(platform.trend)}%</span>}</td></tr>)}</tbody></table></div></section>;
 }
 
 function Skeleton(){return <div className="admin-analytics-skeleton">{Array.from({length:10}).map((_,i)=><i key={i}/>)}</div>;}
@@ -51,7 +51,7 @@ export default function AdminAnalyticsWorkspace({ onRefreshReady }) {
   const { data,error,refreshing,refresh } = useAdminAnalytics(period);
   React.useEffect(() => { onRefreshReady?.(refresh); }, [onRefreshReady,refresh]);
 
-  const metricSeries = useMemo(() => data ? [data.mrr,data.newClients,data.churnRate,data.plans.professional] : [], [data]);
+  const metricSeries = useMemo(() => data ? [data.revenue || data.mrr, data.newClients, data.churnRate, data.clientBase] : [], [data]);
   if (!data && refreshing) return <Skeleton/>;
   if (!data && error) return <section className="admin-analytics-error"><strong>Не удалось загрузить аналитику</strong><p>{error}</p><button type="button" onClick={refresh}>Повторить</button></section>;
   if (!data) return null;
@@ -62,9 +62,9 @@ export default function AdminAnalyticsWorkspace({ onRefreshReady }) {
     <div className="admin-analytics__metrics">{data.metrics.map((item,index)=><AnalyticsMetric key={item.id} item={item} index={index} series={metricSeries[index]}/>)}</div>
 
     <div className="admin-analytics__grid">
-      <MultiLineChart title="MRR" eyebrow="REVENUE VELOCITY" description="Ежемесячная повторяющаяся выручка, тыс. ₽." months={data.months} lines={[{id:'mrr',values:data.mrr,color:'#665cff'}]} legend={[{label:'MRR',color:'#665cff'}]} />
+      <MultiLineChart title="Оплаченная выручка" eyebrow="REVENUE VELOCITY" description="Подтверждённые платежи по периодам, тыс. ₽." months={data.months} lines={[{id:'revenue',values:data.revenue || data.mrr,color:'#665cff'}]} legend={[{label:'Выручка',color:'#665cff'}]} />
       <BarsChart data={data} months={data.months}/>
-      <MultiLineChart title="Рост по тарифам" eyebrow="PLAN MOMENTUM" description="Как меняется клиентская база по продуктовым пакетам." months={data.months} lines={[{id:'starter',values:data.plans.starter,color:'#16b9d3'},{id:'professional',values:data.plans.professional,color:'#665cff'},{id:'business',values:data.plans.business,color:'#a33ff2'}]} legend={[{label:'Стартер',color:'#16b9d3'},{label:'Профессионал',color:'#665cff'},{label:'Бизнес',color:'#a33ff2'}]} />
+      <MultiLineChart title="Подключения по тарифам" eyebrow="PLAN MOMENTUM" description="Новые подписки по продуктовым пакетам в каждом периоде." months={data.months} lines={[{id:'starter',values:data.plans.starter,color:'#16b9d3'},{id:'professional',values:data.plans.professional,color:'#665cff'},{id:'business',values:data.plans.business,color:'#a33ff2'}]} legend={[{label:'Стартер',color:'#16b9d3'},{label:'Профессионал',color:'#665cff'},{label:'Бизнес',color:'#a33ff2'}]} />
       <MultiLineChart title="Churn Rate" eyebrow="RETENTION SIGNAL" description="Доля клиентов, покидающих сервис." months={data.months} lines={[{id:'churn',values:data.churnRate,color:'#17b982'}]} legend={[{label:'Churn %',color:'#17b982'}]} />
     </div>
 
