@@ -58,10 +58,17 @@ if (env.AI_REVIEW_INTELLIGENCE_ENABLED) {
   if (env.AI_PROVIDER === 'openai' && (!env.AI_OPENAI_API_KEY || !env.AI_OPENAI_MODEL)) {
     throw new Error('OpenAI provider is enabled but AI_OPENAI_API_KEY/AI_OPENAI_MODEL are not configured');
   }
+  if (env.AI_PROVIDER === 'mistral' && (!env.AI_MISTRAL_API_KEY || !env.AI_MISTRAL_MODEL)) {
+    throw new Error('Mistral provider is enabled but AI_MISTRAL_API_KEY/AI_MISTRAL_MODEL are not configured');
+  }
   if (env.AI_PROVIDER === 'self_hosted' && (!env.AI_SELF_HOSTED_BASE_URL || !env.AI_SELF_HOSTED_MODEL)) {
     throw new Error('Self-hosted AI is enabled but AI_SELF_HOSTED_BASE_URL/AI_SELF_HOSTED_MODEL are not configured');
   }
-  const model = env.AI_PROVIDER === 'self_hosted' ? env.AI_SELF_HOSTED_MODEL : env.AI_OPENAI_MODEL;
+  const model = env.AI_PROVIDER === 'mistral'
+    ? env.AI_MISTRAL_MODEL
+    : env.AI_PROVIDER === 'self_hosted'
+      ? env.AI_SELF_HOSTED_MODEL
+      : env.AI_OPENAI_MODEL;
   console.log(`✅ AI activation configured (provider=${env.AI_PROVIDER}, model=${model})`);
 } else {
   console.warn('⚠ AI_REVIEW_INTELLIGENCE_ENABLED=false: Review Intelligence, Reply Copilot, Ask Shield and AI Visibility provider calls remain disabled.');
@@ -69,6 +76,18 @@ if (env.AI_REVIEW_INTELLIGENCE_ENABLED) {
 if (operationsConfig.OPERATIONS_METRICS_TOKEN.length < 32) {
   throw new Error('OPERATIONS_METRICS_TOKEN must be at least 32 characters');
 }
+if (env.GOOGLE_BUSINESS_ENABLED) {
+  console.log('✅ Google Business Profile OAuth is enabled');
+} else {
+  console.warn('⚠ GOOGLE_BUSINESS_ENABLED=false: Google Business Profile adapter is installed but OAuth activation is disabled.');
+}
+const bridgeHosts = String(process.env.REVIEW_BRIDGE_ALLOWED_HOSTS || '').split(',').map((v) => v.trim()).filter(Boolean);
+if (bridgeHosts.length) {
+  console.log(`✅ Review bridge allowlist configured for ${bridgeHosts.length} host(s)`);
+} else {
+  console.warn('⚠ REVIEW_BRIDGE_ALLOWED_HOSTS is empty: Yandex Business and Otzovik verified bridge connections remain disabled.');
+}
+console.log('✅ WB/Ozon/2GIS adapters are installed; tenant credentials are supplied through the Integrations UI.');
 console.log('✅ Backend production environment passed schema, security, and operational validation');
 NODE
 

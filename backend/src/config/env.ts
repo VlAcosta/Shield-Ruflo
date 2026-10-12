@@ -127,9 +127,14 @@ const envSchema = z
     SUGGESTION_WEBHOOK_TOKEN: z.string().default(''),
 
     AI_REVIEW_INTELLIGENCE_ENABLED: booleanFromString.default(false),
-    AI_PROVIDER: z.enum(['openai', 'self_hosted']).default('openai'),
+    AI_PROVIDER: z.enum(['openai', 'mistral', 'self_hosted']).default('openai'),
     AI_OPENAI_API_KEY: z.string().default(''),
     AI_OPENAI_MODEL: z.string().default(''),
+    AI_MISTRAL_API_KEY: z.string().default(''),
+    AI_MISTRAL_MODEL: z.string().default('mistral-small-latest'),
+    AI_MISTRAL_BASE_URL: z.string().url().default('https://api.mistral.ai'),
+    AI_MISTRAL_INPUT_COST_MICROS_PER_MILLION_TOKENS: z.coerce.number().int().min(0).default(0),
+    AI_MISTRAL_OUTPUT_COST_MICROS_PER_MILLION_TOKENS: z.coerce.number().int().min(0).default(0),
     AI_SELF_HOSTED_BASE_URL: optionalUrl,
     AI_SELF_HOSTED_API_KEY: z.string().default(''),
     AI_SELF_HOSTED_MODEL: z.string().default(''),
@@ -173,6 +178,14 @@ const envSchema = z
         }
         if (!value.AI_OPENAI_MODEL) {
           ctx.addIssue({ code: 'custom', path: ['AI_OPENAI_MODEL'], message: 'OpenAI provider requires an explicit model' });
+        }
+      }
+      if (value.AI_PROVIDER === 'mistral') {
+        if (!value.AI_MISTRAL_API_KEY) {
+          ctx.addIssue({ code: 'custom', path: ['AI_MISTRAL_API_KEY'], message: 'Mistral provider requires an API key' });
+        }
+        if (!value.AI_MISTRAL_MODEL) {
+          ctx.addIssue({ code: 'custom', path: ['AI_MISTRAL_MODEL'], message: 'Mistral provider requires an explicit model' });
         }
       }
       if (value.AI_PROVIDER === 'self_hosted') {
@@ -248,6 +261,9 @@ const envSchema = z
       }
       if (value.REPORT_EMAIL_PROVIDER === 'webhook' && !value.REPORT_EMAIL_WEBHOOK_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_WEBHOOK_URL'], message: 'Production report email webhook must use HTTPS' });
+      }
+      if (value.AI_REVIEW_INTELLIGENCE_ENABLED && value.AI_PROVIDER === 'mistral' && !value.AI_MISTRAL_BASE_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['AI_MISTRAL_BASE_URL'], message: 'Production Mistral endpoint must use HTTPS' });
       }
       if (value.AI_REVIEW_INTELLIGENCE_ENABLED && value.AI_PROVIDER === 'self_hosted' && !value.AI_SELF_HOSTED_BASE_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['AI_SELF_HOSTED_BASE_URL'], message: 'Production self-hosted AI endpoint must use HTTPS' });
