@@ -18,6 +18,7 @@ import {
   testAdminEmailProvider,
   testAdminTelegramProvider,
   toggleAdminPlatformIntegration,
+  updateAdminClient,
   updateAdminPlan,
   updateAdminReplyTemplate,
   updateAdminSettingsSection,
@@ -47,11 +48,18 @@ const clientCreate = z.object({
   expiryDate: z.string().trim().max(20).optional(),
 }).strict();
 const clientPatch = z.object({
-  status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED', 'active', 'suspended', 'archived']).optional(),
+  name: z.string().trim().min(3).max(240).optional(),
   legalName: z.string().trim().min(1).max(240).nullable().optional(),
+  inn: z.string().trim().regex(/^\d{10,12}$/).optional(),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().min(5).max(64).optional(),
+  city: z.string().trim().max(160).optional(),
   industry: z.string().trim().max(120).nullable().optional(),
   website: z.string().url().nullable().optional(),
+  planId: z.string().trim().min(1).max(120).optional(),
   managerId: z.string().uuid().nullable().optional(),
+  status: z.enum(['active', 'trial', 'expired', 'cancelled', 'suspended', 'archived']).optional(),
+  expiryDate: z.string().trim().max(20).optional(),
 }).strict();
 const planPatch = z.object({
   name: z.string().trim().min(1).max(160).optional(),
@@ -217,21 +225,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const { clientId } = clientParams.parse(request.params);
     const patch = clientPatch.parse(request.body);
     await assertAssignableManager(app, patch.managerId);
-    const current = await app.prisma.organization.findUnique({ where: { id: clientId } });
-    if (!current) throw new AppError({ code: 'ADMIN_CLIENT_NOT_FOUND', message: 'Клиент не найден', statusCode: 404 });
-    const status = patch.status ? patch.status.toUpperCase() as 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' : undefined;
-    await app.prisma.organization.update({
-      where: { id: clientId },
-      data: {
-        ...(status ? { status } : {}),
+    return {
+      client: await updateAdminClient(app, clientId, {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.legalName !== undefined ? { legalName: patch.legalName } : {}),
+        ...(patch.inn !== undefined ? { inn: patch.inn } : {}),
+        ...(patch.email !== undefined ? { email: patch.email } : {}),
+        ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+        ...(patch.city !== undefined ? { city: patch.city } : {}),
         ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
         ...(patch.website !== undefined ? { website: patch.website } : {}),
-        ...(patch.managerId !== undefined ? { accountManagerId: patch.managerId } : {}),
-      },
-    });
-    const clients = await listAdminClients(app);
-    return { client: clients.find((item) => item.id === clientId) };
+        ...(patch.planId !== undefined ? { planId: patch.planId } : {}),
+        ...(patch.managerId !== undefined ? { managerId: patch.managerId } : {}),
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.expiryDate !== undefined ? { expiryDate: patch.expiryDate } : {}),
+      }, request.auth!.userId),
+    };
   });
 
   app.get('/admin/managers', async () => ({
