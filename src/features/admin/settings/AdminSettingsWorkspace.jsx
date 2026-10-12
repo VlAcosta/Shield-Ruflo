@@ -73,7 +73,151 @@ function PlansTab({ plans, savePlan, saving }) {
   );
 }
 
-function IntegrationsTab({ data }) {
+
+function NotificationsTab({ data, saveSection, testSmtp, saving, run }) {
+  const initial = data.notifications || {};
+  const [draft, setDraft] = useState({
+    email: initial.email !== false,
+    telegram: Boolean(initial.telegram),
+    weeklyReports: initial.weeklyReports !== false,
+    criticalAlerts: initial.criticalAlerts !== false,
+  });
+
+  useEffect(() => {
+    const current = data.notifications || {};
+    setDraft({
+      email: current.email !== false,
+      telegram: Boolean(current.telegram),
+      weeklyReports: current.weeklyReports !== false,
+      criticalAlerts: current.criticalAlerts !== false,
+    });
+  }, [data.notifications]);
+
+  const smtp = data.smtp || {};
+  const rows = [
+    ['email', 'Email-уведомления', 'Глобальный переключатель platform email-уведомлений.'],
+    ['telegram', 'Telegram-уведомления', 'Использовать Telegram для platform delivery после настройки bot token.'],
+    ['weeklyReports', 'Еженедельные отчёты', 'Разрешить плановую delivery-отправку weekly reports.'],
+    ['criticalAlerts', 'Критические оповещения', 'Разрешить срочные platform-уведомления и аварийные события.'],
+  ];
+
+  return (
+    <div className="admin-settings-two">
+      <section className="admin-settings-panel">
+        <header><div><span>NOTIFICATIONS</span><h3>Каналы и правила доставки</h3><p>Настройки сохраняются в PostgreSQL и применяются как platform policy.</p></div></header>
+        <div className="admin-settings-trigger-list">
+          {rows.map(([key, title, description], index) => (
+            <article key={key} style={{ '--item-index': index }}>
+              <span><strong>{title}</strong><small>{description}</small></span>
+              <button
+                type="button"
+                className={`admin-settings-switch ${draft[key] ? 'is-on' : ''}`}
+                aria-pressed={draft[key]}
+                disabled={saving}
+                onClick={() => setDraft((current) => ({ ...current, [key]: !current[key] }))}
+              ><i /></button>
+            </article>
+          ))}
+        </div>
+        <footer>
+          <button type="button" disabled={saving} onClick={() => run(() => saveSection('notifications', draft), 'Настройки уведомлений сохранены')}>
+            {saving ? 'Сохраняем…' : 'Сохранить настройки'}
+          </button>
+        </footer>
+      </section>
+
+      <section className="admin-settings-panel">
+        <header><div><span>EMAIL DELIVERY</span><h3>Email provider</h3><p>Credentials остаются только в backend environment и никогда не передаются в браузер.</p></div></header>
+        <div className="admin-settings-security__switches">
+          <article><span><strong>Provider</strong><small>Текущий production provider.</small></span><b>{smtp.provider || 'disabled'}</b></article>
+          <article><span><strong>Состояние</strong><small>Готовность к фактической отправке.</small></span><b>{smtp.configured ? 'Настроен' : 'Не настроен'}</b></article>
+          <article><span><strong>From</strong><small>Серверный адрес отправителя.</small></span><b>{smtp.from || '—'}</b></article>
+        </div>
+        <footer>
+          <button type="button" className="is-secondary" disabled={saving || !smtp.configured} onClick={() => run(() => testSmtp(), 'Тестовое письмо отправлено')}>
+            Проверить отправку
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function TemplatesTab({ data, saveTemplate, deleteTemplate, saving, run }) {
+  const templates = Array.isArray(data.templates) ? data.templates : [];
+  const [selectedId, setSelectedId] = useState(templates[0]?.id || 'new');
+  const selected = templates.find((item) => item.id === selectedId) || null;
+  const [draft, setDraft] = useState({ name: '', body: '', tone: '', enabled: true });
+
+  useEffect(() => {
+    const current = templates.find((item) => item.id === selectedId);
+    if (current) {
+      setDraft({
+        id: current.id,
+        name: current.name || current.title || '',
+        body: current.body || current.text || '',
+        tone: current.tone || '',
+        enabled: current.enabled !== false,
+      });
+    } else {
+      setDraft({ name: '', body: '', tone: '', enabled: true });
+    }
+  }, [selectedId, data.templates]);
+
+  const createNew = () => {
+    setSelectedId('new');
+    setDraft({ name: '', body: '', tone: '', enabled: true });
+  };
+
+  return (
+    <div className="admin-settings-template-layout">
+      <section className="admin-settings-template-list">
+        <header><div><span>REPLY TEMPLATES</span><h3>Библиотека шаблонов</h3></div><button type="button" onClick={createNew}>+ Новый</button></header>
+        <div>
+          {templates.length ? templates.map((item, index) => (
+            <button key={item.id} type="button" className={selectedId === item.id ? 'is-active' : ''} style={{ '--item-index': index }} onClick={() => setSelectedId(item.id)}>
+              <i className={item.enabled === false ? 'is-danger' : 'is-success'} />
+              <span><strong>{item.name || item.title || 'Без названия'}</strong><small>{item.tone || 'Без tone-of-voice'}</small></span>
+              <b>›</b>
+            </button>
+          )) : <div className="admin-settings-test-result">Шаблонов пока нет. Создайте первый production-шаблон ответа.</div>}
+        </div>
+      </section>
+
+      <section className="admin-settings-panel admin-settings-template-editor">
+        <header><div><span>{selected ? 'EDIT TEMPLATE' : 'NEW TEMPLATE'}</span><h3>{selected ? 'Редактирование шаблона' : 'Новый шаблон ответа'}</h3><p>Шаблон хранится на backend и доступен всей platform-admin команде.</p></div></header>
+        <div className="admin-settings-form">
+          <label><span>Название</span><input value={draft.name} maxLength={180} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+          <label><span>Tone of voice</span><input value={draft.tone} maxLength={80} placeholder="Например: спокойный" onChange={(event) => setDraft((current) => ({ ...current, tone: event.target.value }))} /></label>
+          <label className="is-wide"><span>Текст шаблона</span><textarea rows="12" value={draft.body} maxLength={20000} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} /></label>
+          <label>
+            <span>Состояние</span>
+            <select value={draft.enabled ? 'enabled' : 'disabled'} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.value === 'enabled' }))}>
+              <option value="enabled">Активен</option>
+              <option value="disabled">Отключён</option>
+            </select>
+          </label>
+        </div>
+        <footer>
+          {selected ? <button type="button" className="is-danger" disabled={saving} onClick={() => run(async () => { await deleteTemplate(selected.id); createNew(); }, 'Шаблон удалён')}>Удалить</button> : null}
+          <button
+            type="button"
+            disabled={saving || !draft.name.trim() || !draft.body.trim()}
+            onClick={() => run(async () => {
+              const result = await saveTemplate({ ...draft, ...(selected ? { id: selected.id } : {}) });
+              const id = result?.template?.id || selected?.id;
+              if (id) setSelectedId(id);
+            }, selected ? 'Шаблон обновлён' : 'Шаблон создан')}
+          >
+            {saving ? 'Сохраняем…' : selected ? 'Сохранить шаблон' : 'Создать шаблон'}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function IntegrationsTab({ data, toggleIntegration, saving, run }) {
   if (!data.capabilities?.platformIntegrations) {
     return <UnavailablePanel eyebrow="PLATFORM INTEGRATIONS" title="Платформенные интеграции не настроены" description="Provider adapters и их lifecycle появятся после отдельного production-подключения." />;
   }
@@ -81,11 +225,15 @@ function IntegrationsTab({ data }) {
   return (
     <div className="admin-settings-integrations">
       {(data.integrations || []).map((item, index) => (
-        <article key={item.id} className={`is-${item.status}`} style={{ '--item-index': index }}>
+        <article key={item.id} className={item.enabled ? 'is-connected' : `is-${item.status || 'disabled'}`} style={{ '--item-index': index }}>
+          <div className="admin-settings-integrations__logo">{String(item.name || item.id || '?').slice(0, 2).toUpperCase()}</div>
           <div>
-            <div className="admin-settings-integrations__title"><strong>{item.name}</strong><span>{item.status}</span></div>
-            <small>{item.description}</small>
+            <div className="admin-settings-integrations__title"><strong>{item.name || item.id}</strong><span><i />{item.enabled ? 'enabled' : item.status || 'disabled'}</span></div>
+            <small>{item.description || 'Platform integration configuration'}</small>
           </div>
+          <button type="button" disabled={saving} onClick={() => run(() => toggleIntegration(item.id, !item.enabled), item.enabled ? 'Интеграция отключена' : 'Интеграция включена')}>
+            {item.enabled ? 'Отключить' : 'Включить'}
+          </button>
         </article>
       ))}
     </div>
@@ -131,7 +279,7 @@ export default function AdminSettingsWorkspace({ onRefreshReady }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
   const [tab, setTab] = useState(SETTINGS_TABS.some((item) => item.id === requestedTab) ? requestedTab : 'plans');
-  const { data, error, refreshing, saving, refresh, savePlan } = useAdminSettings();
+  const { data, error, refreshing, saving, refresh, savePlan, saveSection, toggleIntegration, saveTemplate, deleteTemplate, testSmtp } = useAdminSettings();
   const [toast, setToast] = useState('');
 
   useEffect(() => { onRefreshReady?.(refresh); }, [onRefreshReady, refresh]);
@@ -164,11 +312,11 @@ export default function AdminSettingsWorkspace({ onRefreshReady }) {
   const sectionContent = useMemo(() => {
     if (!data) return null;
     if (tab === 'plans') return <PlansTab plans={data.plans || []} saving={saving} savePlan={(id, patch) => run(() => savePlan(id, patch), 'Тариф обновлён')} />;
-    if (tab === 'notifications') return <UnavailablePanel eyebrow="NOTIFICATIONS" title="Platform notification settings не подключены" description="Операционные уведомления работают в tenant-контуре, но глобальная platform-настройка ещё не имеет persistence API." />;
-    if (tab === 'integrations') return <IntegrationsTab data={data} />;
-    if (tab === 'templates') return <UnavailablePanel eyebrow="REPLY TEMPLATES" title="Глобальная библиотека шаблонов не подключена" description="Backend намеренно возвращает not configured вместо localStorage или фиктивного успеха." />;
+    if (tab === 'notifications') return <NotificationsTab data={data} saveSection={saveSection} testSmtp={testSmtp} saving={saving} run={run} />;
+    if (tab === 'integrations') return <IntegrationsTab data={data} toggleIntegration={toggleIntegration} saving={saving} run={run} />;
+    if (tab === 'templates') return <TemplatesTab data={data} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} saving={saving} run={run} />;
     return <SecurityTab data={data} />;
-  }, [data, tab, saving, savePlan]);
+  }, [data, tab, saving, savePlan, saveSection, toggleIntegration, saveTemplate, deleteTemplate, testSmtp]);
 
   if (!data && refreshing) return <Skeleton />;
   if (!data && error) return <section className="admin-settings-error"><strong>Не удалось загрузить настройки</strong><p>{error}</p><button type="button" onClick={refresh}>Повторить</button></section>;
