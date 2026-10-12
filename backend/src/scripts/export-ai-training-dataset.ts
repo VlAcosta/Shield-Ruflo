@@ -68,8 +68,8 @@ try {
         reply: answer.text,
       },
       privacy: {
-        reviewPiiRedactions: review.redactions.length,
-        replyPiiRedactions: answer.redactions.length,
+        reviewPiiRedactions: Object.values(review.redactions).reduce((sum, value) => sum + value, 0),
+        replyPiiRedactions: Object.values(answer.redactions).reduce((sum, value) => sum + value, 0),
       },
     })];
   });
