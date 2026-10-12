@@ -240,17 +240,14 @@ export async function getYooKassaPayment(paymentId: string) {
   return yooFetch<YooKassaPayment>(`/payments/${encodeURIComponent(paymentId)}`, { method: 'GET' });
 }
 
-export async function processYooKassaNotification(app: FastifyInstance, input: { event?: string; object?: { id?: string } }) {
-  if (!yooKassaConfigured()) {
-    throw new AppError({ code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', message: 'Платёжный провайдер не настроен', statusCode: 503 });
-  }
-
-  const paymentId = String(input.object?.id || '').trim();
-  if (!paymentId) throw new AppError({ code: 'YOOKASSA_NOTIFICATION_INVALID', message: 'Некорректное уведомление ЮKassa', statusCode: 400 });
-
-  const payment = await getYooKassaPayment(paymentId);
+async function applyVerifiedYooKassaPayment(
+  app: Pick<FastifyInstance, 'prisma'>,
+  payment: YooKassaPayment,
+) {
   const purchaseId = String(payment.metadata?.purchaseRequestId || '').trim();
-  if (!purchaseId) throw new AppError({ code: 'YOOKASSA_PAYMENT_METADATA_INVALID', message: 'Платёж не связан с Business Shield', statusCode: 409 });
+  if (!purchaseId) {
+    throw new AppError({ code: 'YOOKASSA_PAYMENT_METADATA_INVALID', message: 'Платёж не связан с Business Shield', statusCode: 409 });
+  }
 
   const purchase = await app.prisma.billingPurchaseRequest.findUnique({ where: { id: purchaseId } });
   if (!purchase || purchase.externalPaymentId !== payment.id || purchase.provider !== 'yookassa') {
@@ -263,16 +260,41 @@ export async function processYooKassaNotification(app: FastifyInstance, input: {
     throw new AppError({ code: 'YOOKASSA_PAYMENT_AMOUNT_MISMATCH', message: 'Сумма платежа не совпадает с заказом', statusCode: 409 });
   }
 
+  if (payment.status === 'canceled') {
+    if (purchase.status !== 'COMPLETED') {
+      const now = new Date();
+      await app.prisma.billingPurchaseRequest.update({
+        where: { id: purchase.id },
+        data: {
+          status: 'CANCELED',
+          providerStatus: 'canceled',
+          canceledAt: purchase.canceledAt ?? now,
+          confirmationUrl: null,
+        },
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          organizationId: purchase.organizationId,
+          action: 'billing.payment_canceled',
+          entityType: 'billing_purchase_request',
+          entityId: purchase.id,
+          metadata: { provider: 'yookassa', externalPaymentId: payment.id },
+        },
+      }).catch(() => null);
+    }
+    return { accepted: true, activated: false, canceled: true, status: 'canceled' as const };
+  }
+
   if (payment.status !== 'succeeded' || payment.paid !== true) {
     await app.prisma.billingPurchaseRequest.update({
       where: { id: purchase.id },
       data: { providerStatus: payment.status || 'unknown' },
     });
-    return { accepted: true, activated: false, status: payment.status || 'unknown' };
+    return { accepted: true, activated: false, canceled: false, status: payment.status || 'unknown' };
   }
 
   if (purchase.status === 'COMPLETED') {
-    return { accepted: true, activated: true, deduplicated: true };
+    return { accepted: true, activated: true, canceled: false, deduplicated: true, status: 'succeeded' as const };
   }
 
   const now = new Date();
@@ -286,7 +308,9 @@ export async function processYooKassaNotification(app: FastifyInstance, input: {
     if (!current || current.status === 'COMPLETED') return;
 
     const plan = await tx.plan.findFirst({ where: { code: current.planCode, active: true } });
-    if (!plan) throw new AppError({ code: 'BILLING_PLAN_NOT_FOUND', message: 'Оплаченный тариф больше недоступен', statusCode: 409 });
+    if (!plan) {
+      throw new AppError({ code: 'BILLING_PLAN_NOT_FOUND', message: 'Оплаченный тариф больше недоступен', statusCode: 409 });
+    }
 
     await tx.subscription.updateMany({
       where: { organizationId: current.organizationId, status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] } },
@@ -310,9 +334,10 @@ export async function processYooKassaNotification(app: FastifyInstance, input: {
       where: { id: current.id },
       data: {
         status: 'COMPLETED',
-        providerStatus: payment.status,
+        providerStatus: 'succeeded',
         paidAt: now,
         completedAt: now,
+        canceledAt: null,
       },
     });
 
@@ -334,5 +359,76 @@ export async function processYooKassaNotification(app: FastifyInstance, input: {
     });
   });
 
-  return { accepted: true, activated: true, deduplicated: false };
+  return { accepted: true, activated: true, canceled: false, deduplicated: false, status: 'succeeded' as const };
+}
+
+export async function reconcileYooKassaPurchase(
+  app: Pick<FastifyInstance, 'prisma'>,
+  purchaseRequestId: string,
+  organizationId?: string,
+) {
+  if (!yooKassaConfigured()) {
+    throw new AppError({ code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', message: 'Платёжный провайдер не настроен', statusCode: 503 });
+  }
+  const purchase = await app.prisma.billingPurchaseRequest.findFirst({
+    where: {
+      id: purchaseRequestId,
+      ...(organizationId ? { organizationId } : {}),
+    },
+  });
+  if (!purchase || purchase.provider !== 'yookassa' || !purchase.externalPaymentId) {
+    throw new AppError({ code: 'YOOKASSA_PAYMENT_NOT_FOUND', message: 'Платёж Business Shield не найден', statusCode: 404 });
+  }
+  const payment = await getYooKassaPayment(purchase.externalPaymentId);
+  return applyVerifiedYooKassaPayment(app, payment);
+}
+
+export async function processYooKassaNotification(app: FastifyInstance, input: { event?: string; object?: { id?: string } }) {
+  if (!yooKassaConfigured()) {
+    throw new AppError({ code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', message: 'Платёжный провайдер не настроен', statusCode: 503 });
+  }
+
+  const paymentId = String(input.object?.id || '').trim();
+  if (!paymentId) {
+    throw new AppError({ code: 'YOOKASSA_NOTIFICATION_INVALID', message: 'Некорректное уведомление ЮKassa', statusCode: 400 });
+  }
+
+  const payment = await getYooKassaPayment(paymentId);
+  return applyVerifiedYooKassaPayment(app, payment);
+}
+
+
+export async function reconcilePendingYooKassaPurchases(
+  app: Pick<FastifyInstance, 'prisma'>,
+  input: { now?: Date; limit?: number; lookbackHours?: number } = {},
+) {
+  if (!yooKassaConfigured()) return { scanned: 0, reconciled: 0, failed: 0 };
+  const now = input.now ?? new Date();
+  const lookbackHours = Math.max(1, Math.min(168, input.lookbackHours ?? 72));
+  const staleBefore = new Date(now.getTime() - 2 * 60_000);
+  const createdAfter = new Date(now.getTime() - lookbackHours * 60 * 60_000);
+  const rows = await app.prisma.billingPurchaseRequest.findMany({
+    where: {
+      provider: 'yookassa',
+      status: { in: ['OPEN', 'CONTACTED', 'INVOICED'] },
+      externalPaymentId: { not: null },
+      createdAt: { gte: createdAfter },
+      updatedAt: { lte: staleBefore },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: Math.max(1, Math.min(100, input.limit ?? 25)),
+    select: { id: true },
+  });
+
+  let reconciled = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      await reconcileYooKassaPurchase(app, row.id);
+      reconciled += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { scanned: rows.length, reconciled, failed };
 }

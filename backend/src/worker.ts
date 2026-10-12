@@ -35,6 +35,7 @@ import { hasReportsEntitlement } from './modules/reports/report-entitlement.serv
 import { REPORT_BLOCKS, type ReportBlock } from './modules/reports/reports.service.js';
 import { processSuggestionDeliveryJob } from './modules/feedback/feedback.service.js';
 import { createNotificationForOrganization } from './modules/notifications/notifications.service.js';
+import { reconcilePendingYooKassaPurchases, yooKassaConfigured } from './modules/billing/yookassa.service.js';
 
 registerIntegrationProviders();
 registerAiProviders();
@@ -46,6 +47,7 @@ const JOB_CANDIDATE_BATCH = 25;
 let stopping = false;
 let lastIntegrationSchedulerAt = 0;
 let lastReportSchedulerAt = 0;
+let lastBillingReconciliationAt = 0;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -612,6 +614,26 @@ async function maybeRunSchedulers() {
       if (result.scheduled) console.log(JSON.stringify({ level: 'info', message: 'Scheduled report jobs', count: result.scheduled }));
     } catch (error) {
       console.error(JSON.stringify({ level: 'error', message: 'Report scheduler failed', error: error instanceof Error ? error.message : String(error) }));
+    }
+  }
+
+  if (yooKassaConfigured() && now - lastBillingReconciliationAt >= 5 * 60_000) {
+    lastBillingReconciliationAt = now;
+    try {
+      const result = await reconcilePendingYooKassaPurchases({ prisma }, { now: new Date(now), limit: 25, lookbackHours: 72 });
+      if (result.scanned || result.failed) {
+        console.log(JSON.stringify({
+          level: result.failed ? 'warn' : 'info',
+          message: 'Reconciled pending YooKassa payments',
+          ...result,
+        }));
+      }
+    } catch (error) {
+      console.error(JSON.stringify({
+        level: 'error',
+        message: 'YooKassa reconciliation sweep failed',
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
   }
 }
