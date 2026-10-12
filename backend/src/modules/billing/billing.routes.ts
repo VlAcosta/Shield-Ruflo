@@ -96,7 +96,7 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.get('/billing/payments/:paymentId/receipt', {
+  app.get('/billing/subscription/payments/:paymentId/receipt', {
     preHandler: [app.authenticate, app.authorize('billing.view')],
   }, async (request, reply) => {
     const { paymentId } = z.object({ paymentId: z.string().uuid() }).parse(request.params);
