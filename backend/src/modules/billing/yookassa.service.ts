@@ -365,11 +365,17 @@ async function applyVerifiedYooKassaPayment(
 export async function reconcileYooKassaPurchase(
   app: Pick<FastifyInstance, 'prisma'>,
   purchaseRequestId: string,
+  organizationId?: string,
 ) {
   if (!yooKassaConfigured()) {
     throw new AppError({ code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', message: 'Платёжный провайдер не настроен', statusCode: 503 });
   }
-  const purchase = await app.prisma.billingPurchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  const purchase = await app.prisma.billingPurchaseRequest.findFirst({
+    where: {
+      id: purchaseRequestId,
+      ...(organizationId ? { organizationId } : {}),
+    },
+  });
   if (!purchase || purchase.provider !== 'yookassa' || !purchase.externalPaymentId) {
     throw new AppError({ code: 'YOOKASSA_PAYMENT_NOT_FOUND', message: 'Платёж Business Shield не найден', statusCode: 404 });
   }
@@ -389,4 +395,40 @@ export async function processYooKassaNotification(app: FastifyInstance, input: {
 
   const payment = await getYooKassaPayment(paymentId);
   return applyVerifiedYooKassaPayment(app, payment);
+}
+
+
+export async function reconcilePendingYooKassaPurchases(
+  app: Pick<FastifyInstance, 'prisma'>,
+  input: { now?: Date; limit?: number; lookbackHours?: number } = {},
+) {
+  if (!yooKassaConfigured()) return { scanned: 0, reconciled: 0, failed: 0 };
+  const now = input.now ?? new Date();
+  const lookbackHours = Math.max(1, Math.min(168, input.lookbackHours ?? 72));
+  const staleBefore = new Date(now.getTime() - 2 * 60_000);
+  const createdAfter = new Date(now.getTime() - lookbackHours * 60 * 60_000);
+  const rows = await app.prisma.billingPurchaseRequest.findMany({
+    where: {
+      provider: 'yookassa',
+      status: { in: ['OPEN', 'CONTACTED', 'INVOICED'] },
+      externalPaymentId: { not: null },
+      createdAt: { gte: createdAfter },
+      updatedAt: { lte: staleBefore },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: Math.max(1, Math.min(100, input.limit ?? 25)),
+    select: { id: true },
+  });
+
+  let reconciled = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      await reconcileYooKassaPurchase(app, row.id);
+      reconciled += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { scanned: rows.length, reconciled, failed };
 }
