@@ -55,10 +55,14 @@ if (!env.PLATFORM_ADMIN_IDENTITIES.length) {
   console.warn('⚠ PLATFORM_ADMIN_IDENTITIES is empty: /admin requires a persisted active platform manager.');
 }
 if (env.AI_REVIEW_INTELLIGENCE_ENABLED) {
-  if (!env.AI_OPENAI_API_KEY || !env.AI_OPENAI_MODEL) {
-    throw new Error('AI is enabled but AI_OPENAI_API_KEY/AI_OPENAI_MODEL are not configured');
+  if (env.AI_PROVIDER === 'openai' && (!env.AI_OPENAI_API_KEY || !env.AI_OPENAI_MODEL)) {
+    throw new Error('OpenAI provider is enabled but AI_OPENAI_API_KEY/AI_OPENAI_MODEL are not configured');
   }
-  console.log(`✅ AI activation configured (provider=openai, model=${env.AI_OPENAI_MODEL})`);
+  if (env.AI_PROVIDER === 'self_hosted' && (!env.AI_SELF_HOSTED_BASE_URL || !env.AI_SELF_HOSTED_MODEL)) {
+    throw new Error('Self-hosted AI is enabled but AI_SELF_HOSTED_BASE_URL/AI_SELF_HOSTED_MODEL are not configured');
+  }
+  const model = env.AI_PROVIDER === 'self_hosted' ? env.AI_SELF_HOSTED_MODEL : env.AI_OPENAI_MODEL;
+  console.log(`✅ AI activation configured (provider=${env.AI_PROVIDER}, model=${model})`);
 } else {
   console.warn('⚠ AI_REVIEW_INTELLIGENCE_ENABLED=false: Review Intelligence, Reply Copilot, Ask Shield and AI Visibility provider calls remain disabled.');
 }
