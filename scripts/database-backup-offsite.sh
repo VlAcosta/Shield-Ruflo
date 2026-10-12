@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 BACKUP_ROOT="${BACKUP_ROOT:-}"
-ENV_FILE="${BACKUP_OFFSITE_ENV_FILE:-/etc/business-shield/backup-offsite.env}"
+ENV_FILE="${BACKUP_OFFSITE_ENV_FILE:-/home/acosta/.config/business-shield/backup-offsite.env}"
 
 [[ -d "$BACKUP_ROOT" ]] || { echo "❌ BACKUP_ROOT is required" >&2; exit 1; }
 
@@ -30,7 +30,11 @@ if [[ -z "$BACKUP_S3_BUCKET" || -z "$AWS_ACCESS_KEY_ID" || -z "$AWS_SECRET_ACCES
   exit 0
 fi
 
-command -v aws >/dev/null 2>&1 || {
+AWS_BIN="${BACKUP_AWS_CLI_BIN:-$(command -v aws 2>/dev/null || true)}"
+if [[ -z "$AWS_BIN" && -x /home/acosta/.local/bin/aws ]]; then
+  AWS_BIN=/home/acosta/.local/bin/aws
+fi
+[[ -n "$AWS_BIN" && -x "$AWS_BIN" ]] || {
   echo "❌ aws CLI is required for configured off-site backup" >&2
   exit 1
 }
@@ -41,5 +45,5 @@ ARGS=(s3 sync "$BACKUP_ROOT/" "$TARGET" --only-show-errors)
 [[ -n "$BACKUP_S3_REGION" ]] && ARGS+=(--region "$BACKUP_S3_REGION")
 [[ -n "$BACKUP_S3_ENDPOINT" ]] && ARGS+=(--endpoint-url "$BACKUP_S3_ENDPOINT")
 
-aws "${ARGS[@]}"
+"$AWS_BIN" "${ARGS[@]}"
 echo "✅ Off-site backup uploaded: $TARGET"
