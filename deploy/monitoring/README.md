@@ -47,7 +47,7 @@ The backup job:
 Recommended initial storage: Yandex Object Storage.
 
 Expected environment file for the existing uploader:
-`/etc/business-shield/backup-offsite.env`
+`/home/acosta/.config/business-shield/backup-offsite.env`
 
 Required values:
 - BACKUP_S3_BUCKET
@@ -57,3 +57,13 @@ Required values:
 - AWS_SECRET_ACCESS_KEY
 
 Use a dedicated service account restricted to the backup bucket.
+
+
+Create it from the template:
+
+```bash
+cp deploy/monitoring/backup-offsite.env.example /home/acosta/.config/business-shield/backup-offsite.env
+chmod 600 /home/acosta/.config/business-shield/backup-offsite.env
+```
+
+Do not commit the populated file.
