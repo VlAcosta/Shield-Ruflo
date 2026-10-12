@@ -45,7 +45,7 @@ export const INTEGRATION_ITEMS = Object.freeze([
     recommended: true,
     tone: 'blue',
     sourceType: 'marketplace',
-    priority: 3,
+    priority: 4,
   },
   {
     id: 'otzovik',
@@ -57,7 +57,7 @@ export const INTEGRATION_ITEMS = Object.freeze([
     recommended: true,
     tone: 'violet',
     sourceType: 'reviews',
-    priority: 4,
+    priority: 5,
   },
   {
     id: 'wb',
@@ -69,7 +69,7 @@ export const INTEGRATION_ITEMS = Object.freeze([
     recommended: true,
     tone: 'pink',
     sourceType: 'marketplace',
-    priority: 5,
+    priority: 6,
   },
   {
     id: 'telegram',
