@@ -117,7 +117,7 @@ export async function sendReportEmail(to: string, subject: string, text: string,
   }
 }
 
-async function sendTelegram(chatId: string, text: string) {
+export async function sendReportTelegram(chatId: string, text: string) {
   if (!env.REPORT_TELEGRAM_BOT_TOKEN) {
     throw new ReportDeliveryError('REPORT_TELEGRAM_BOT_NOT_CONFIGURED');
   }
@@ -292,7 +292,7 @@ export async function processReportDeliveryJob(
   });
 
   if (input.delivery.channel === 'email') await sendReportEmail(destination, report.title, text, eventId);
-  else await sendTelegram(destination, text);
+  else await sendReportTelegram(destination, text);
 
   await prisma.auditLog.create({
     data: {

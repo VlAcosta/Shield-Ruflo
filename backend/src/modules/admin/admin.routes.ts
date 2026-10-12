@@ -16,6 +16,7 @@ import {
   listAdminClients,
   listPlatformManagers,
   testAdminEmailProvider,
+  testAdminTelegramProvider,
   toggleAdminPlatformIntegration,
   updateAdminPlan,
   updateAdminReplyTemplate,
@@ -90,6 +91,7 @@ const managerParams = z.object({ managerId: z.string().uuid() });
 const settingsSectionParams = z.object({ section: z.enum(['notifications', 'smtp', 'security']) });
 const integrationParams = z.object({ integrationId: z.string().trim().min(1).max(120) });
 const integrationToggle = z.object({ enabled: z.boolean() }).strict();
+const telegramTest = z.object({ chatId: z.string().trim().min(1).max(120) }).strict();
 const templateParams = z.object({ templateId: z.string().uuid() });
 const jsonRecord = z.record(z.string(), z.unknown());
 const replyTemplateCreate = z.object({
@@ -322,4 +324,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/admin/settings/smtp/test', async (request) => testAdminEmailProvider(app, request.auth!.userId));
+  app.post('/admin/settings/telegram/test', async (request) => {
+    const { chatId } = telegramTest.parse(request.body);
+    return testAdminTelegramProvider(chatId);
+  });
 };
