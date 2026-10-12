@@ -21,10 +21,47 @@ export async function updateAdminTicket(ticketId, patch) {
   return payload?.ticket || payload;
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof File === 'undefined' || !(file instanceof File)) {
+      reject(new Error('SUPPORT_ATTACHMENT_FILE_MISSING'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('SUPPORT_ATTACHMENT_READ_FAILED'));
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      const comma = value.indexOf(',');
+      if (comma < 0) reject(new Error('SUPPORT_ATTACHMENT_READ_FAILED'));
+      else resolve(value.slice(comma + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function serializeAttachments(attachments = []) {
+  return Promise.all(attachments.map(async (attachment) => ({
+    name: attachment.name,
+    size: attachment.size,
+    type: attachment.type || '',
+    dataBase64: await fileToBase64(attachment.file),
+  })));
+}
+
 export async function addAdminTicketMessage(ticketId, message) {
-  const text = String(message || '').trim();
-  if (!text) throw new Error('Сообщение пустое');
-  const payload = await request(`/${ticketId}/messages`, { method: 'POST', body: { text } });
+  const source = message && typeof message === 'object' ? message : { text: String(message || '') };
+  const text = String(source.text || '').trim();
+  const attachments = await serializeAttachments(source.attachments || []);
+  if (!text && !attachments.length) throw new Error('Сообщение пустое');
+  const payload = await request(`/${ticketId}/messages`, {
+    method: 'POST',
+    body: {
+      text,
+      internal: Boolean(source.internal),
+      attachments,
+    },
+    idempotencyKey: `admin-support-${ticketId}-${Date.now()}`,
+  });
   return payload?.ticket || payload;
 }
 

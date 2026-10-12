@@ -154,20 +154,51 @@ describeWithPostgres('Support chat persistence, RBAC and tenant isolation', () =
     ]);
   });
 
-  it('does not pretend that file attachments are uploaded', async () => {
+  it('stores support attachments privately and enforces tenant-isolated downloads', async () => {
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/support/channels/technical/messages',
       headers: { cookie: ownerACookie },
       payload: {
         text: 'Прикладываю скриншот',
-        attachments: [{ name: 'screen.png', size: 1024, type: 'image/png' }],
+        attachments: [{
+          name: 'screen.png',
+          size: pngBytes.length,
+          type: 'image/png',
+          dataBase64: pngBytes.toString('base64'),
+        }],
       },
     });
 
-    expect(response.statusCode).toBe(501);
-    expect(response.json()).toMatchObject({
-      error: { code: 'SUPPORT_ATTACHMENTS_NOT_CONFIGURED' },
+    expect(response.statusCode).toBe(201);
+    const attachment = response.json().snapshot.threads.technical
+      .flatMap((message: any) => message.attachments || [])
+      .find((item: any) => item.name === 'screen.png');
+    expect(attachment).toMatchObject({
+      name: 'screen.png',
+      size: pngBytes.length,
+      type: 'image/png',
+    });
+    expect(attachment.downloadUrl).toMatch(/^\/api\/v1\/support\/attachments\//);
+
+    const ownDownload = await app.inject({
+      method: 'GET',
+      url: attachment.downloadUrl,
+      headers: { cookie: ownerACookie },
+    });
+    expect(ownDownload.statusCode).toBe(200);
+    expect(ownDownload.headers['content-type']).toContain('image/png');
+    expect(ownDownload.rawPayload).toEqual(pngBytes);
+
+    const foreignDownload = await app.inject({
+      method: 'GET',
+      url: attachment.downloadUrl,
+      headers: { cookie: ownerBCookie },
+    });
+    expect(foreignDownload.statusCode).toBe(404);
+    expect(foreignDownload.json()).toMatchObject({
+      error: { code: 'SUPPORT_ATTACHMENT_NOT_FOUND' },
     });
   });
 

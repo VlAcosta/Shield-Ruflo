@@ -25,6 +25,7 @@ export default function useSupportChat() {
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
   const [attachments, setAttachments] = useState([]);
+  const [attachmentError, setAttachmentError] = useState('');
   const mountedRef = useRef(true);
 
   useEffect(() => () => {
@@ -89,12 +90,24 @@ export default function useSupportChat() {
   }, [activeChannelId, setSearchParams, snapshot]);
 
   const addAttachments = useCallback((files) => {
-    const mapped = Array.from(files || []).slice(0, 5).map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    }));
+    const allowed = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'text/plain', 'text/csv', 'application/json']);
+    const selected = Array.from(files || []);
+    const invalid = selected.find((file) => file.size > 2 * 1024 * 1024 || !allowed.has(file.type));
+    if (invalid) {
+      setAttachmentError('Поддерживаются PDF, JPG, PNG, WebP, TXT, CSV и JSON до 2 МБ на файл.');
+    } else {
+      setAttachmentError('');
+    }
+    const mapped = selected
+      .filter((file) => file.size > 0 && file.size <= 2 * 1024 * 1024 && allowed.has(file.type))
+      .slice(0, 5)
+      .map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        file,
+      }));
 
     setAttachments((current) => {
       const unique = new Map([...current, ...mapped].map((item) => [item.id, item]));
@@ -164,6 +177,7 @@ export default function useSupportChat() {
     draft,
     setDraft,
     attachments,
+    attachmentError,
     addAttachments,
     removeAttachment,
     sending,
