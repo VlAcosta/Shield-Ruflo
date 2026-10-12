@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type {
   SupportChannel,
@@ -15,11 +16,22 @@ type SupportActor = {
   userId: string;
 };
 
+type ClientAttachmentInput = {
+  name: string;
+  size: number;
+  type: string;
+  dataBase64: string;
+};
+
 type ClientMessageInput = {
   text: string;
-  attachments?: unknown[];
+  attachments?: ClientAttachmentInput[];
   idempotencyKey?: string | null;
 };
+
+const SUPPORT_ATTACHMENT_MAX_FILES = 5;
+const SUPPORT_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024;
+const SUPPORT_ATTACHMENT_TOTAL_BYTES = 8 * 1024 * 1024;
 
 type AdminTicketPatch = {
   status?: 'open' | 'in_progress' | 'waiting' | 'closed';
@@ -69,6 +81,93 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function safeAttachmentName(value: string): string {
+  const normalized = String(value || '')
+    .replace(/[\\/\0\r\n]/g, '_')
+    .trim()
+    .slice(0, 180);
+  if (!normalized) {
+    throw new AppError({ code: 'SUPPORT_ATTACHMENT_NAME_INVALID', message: 'Некорректное имя файла', statusCode: 422 });
+  }
+  return normalized;
+}
+
+function decodedBase64(value: string): Buffer {
+  const normalized = String(value || '').replace(/\s+/g, '');
+  if (!normalized || normalized.length > Math.ceil(SUPPORT_ATTACHMENT_MAX_BYTES * 4 / 3) + 8
+    || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) {
+    throw new AppError({ code: 'SUPPORT_ATTACHMENT_DATA_INVALID', message: 'Некорректные данные вложения', statusCode: 422 });
+  }
+  const buffer = Buffer.from(normalized, 'base64');
+  if (!buffer.length || buffer.length > SUPPORT_ATTACHMENT_MAX_BYTES) {
+    throw new AppError({
+      code: 'SUPPORT_ATTACHMENT_TOO_LARGE',
+      message: 'Размер одного вложения не должен превышать 2 МБ',
+      statusCode: 413,
+    });
+  }
+  return buffer;
+}
+
+function detectAttachmentMime(buffer: Buffer, claimed: string): string {
+  if (buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-') return 'application/pdf';
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) return 'image/png';
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF'
+    && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+
+  const normalized = claimed.toLowerCase().split(';')[0]?.trim() || '';
+  if (['text/plain', 'text/csv', 'application/json'].includes(normalized) && !buffer.includes(0)) {
+    return normalized;
+  }
+  throw new AppError({
+    code: 'SUPPORT_ATTACHMENT_TYPE_NOT_ALLOWED',
+    message: 'Поддерживаются PDF, JPG, PNG, WebP, TXT, CSV и JSON',
+    statusCode: 415,
+  });
+}
+
+function prepareClientAttachments(input: ClientAttachmentInput[] | undefined) {
+  const source = input || [];
+  if (source.length > SUPPORT_ATTACHMENT_MAX_FILES) {
+    throw new AppError({ code: 'SUPPORT_ATTACHMENT_LIMIT', message: 'Можно прикрепить не более 5 файлов', statusCode: 422 });
+  }
+
+  let totalBytes = 0;
+  return source.map((item) => {
+    const content = decodedBase64(item.dataBase64);
+    totalBytes += content.length;
+    if (totalBytes > SUPPORT_ATTACHMENT_TOTAL_BYTES) {
+      throw new AppError({
+        code: 'SUPPORT_ATTACHMENTS_TOO_LARGE',
+        message: 'Общий размер вложений не должен превышать 8 МБ',
+        statusCode: 413,
+      });
+    }
+    if (Number(item.size) !== content.length) {
+      throw new AppError({ code: 'SUPPORT_ATTACHMENT_SIZE_MISMATCH', message: 'Размер вложения не совпадает с данными', statusCode: 422 });
+    }
+    return {
+      id: crypto.randomUUID(),
+      name: safeAttachmentName(item.name),
+      mimeType: detectAttachmentMime(content, item.type),
+      sizeBytes: content.length,
+      sha256: crypto.createHash('sha256').update(content).digest('hex'),
+      content,
+    };
+  });
+}
+
+function attachmentMetadata(file: { id: string; name: string; mimeType: string; sizeBytes: number }) {
+  return {
+    id: file.id,
+    name: file.name,
+    type: file.mimeType,
+    size: file.sizeBytes,
+    downloadUrl: `/api/v1/support/attachments/${file.id}`,
+  };
 }
 
 function channelFromClient(value: string): SupportChannel {
@@ -219,12 +318,9 @@ export async function addClientSupportMessage(
   channelId: string,
   input: ClientMessageInput,
 ) {
-  if (input.attachments?.length) {
-    throw new AppError({
-      code: 'SUPPORT_ATTACHMENTS_NOT_CONFIGURED',
-      message: 'Загрузка вложений в поддержку пока не подключена',
-      statusCode: 501,
-    });
+  const preparedAttachments = prepareClientAttachments(input.attachments);
+  if (!input.text.trim() && !preparedAttachments.length) {
+    throw new AppError({ code: 'SUPPORT_MESSAGE_EMPTY', message: 'Введите сообщение или прикрепите файл', statusCode: 422 });
   }
 
   const channel = channelFromClient(channelId);
@@ -278,17 +374,37 @@ export async function addClientSupportMessage(
   }
 
   const result = await app.prisma.$transaction(async (tx) => {
-    const message = await tx.supportMessage.create({
+    let message = await tx.supportMessage.create({
       data: {
         organizationId: actor.organizationId,
         ticketId: ticket!.id,
         authorUserId: actor.userId,
         role: 'CLIENT',
-        text: input.text,
+        text: input.text.trim(),
         attachments: [],
         idempotencyKey: input.idempotencyKey || null,
       },
     });
+
+    if (preparedAttachments.length) {
+      await tx.supportAttachment.createMany({
+        data: preparedAttachments.map((file) => ({
+          id: file.id,
+          organizationId: actor.organizationId,
+          messageId: message.id,
+          name: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          sha256: file.sha256,
+          content: file.content,
+        })),
+      });
+      message = await tx.supportMessage.update({
+        where: { id: message.id },
+        data: { attachments: preparedAttachments.map(attachmentMetadata) },
+      });
+    }
+
     const updatedTicket = await tx.supportTicket.update({
       where: { id: ticket!.id },
       data: {
@@ -305,7 +421,7 @@ export async function addClientSupportMessage(
         action: 'support.message.client',
         entityType: 'SupportTicket',
         entityId: ticket!.id,
-        metadata: { messageId: message.id, channel: meta.id },
+        metadata: { messageId: message.id, channel: meta.id, attachmentCount: preparedAttachments.length },
       },
     });
     return { message, ticket: updatedTicket };
@@ -315,6 +431,33 @@ export async function addClientSupportMessage(
     ...result,
     snapshot: await getSupportSnapshot(app, actor),
   };
+}
+
+export async function getSupportAttachment(
+  app: FastifyInstance,
+  attachmentId: string,
+  organizationId?: string,
+) {
+  const attachment = await app.prisma.supportAttachment.findFirst({
+    where: {
+      id: attachmentId,
+      ...(organizationId ? { organizationId } : {}),
+      message: organizationId ? { internal: false } : undefined,
+    },
+    select: {
+      id: true,
+      organizationId: true,
+      name: true,
+      mimeType: true,
+      sizeBytes: true,
+      sha256: true,
+      content: true,
+    },
+  });
+  if (!attachment) {
+    throw new AppError({ code: 'SUPPORT_ATTACHMENT_NOT_FOUND', message: 'Вложение не найдено', statusCode: 404 });
+  }
+  return attachment;
 }
 
 type TicketWithRelations = SupportTicket & {
@@ -341,6 +484,7 @@ function adminMessage(message: TicketWithRelations['messages'][number], timeZone
     text: message.text,
     createdAt: formatDateTime(message.createdAt, timeZone),
     internal: message.internal,
+    attachments: Array.isArray(message.attachments) ? message.attachments : [],
   };
 }
 
