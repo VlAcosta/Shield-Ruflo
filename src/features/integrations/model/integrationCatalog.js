@@ -24,6 +24,18 @@ export const INTEGRATION_ITEMS = Object.freeze([
     priority: 2,
   },
   {
+    id: 'ymarket',
+    name: 'Яндекс Маркет',
+    shortName: 'Маркет',
+    category: 'Маркетплейс',
+    description: 'Импортируем отзывы о товарах и публикуем ответы через официальный API кабинета продавца Яндекс Маркета',
+    placeholder: 'businessId кабинета Яндекс Маркета',
+    recommended: true,
+    tone: 'amber',
+    sourceType: 'marketplace',
+    priority: 3,
+  },
+  {
     id: 'ozon',
     name: 'Ozon',
     shortName: 'Ozon',
