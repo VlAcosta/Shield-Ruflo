@@ -4,6 +4,7 @@ import {
   deleteAdminReplyTemplate,
   getAdminSettings,
   testAdminSmtp,
+  testAdminTelegram,
   toggleAdminIntegration,
   updateAdminReplyTemplate,
   updateAdminSettings,
@@ -42,5 +43,6 @@ export default function useAdminSettings() {
       : createAdminReplyTemplate(template)),
     deleteTemplate:(id)=>perform(()=>deleteAdminReplyTemplate(id)),
     testSmtp:()=>perform(()=>testAdminSmtp()),
+    testTelegram:(chatId)=>perform(()=>testAdminTelegram(chatId)),
   };
 }
