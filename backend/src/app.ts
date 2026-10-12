@@ -82,6 +82,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           '*.REPORT_EMAIL_API_KEY',
           '*.REPORT_EMAIL_WEBHOOK_TOKEN',
           '*.REPORT_TELEGRAM_BOT_TOKEN',
+          '*.YOOKASSA_SECRET_KEY',
           '*.SUGGESTION_WEBHOOK_TOKEN',
           '*.AI_OPENAI_API_KEY',
           '*.AI_MISTRAL_API_KEY',
