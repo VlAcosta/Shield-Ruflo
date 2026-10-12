@@ -458,9 +458,9 @@ export async function getAdminSubscriptions(app: FastifyInstance) {
     return {
       id: payment.id,
       organizationId: payment.organizationId,
-      clientName: client?.name || client?.legalName || 'Клиент',
+      clientName: client?.name || 'Клиент',
       title,
-      description: `${client?.name || client?.legalName || 'Клиент'} · ${payment.planCode} · ${(payment.quotedAmountCents / 100).toLocaleString('ru-RU')} ${payment.currency}`,
+      description: `${client?.name || 'Клиент'} · ${payment.planCode} · ${(payment.quotedAmountCents / 100).toLocaleString('ru-RU')} ${payment.currency}`,
       provider: payment.provider,
       providerStatus: payment.providerStatus,
       status: payment.status.toLowerCase(),
