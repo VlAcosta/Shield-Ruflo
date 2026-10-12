@@ -48,6 +48,20 @@ export const pricingService = {
     // explicitly not a payment-provider checkout URL and never means payment or
     // subscription activation succeeded.
     if (
+      result?.mode === 'ONLINE_CHECKOUT'
+      && result?.paymentCreated === true
+      && result?.nextAction?.type === 'REDIRECT'
+      && result?.nextAction?.url
+    ) {
+      return {
+        ...result,
+        checkout_url: result.nextAction.url,
+        redirectUrl: result.nextAction.url,
+        checkout_kind: 'online_payment',
+      };
+    }
+
+    if (
       result?.mode === 'SALES_ASSISTED'
       && result?.paymentCreated === false
       && result?.subscriptionActivated === false
