@@ -66,6 +66,10 @@ export async function testAdminSmtp() {
   return request('/smtp/test', { method: 'POST' });
 }
 
+export async function testAdminTelegram(chatId) {
+  return request('/telegram/test', { method: 'POST', body: { chatId } });
+}
+
 export function resetAdminSettingsCache() {
   // Platform settings are server-authoritative.
 }
