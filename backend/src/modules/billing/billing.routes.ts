@@ -16,6 +16,7 @@ import {
 import {
   createYooKassaCheckout,
   processYooKassaNotification,
+  reconcileYooKassaPurchase,
   yooKassaConfigured,
 } from './yookassa.service.js';
 
@@ -111,6 +112,13 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
   }, async (request) => ({
     requests: await listSalesAssistedPurchaseRequests(app, orgId(request)),
   }));
+
+  app.post('/billing/purchase-requests/:purchaseRequestId/reconcile', {
+    preHandler: [app.authenticate, app.authorize('billing.view')],
+  }, async (request) => {
+    const { purchaseRequestId } = z.object({ purchaseRequestId: z.string().uuid() }).parse(request.params);
+    return reconcileYooKassaPurchase(app, purchaseRequestId, orgId(request));
+  });
 
   app.patch('/billing/subscription/auto-renew', { preHandler: [app.authenticate, app.authorize('billing.manage')] }, async (request) => {
     const { enabled } = z.object({ enabled: z.boolean() }).parse(request.body);
