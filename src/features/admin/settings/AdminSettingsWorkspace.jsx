@@ -74,7 +74,7 @@ function PlansTab({ plans, savePlan, saving }) {
 }
 
 
-function NotificationsTab({ data, saveSection, testSmtp, saving, run }) {
+function NotificationsTab({ data, saveSection, testSmtp, testTelegram, saving, run }) {
   const initial = data.notifications || {};
   const [draft, setDraft] = useState({
     email: initial.email !== false,
@@ -94,6 +94,8 @@ function NotificationsTab({ data, saveSection, testSmtp, saving, run }) {
   }, [data.notifications]);
 
   const smtp = data.smtp || {};
+  const telegram = data.telegram || {};
+  const [telegramChatId, setTelegramChatId] = useState('');
   const rows = [
     ['email', 'Email-уведомления', 'Глобальный переключатель platform email-уведомлений.'],
     ['telegram', 'Telegram-уведомления', 'Использовать Telegram для platform delivery после настройки bot token.'],
@@ -136,6 +138,30 @@ function NotificationsTab({ data, saveSection, testSmtp, saving, run }) {
         <footer>
           <button type="button" className="is-secondary" disabled={saving || !smtp.configured} onClick={() => run(() => testSmtp(), 'Тестовое письмо отправлено')}>
             Проверить отправку
+          </button>
+        </footer>
+      </section>
+
+      <section className="admin-settings-panel">
+        <header><div><span>TELEGRAM DELIVERY</span><h3>Telegram Bot API</h3><p>Bot token хранится только на backend. Здесь можно проверить доставку в конкретный chat ID.</p></div></header>
+        <div className="admin-settings-security__switches">
+          <article><span><strong>Provider</strong><small>Серверный канал отправки.</small></span><b>{telegram.provider || 'telegram-bot-api'}</b></article>
+          <article><span><strong>Состояние</strong><small>Готовность bot token к отправке.</small></span><b>{telegram.configured ? 'Настроен' : 'Не настроен'}</b></article>
+        </div>
+        <div className="admin-settings-form">
+          <label className="is-wide">
+            <span>Chat ID для проверки</span>
+            <input value={telegramChatId} placeholder="-1001234567890 или 123456789" onChange={(event) => setTelegramChatId(event.target.value)} />
+          </label>
+        </div>
+        <footer>
+          <button
+            type="button"
+            className="is-secondary"
+            disabled={saving || !telegram.configured || !telegramChatId.trim()}
+            onClick={() => run(() => testTelegram(telegramChatId.trim()), 'Тестовое сообщение Telegram отправлено')}
+          >
+            Проверить Telegram
           </button>
         </footer>
       </section>
@@ -279,7 +305,7 @@ export default function AdminSettingsWorkspace({ onRefreshReady }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
   const [tab, setTab] = useState(SETTINGS_TABS.some((item) => item.id === requestedTab) ? requestedTab : 'plans');
-  const { data, error, refreshing, saving, refresh, savePlan, saveSection, toggleIntegration, saveTemplate, deleteTemplate, testSmtp } = useAdminSettings();
+  const { data, error, refreshing, saving, refresh, savePlan, saveSection, toggleIntegration, saveTemplate, deleteTemplate, testSmtp, testTelegram } = useAdminSettings();
   const [toast, setToast] = useState('');
 
   useEffect(() => { onRefreshReady?.(refresh); }, [onRefreshReady, refresh]);
@@ -312,11 +338,11 @@ export default function AdminSettingsWorkspace({ onRefreshReady }) {
   const sectionContent = useMemo(() => {
     if (!data) return null;
     if (tab === 'plans') return <PlansTab plans={data.plans || []} saving={saving} savePlan={(id, patch) => run(() => savePlan(id, patch), 'Тариф обновлён')} />;
-    if (tab === 'notifications') return <NotificationsTab data={data} saveSection={saveSection} testSmtp={testSmtp} saving={saving} run={run} />;
+    if (tab === 'notifications') return <NotificationsTab data={data} saveSection={saveSection} testSmtp={testSmtp} testTelegram={testTelegram} saving={saving} run={run} />;
     if (tab === 'integrations') return <IntegrationsTab data={data} toggleIntegration={toggleIntegration} saving={saving} run={run} />;
     if (tab === 'templates') return <TemplatesTab data={data} saveTemplate={saveTemplate} deleteTemplate={deleteTemplate} saving={saving} run={run} />;
     return <SecurityTab data={data} />;
-  }, [data, tab, saving, savePlan, saveSection, toggleIntegration, saveTemplate, deleteTemplate, testSmtp]);
+  }, [data, tab, saving, savePlan, saveSection, toggleIntegration, saveTemplate, deleteTemplate, testSmtp, testTelegram]);
 
   if (!data && refreshing) return <Skeleton />;
   if (!data && error) return <section className="admin-settings-error"><strong>Не удалось загрузить настройки</strong><p>{error}</p><button type="button" onClick={refresh}>Повторить</button></section>;
