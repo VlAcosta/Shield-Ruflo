@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import fp from 'fastify-plugin';
 import type { FastifyRequest } from 'fastify';
 import { operationsConfig } from '../../config/operations.config.js';
+import { env } from '../../config/env.js';
+import { aiProviderRegistry } from '../../modules/ai/ai-provider.registry.js';
 
 type HttpMetric = {
   method: string;
@@ -18,6 +20,23 @@ function sameSecret(candidate: string, expected: string): boolean {
   const left = Buffer.from(candidate);
   const right = Buffer.from(expected);
   return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+
+function authorizedOperationsRequest(request: FastifyRequest): boolean {
+  const token = request.headers['x-operations-token'];
+  const candidate = Array.isArray(token) ? token[0] : token;
+  return typeof candidate === 'string' && sameSecret(candidate, operationsConfig.OPERATIONS_METRICS_TOKEN);
+}
+
+function operationsUnauthorized(request: FastifyRequest) {
+  return {
+    error: {
+      code: 'OPERATIONS_METRICS_UNAUTHORIZED',
+      message: 'Operations metrics token is required',
+      requestId: request.id,
+    },
+  };
 }
 
 function routeLabel(request: FastifyRequest): string {
@@ -58,17 +77,41 @@ export const operationalMetricsPlugin = fp(async (app) => {
     httpMetrics.set(key, current);
   });
 
+
+  app.get('/internal/ai/health', async (request, reply) => {
+    if (!authorizedOperationsRequest(request)) {
+      return reply.code(401).send(operationsUnauthorized(request));
+    }
+
+    const provider = aiProviderRegistry.active();
+    const availability = provider?.availability() ?? {
+      configured: false,
+      available: false,
+      reasonCode: 'AI_PROVIDER_NOT_REGISTERED',
+      reasonMessage: 'AI provider is not registered.',
+    };
+
+    reply.header('cache-control', 'no-store');
+    return {
+      enabled: env.AI_REVIEW_INTELLIGENCE_ENABLED,
+      provider: provider?.id ?? null,
+      model: provider?.model || null,
+      configured: availability.configured,
+      available: availability.available,
+      reasonCode: availability.reasonCode ?? null,
+      reasonMessage: availability.reasonMessage ?? null,
+      domains: {
+        reviewIntelligence: true,
+        replyCopilot: true,
+        askShield: true,
+        aiVisibility: true,
+      },
+    };
+  });
+
   app.get('/internal/metrics', async (request, reply) => {
-    const token = request.headers['x-operations-token'];
-    const candidate = Array.isArray(token) ? token[0] : token;
-    if (typeof candidate !== 'string' || !sameSecret(candidate, operationsConfig.OPERATIONS_METRICS_TOKEN)) {
-      return reply.code(401).send({
-        error: {
-          code: 'OPERATIONS_METRICS_UNAUTHORIZED',
-          message: 'Operations metrics token is required',
-          requestId: request.id,
-        },
-      });
+    if (!authorizedOperationsRequest(request)) {
+      return reply.code(401).send(operationsUnauthorized(request));
     }
 
     const [aiOperations, visibilityRuns, askShield, bucketCount] = await Promise.all([
@@ -94,7 +137,24 @@ export const operationalMetricsPlugin = fp(async (app) => {
       + bigintValue(visibilityRuns._sum.estimatedCostMicros)
       + bigintValue(askShield._sum.estimatedCostMicros);
 
+    const aiProvider = aiProviderRegistry.active();
+    const aiAvailability = aiProvider?.availability() ?? {
+      configured: false,
+      available: false,
+      reasonCode: 'AI_PROVIDER_NOT_REGISTERED',
+      reasonMessage: 'AI provider is not registered.',
+    };
+
     const lines = [
+      '# HELP business_shield_ai_provider_enabled Whether AI is enabled in server configuration.',
+      '# TYPE business_shield_ai_provider_enabled gauge',
+      `business_shield_ai_provider_enabled ${env.AI_REVIEW_INTELLIGENCE_ENABLED ? 1 : 0}`,
+      '# HELP business_shield_ai_provider_configured Whether the active AI provider is configured.',
+      '# TYPE business_shield_ai_provider_configured gauge',
+      `business_shield_ai_provider_configured ${aiAvailability.configured ? 1 : 0}`,
+      '# HELP business_shield_ai_provider_available Whether the active AI provider reports itself available.',
+      '# TYPE business_shield_ai_provider_available gauge',
+      `business_shield_ai_provider_available ${aiAvailability.available ? 1 : 0}`,
       '# HELP business_shield_process_uptime_seconds API process uptime in seconds.',
       '# TYPE business_shield_process_uptime_seconds gauge',
       `business_shield_process_uptime_seconds ${process.uptime().toFixed(3)}`,
