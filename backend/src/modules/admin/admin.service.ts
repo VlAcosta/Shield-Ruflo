@@ -234,6 +234,9 @@ export async function listAdminClients(app: FastifyInstance) {
         take: 1,
         include: { user: { select: { email: true, phone: true, firstName: true, lastName: true, displayName: true } } },
       },
+      accountManager: {
+        select: { id: true, displayName: true, firstName: true, lastName: true, email: true },
+      },
       subscriptions: {
         orderBy: { createdAt: 'desc' },
         take: 1,
@@ -272,10 +275,25 @@ export async function listAdminClients(app: FastifyInstance) {
       plan: plan?.name || 'Без тарифа',
       status,
       statusLabel: STATUS_LABELS[status] || status,
-      managerId: null,
-      manager: '',
-      managerName: '',
-      managerInitials: '',
+      managerId: organization.accountManager?.id || null,
+      manager: organization.accountManager
+        ? (organization.accountManager.displayName
+          || organization.accountManager.firstName
+          || organization.accountManager.email
+          || '')
+        : '',
+      managerName: organization.accountManager
+        ? (organization.accountManager.displayName
+          || [organization.accountManager.firstName, organization.accountManager.lastName].filter(Boolean).join(' ')
+          || organization.accountManager.email
+          || '')
+        : '',
+      managerInitials: organization.accountManager
+        ? managerInitials(organization.accountManager.displayName
+          || [organization.accountManager.firstName, organization.accountManager.lastName].filter(Boolean).join(' ')
+          || organization.accountManager.email
+          || 'Менеджер')
+        : '',
       revenue: subscription?.status === 'ACTIVE' ? Number(((plan?.priceCents || 0) / 100).toFixed(2)) : 0,
       rating: rating === null || rating === undefined ? null : Number(rating.toFixed(2)),
       startDate: formatDate(subscription?.currentPeriodStart || organization.createdAt),
@@ -802,6 +820,7 @@ export async function createAdminClient(
     city?: string | undefined;
     industry?: string | undefined;
     expiryDate?: string | undefined;
+    managerId?: string | undefined;
   },
 ) {
   const phone = normalizedPhone(input.phone);
@@ -839,6 +858,7 @@ export async function createAdminClient(
         industry: input.industry || null,
         status: organizationStatus,
         onboardingStatus: 'NOT_STARTED',
+        accountManagerId: input.managerId || null,
       },
     });
     await tx.organizationMember.create({
