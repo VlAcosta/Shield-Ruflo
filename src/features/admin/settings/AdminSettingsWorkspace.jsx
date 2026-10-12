@@ -162,7 +162,7 @@ function TemplatesTab({ data, saveTemplate, deleteTemplate, saving, run }) {
     } else {
       setDraft({ name: '', body: '', tone: '', enabled: true });
     }
-  }, [selectedId, data.templates]);
+  }, [selectedId, templates]);
 
   const createNew = () => {
     setSelectedId('new');
