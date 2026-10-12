@@ -89,6 +89,16 @@ function assertOk(payload: { status?: string; errors?: Array<{ code?: string; me
   });
 }
 
+function commentResult(value: MarketCommentResponse['result']): MarketComment | null {
+  if (!value || ('comments' in value && Array.isArray(value.comments))) return null;
+  return value as MarketComment;
+}
+
+function commentCollection(value: MarketCommentResponse['result']): MarketComment[] {
+  if (!value || !('comments' in value) || !Array.isArray(value.comments)) return [];
+  return value.comments;
+}
+
 function validDate(value?: string): Date {
   const parsed = value ? new Date(value) : new Date();
   return Number.isFinite(parsed.getTime()) ? parsed : new Date();
@@ -226,7 +236,7 @@ export class YandexMarketProviderAdapter implements ProviderAdapter {
       { provider: 'yandex-market' },
     );
     assertOk(payload);
-    const result = payload.result && !('comments' in payload.result) ? payload.result : null;
+    const result = commentResult(payload.result);
     const status = String(result?.status || '').toUpperCase();
     return {
       status: status === 'PUBLISHED' ? 'CONFIRMED' : 'UNKNOWN',
@@ -249,9 +259,9 @@ export class YandexMarketProviderAdapter implements ProviderAdapter {
       { provider: 'yandex-market' },
     );
     assertOk(payload);
-    const result = payload.result && 'comments' in payload.result ? payload.result : null;
+    const comments = commentCollection(payload.result);
     const expected = input.text.trim();
-    const match = (result?.comments ?? []).find((comment) => (
+    const match = comments.find((comment) => (
       comment.author?.type === 'BUSINESS'
       && String(comment.text || '').trim() === expected
       && comment.status !== 'DELETED'
