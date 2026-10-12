@@ -35,3 +35,18 @@ AWS_SECRET_ACCESS_KEY=...
 
 The daily job detects this file and uploads the completed backup directory.
 Without that file, local backup remains fully functional and the off-site stage is skipped.
+
+
+## Non-root fallback: cron
+
+If the deployment channel cannot install system-level units and the user systemd
+manager is unavailable, install the same daily backup job into the `acosta`
+crontab:
+
+```bash
+cd /var/www/bis-shield
+bash scripts/install-backup-cron.sh
+```
+
+The default cron schedule is 03:30 daily. The job uses the same checksum,
+retention and optional off-site upload logic as the systemd service.
