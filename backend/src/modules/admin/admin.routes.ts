@@ -73,10 +73,19 @@ const ticketPatch = z.object({
   assignedManagerName: z.string().max(180).optional(),
   updatedAt: z.string().max(80).optional(),
 }).strict();
-const ticketMessage = z.object({
-  text: z.string().trim().min(1).max(10_000),
-  internal: z.boolean().optional(),
+const ticketAttachment = z.object({
+  name: z.string().trim().min(1).max(180),
+  size: z.number().int().positive().max(2 * 1024 * 1024),
+  type: z.string().trim().max(120).default(''),
+  dataBase64: z.string().min(1).max(2_800_000),
 }).strict();
+const ticketMessage = z.object({
+  text: z.string().trim().max(10_000).default(''),
+  internal: z.boolean().optional(),
+  attachments: z.array(ticketAttachment).max(5).optional(),
+}).strict().refine((value) => Boolean(value.text || value.attachments?.length), {
+  message: 'Введите сообщение или прикрепите файл',
+});
 const managerCreate = z.object({
   name: z.string().trim().min(2).max(180),
   email: z.string().trim().email(),
@@ -261,12 +270,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post('/admin/tickets/:ticketId/messages', async (request, reply) => {
+  app.post('/admin/tickets/:ticketId/messages', { bodyLimit: 12 * 1024 * 1024 }, async (request, reply) => {
     const { ticketId } = ticketParams.parse(request.params);
     const body = ticketMessage.parse(request.body);
     const ticket = await addAdminSupportMessage(app, request.auth!.userId, ticketId, {
       text: body.text,
       ...(body.internal !== undefined ? { internal: body.internal } : {}),
+      ...(body.attachments !== undefined ? { attachments: body.attachments } : {}),
       idempotencyKey: requestIdempotencyKey(request),
     });
     return reply.code(201).send({ ticket });
