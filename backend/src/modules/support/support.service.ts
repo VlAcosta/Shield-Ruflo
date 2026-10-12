@@ -396,7 +396,7 @@ export async function addClientSupportMessage(
           mimeType: file.mimeType,
           sizeBytes: file.sizeBytes,
           sha256: file.sha256,
-          content: file.content,
+          content: Uint8Array.from(file.content),
         })),
       });
       message = await tx.supportMessage.update({
@@ -653,7 +653,7 @@ export async function addAdminSupportMessage(
           mimeType: file.mimeType,
           sizeBytes: file.sizeBytes,
           sha256: file.sha256,
-          content: file.content,
+          content: Uint8Array.from(file.content),
         })),
       });
       const routePrefix = input.internal ? '/api/v1/admin/support/attachments' : '/api/v1/support/attachments';
