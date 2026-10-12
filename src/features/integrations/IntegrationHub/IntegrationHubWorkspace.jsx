@@ -8,6 +8,14 @@ import './IntegrationHubWorkspace.scss';
 
 const STATUS_ORDER = ['error', 'expired', 'degraded', 'needs_setup', 'syncing', 'configured', 'connected', 'disconnected'];
 const PROVIDER_SETUP = Object.freeze({
+  ymarket: {
+    note: 'Используется официальный API Яндекс Маркета для продавцов. Нужен API-Key с доступом «Общение с покупателями» и businessId кабинета.',
+    supportsScheduledSync: true,
+    fields: [
+      { key: 'businessId', target: 'configuration', label: 'businessId кабинета', placeholder: 'Например: 12345678', required: true },
+      { key: 'apiKey', target: 'credentials', label: 'API-Key Яндекс Маркета', placeholder: 'Токен из «API и модули»', secret: true, required: true },
+    ],
+  },
   wb: {
     note: 'Используется официальное подключение Wildberries для вопросов и отзывов. Ключ доступа хранится на сервере в зашифрованном виде.',
     supportsScheduledSync: true,
