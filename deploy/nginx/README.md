@@ -8,6 +8,8 @@ These snippets are designed for the existing production nginx HTTPS server for
 - `bis-shield-security-headers.conf` — browser security headers and frontend CSP.
 - `bis-shield-spa-hardening.conf` — dotfile/internal-route protection, hashed
   asset caching, and no-cache handling for the SPA shell.
+- `bis-shield-health.conf` — exact public `/health` and `/health/ready`
+  reverse-proxy routes to the backend, so external monitors do not hit SPA fallback.
 
 ## Safe installation
 
@@ -29,6 +31,9 @@ sudo install -m 0644 deploy/nginx/bis-shield-security-headers.conf \
 
 sudo install -m 0644 deploy/nginx/bis-shield-spa-hardening.conf \
   /etc/nginx/snippets/bis-shield-spa-hardening.conf
+
+sudo install -m 0644 deploy/nginx/bis-shield-health.conf \
+  /etc/nginx/snippets/bis-shield-health.conf
 ```
 
 Inside the existing **HTTPS** `server { ... }` block, after the existing
@@ -37,6 +42,7 @@ Inside the existing **HTTPS** `server { ... }` block, after the existing
 ```nginx
 include /etc/nginx/snippets/bis-shield-security-headers.conf;
 include /etc/nginx/snippets/bis-shield-spa-hardening.conf;
+include /etc/nginx/snippets/bis-shield-health.conf;
 ```
 
 The SPA hardening snippet defines exact/specific locations for

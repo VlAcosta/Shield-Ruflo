@@ -1,0 +1,25 @@
+[Unit]
+Description=Business Shield daily PostgreSQL backup
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=acosta
+Group=acosta
+WorkingDirectory=/var/www/bis-shield
+Environment=APP_DIR=/var/www/bis-shield
+Environment=BACKUP_BASE=/home/acosta/business-shield-backups/daily
+Environment=BACKUP_RETENTION_DAYS=14
+ExecStart=/usr/bin/bash /var/www/bis-shield/scripts/database-backup-daily.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/home/acosta/business-shield-backups /var/lock
+
+[Install]
+WantedBy=multi-user.target
