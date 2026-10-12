@@ -76,6 +76,18 @@ if (env.AI_REVIEW_INTELLIGENCE_ENABLED) {
 if (operationsConfig.OPERATIONS_METRICS_TOKEN.length < 32) {
   throw new Error('OPERATIONS_METRICS_TOKEN must be at least 32 characters');
 }
+if (env.GOOGLE_BUSINESS_ENABLED) {
+  console.log('✅ Google Business Profile OAuth is enabled');
+} else {
+  console.warn('⚠ GOOGLE_BUSINESS_ENABLED=false: Google Business Profile adapter is installed but OAuth activation is disabled.');
+}
+const bridgeHosts = String(process.env.REVIEW_BRIDGE_ALLOWED_HOSTS || '').split(',').map((v) => v.trim()).filter(Boolean);
+if (bridgeHosts.length) {
+  console.log(`✅ Review bridge allowlist configured for ${bridgeHosts.length} host(s)`);
+} else {
+  console.warn('⚠ REVIEW_BRIDGE_ALLOWED_HOSTS is empty: Yandex Business and Otzovik verified bridge connections remain disabled.');
+}
+console.log('✅ WB/Ozon/2GIS adapters are installed; tenant credentials are supplied through the Integrations UI.');
 console.log('✅ Backend production environment passed schema, security, and operational validation');
 NODE
 
