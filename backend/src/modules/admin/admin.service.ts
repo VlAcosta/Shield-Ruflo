@@ -4,7 +4,7 @@ import type { Prisma, SubscriptionStatus } from '../../generated/prisma/client.j
 import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { listAdminSupportTickets } from '../support/support.service.js';
-import { ReportDeliveryError, sendReportEmail } from '../reports/report-delivery.service.js';
+import { ReportDeliveryError, sendReportEmail, sendReportTelegram } from '../reports/report-delivery.service.js';
 
 const PLATFORM_MANAGERS_METADATA_KEY = 'platform.admin.managers';
 const PLATFORM_SETTINGS_METADATA_KEY = 'platform.admin.settings';
@@ -559,7 +559,12 @@ export async function getAdminSettings(app: FastifyInstance) {
     listPlatformManagers(app),
   ]);
   const storedIntegrations = Array.isArray(stored.integrations) ? stored.integrations : [];
-  const reportEmailConfigured = env.REPORT_EMAIL_PROVIDER !== 'disabled';
+  const reportEmailConfigured = env.REPORT_EMAIL_PROVIDER !== 'disabled'
+    && (env.REPORT_EMAIL_PROVIDER !== 'resend' || Boolean(env.REPORT_EMAIL_API_KEY && env.REPORT_EMAIL_FROM))
+    && (env.REPORT_EMAIL_PROVIDER !== 'webhook' || Boolean(env.REPORT_EMAIL_WEBHOOK_URL));
+  const telegramConfigured = Boolean(env.REPORT_TELEGRAM_BOT_TOKEN);
+  const billingConfigured = env.PAYMENT_PROVIDER === 'yookassa'
+    && Boolean(env.YOOKASSA_SHOP_ID && env.YOOKASSA_SECRET_KEY && env.YOOKASSA_RETURN_URL);
 
   return {
     notifications: asJsonRecord(stored.notifications),
@@ -568,6 +573,15 @@ export async function getAdminSettings(app: FastifyInstance) {
       provider: env.REPORT_EMAIL_PROVIDER,
       configured: reportEmailConfigured,
       from: env.REPORT_EMAIL_FROM || '',
+    },
+    telegram: {
+      provider: 'telegram-bot-api',
+      configured: telegramConfigured,
+    },
+    billing: {
+      provider: env.PAYMENT_PROVIDER,
+      configured: billingConfigured,
+      webhookUrl: 'https://bis-shield.ru/api/v1/billing/yookassa/webhook',
     },
     integrations: storedIntegrations,
     templates,
@@ -582,6 +596,8 @@ export async function getAdminSettings(app: FastifyInstance) {
     source: 'api',
     capabilities: {
       smtp: reportEmailConfigured,
+      telegram: telegramConfigured,
+      billingOnlineCheckout: billingConfigured,
       platformIntegrations: true,
       supportTickets: true,
       supportManagers: true,
@@ -589,6 +605,29 @@ export async function getAdminSettings(app: FastifyInstance) {
       settingsPersistence: true,
     },
   };
+}
+
+export async function testAdminTelegramProvider(chatId: string) {
+  const destination = chatId.trim();
+  if (!destination) {
+    throw new AppError({ code: 'ADMIN_TELEGRAM_CHAT_REQUIRED', message: 'Укажите chat ID для тестовой отправки', statusCode: 400 });
+  }
+  if (!env.REPORT_TELEGRAM_BOT_TOKEN) {
+    throw new AppError({ code: 'REPORT_TELEGRAM_BOT_NOT_CONFIGURED', message: 'Telegram bot token не настроен', statusCode: 503 });
+  }
+  try {
+    await sendReportTelegram(destination, 'Бизнес Щит · тест Telegram delivery\nКанал доставки настроен и работает.');
+  } catch (error) {
+    if (error instanceof ReportDeliveryError) {
+      throw new AppError({
+        code: 'ADMIN_TELEGRAM_TEST_FAILED',
+        message: error.message,
+        statusCode: error.retryable ? 503 : 502,
+      });
+    }
+    throw error;
+  }
+  return { ok: true, provider: 'telegram-bot-api', destination };
 }
 
 export async function updateAdminSettingsSection(
