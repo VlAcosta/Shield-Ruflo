@@ -123,6 +123,12 @@ const envSchema = z
     REPORT_EMAIL_WEBHOOK_TOKEN: z.string().default(''),
     REPORT_TELEGRAM_BOT_TOKEN: z.string().trim().default(''),
 
+    PAYMENT_PROVIDER: z.enum(['disabled', 'yookassa']).default('disabled'),
+    YOOKASSA_SHOP_ID: z.string().trim().default(''),
+    YOOKASSA_SECRET_KEY: z.string().trim().default(''),
+    YOOKASSA_RETURN_URL: optionalUrl,
+    YOOKASSA_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+
     SUGGESTION_WEBHOOK_URL: optionalUrl,
     SUGGESTION_WEBHOOK_TOKEN: z.string().default(''),
 
@@ -221,6 +227,18 @@ const envSchema = z
         ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_FROM'], message: 'Resend report delivery requires a From address' });
       }
     }
+    if (value.PAYMENT_PROVIDER === 'yookassa') {
+      if (!value.YOOKASSA_SHOP_ID) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_SHOP_ID'], message: 'YooKassa requires shop id' });
+      }
+      if (!value.YOOKASSA_SECRET_KEY) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_SECRET_KEY'], message: 'YooKassa requires secret key' });
+      }
+      if (!value.YOOKASSA_RETURN_URL) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_RETURN_URL'], message: 'YooKassa requires checkout return URL' });
+      }
+    }
+
     if (value.REPORT_EMAIL_PROVIDER === 'webhook' && !value.REPORT_EMAIL_WEBHOOK_URL) {
       ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_WEBHOOK_URL'], message: 'Report email webhook provider requires URL' });
     }
@@ -258,6 +276,9 @@ const envSchema = z
       }
       if (value.GOOGLE_BUSINESS_ENABLED && !value.GOOGLE_BUSINESS_RETURN_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['GOOGLE_BUSINESS_RETURN_URL'], message: 'Production Google OAuth return URL must use HTTPS' });
+      }
+      if (value.PAYMENT_PROVIDER === 'yookassa' && !value.YOOKASSA_RETURN_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['YOOKASSA_RETURN_URL'], message: 'Production YooKassa return URL must use HTTPS' });
       }
       if (value.REPORT_EMAIL_PROVIDER === 'webhook' && !value.REPORT_EMAIL_WEBHOOK_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['REPORT_EMAIL_WEBHOOK_URL'], message: 'Production report email webhook must use HTTPS' });

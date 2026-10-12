@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
 import { getPublicBillingCatalog, PUBLIC_PLAN_CODES, type PublicPlanCode } from './billing.service.js';
 
@@ -46,11 +47,15 @@ function salesNextAction(requestId: string) {
 }
 
 export function billingPurchaseOptions() {
+  const yooKassaReady = env.PAYMENT_PROVIDER === 'yookassa'
+    && Boolean(env.YOOKASSA_SHOP_ID)
+    && Boolean(env.YOOKASSA_SECRET_KEY)
+    && Boolean(env.YOOKASSA_RETURN_URL);
   return {
     onlineCheckout: {
-      available: false,
-      provider: null,
-      reasonCode: 'PAYMENT_PROVIDER_NOT_CONFIGURED',
+      available: yooKassaReady,
+      provider: yooKassaReady ? 'yookassa' : null,
+      reasonCode: yooKassaReady ? null : 'PAYMENT_PROVIDER_NOT_CONFIGURED',
     },
     salesAssisted: {
       available: true,

@@ -21,6 +21,11 @@ model BillingPurchaseRequest {
   contactEmail          String?                      @map("contact_email") @db.VarChar(320)
   contactPhone          String?                      @map("contact_phone") @db.VarChar(64)
   requestedReturnUrl    String?                      @map("requested_return_url") @db.Text
+  provider              String?                      @db.VarChar(80)
+  externalPaymentId     String?                      @unique @map("external_payment_id") @db.VarChar(240)
+  providerStatus        String?                      @map("provider_status") @db.VarChar(80)
+  confirmationUrl       String?                      @map("confirmation_url") @db.Text
+  paidAt                DateTime?                    @map("paid_at")
   metadata              Json?
   contactedAt           DateTime?                    @map("contacted_at")
   invoicedAt            DateTime?                    @map("invoiced_at")

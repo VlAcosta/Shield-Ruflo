@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors/app-error.js';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = ['TRIALING', 'ACTIVE', 'PAST_DUE', 'INCOMPLETE'] as const;
@@ -207,7 +208,10 @@ export async function getBillingSnapshot(app: FastifyInstance, organizationId: s
     usage,
     packages: [],
     payments: [],
-    paymentProviderConfigured: false,
+    paymentProviderConfigured: env.PAYMENT_PROVIDER === 'yookassa'
+      && Boolean(env.YOOKASSA_SHOP_ID)
+      && Boolean(env.YOOKASSA_SECRET_KEY)
+      && Boolean(env.YOOKASSA_RETURN_URL),
     trial: { available: !priorPro && subscription.plan.code === 'FREE', days: PRO_TRIAL_DAYS, targetPlan: 'PRO' },
   };
 }
