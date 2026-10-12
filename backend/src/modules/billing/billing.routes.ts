@@ -1,7 +1,13 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
-import { getBillingSnapshot, getPublicBillingCatalog, PUBLIC_PLAN_CODES, startProTrial } from './billing.service.js';
+import {
+  getBillingPaymentReceipt,
+  getBillingSnapshot,
+  getPublicBillingCatalog,
+  PUBLIC_PLAN_CODES,
+  startProTrial,
+} from './billing.service.js';
 import {
   billingPurchaseOptions,
   createSalesAssistedPurchaseRequest,
@@ -88,6 +94,16 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
       subscription: snapshot.subscription,
       usage: snapshot.usage,
     };
+  });
+
+  app.get('/billing/subscription/payments/:paymentId/receipt', {
+    preHandler: [app.authenticate, app.authorize('billing.view')],
+  }, async (request, reply) => {
+    const { paymentId } = z.object({ paymentId: z.string().uuid() }).parse(request.params);
+    const receipt = await getBillingPaymentReceipt(app, orgId(request), paymentId);
+    reply.header('content-type', 'text/plain; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="business-shield-receipt-${paymentId}.txt"`);
+    return reply.send(receipt);
   });
 
   app.get('/billing/purchase-requests', {

@@ -405,10 +405,14 @@ export async function getAdminAnalytics(app: FastifyInstance, period: string) {
 }
 
 export async function getAdminSubscriptions(app: FastifyInstance) {
-  const [clients, plans, subscriptions] = await Promise.all([
+  const [clients, plans, subscriptions, paymentRequests] = await Promise.all([
     listAdminClients(app),
     app.prisma.plan.findMany({ where: { active: true }, include: { entitlements: true }, orderBy: { priceCents: 'asc' } }),
     app.prisma.subscription.findMany({ include: { organization: true, plan: true }, orderBy: { createdAt: 'desc' }, take: 1000 }),
+    app.prisma.billingPurchaseRequest.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 250,
+    }),
   ]);
 
   const subscriptionRows = subscriptions.map((subscription) => ({
@@ -439,6 +443,35 @@ export async function getAdminSubscriptions(app: FastifyInstance) {
   const renewable = current.filter((item) => ['active', 'trial'].includes(item.status));
   const mrr = active.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
 
+  const clientById = new Map(clients.map((client) => [client.id, client]));
+  const events = paymentRequests.map((payment) => {
+    const client = clientById.get(payment.organizationId);
+    const successful = payment.status === 'COMPLETED';
+    const failed = payment.status === 'CANCELED' || ['canceled', 'failed'].includes(String(payment.providerStatus || '').toLowerCase());
+    const title = successful
+      ? 'Оплата подтверждена'
+      : failed
+        ? 'Оплата отменена'
+        : payment.provider
+          ? 'Платёж создан'
+          : 'Заявка на тариф';
+    return {
+      id: payment.id,
+      organizationId: payment.organizationId,
+      clientName: client?.name || 'Клиент',
+      title,
+      description: `${client?.name || 'Клиент'} · ${payment.planCode} · ${(payment.quotedAmountCents / 100).toLocaleString('ru-RU')} ${payment.currency}`,
+      provider: payment.provider,
+      providerStatus: payment.providerStatus,
+      status: payment.status.toLowerCase(),
+      amount: Number((payment.quotedAmountCents / 100).toFixed(2)),
+      currency: payment.currency,
+      time: formatDate(payment.paidAt || payment.completedAt || payment.createdAt),
+      createdAt: payment.createdAt.toISOString(),
+      tone: successful ? 'green' : failed ? 'red' : 'orange',
+    };
+  });
+
   return {
     plans: plans.map((plan) => ({
       id: plan.code.toLowerCase(),
@@ -454,7 +487,7 @@ export async function getAdminSubscriptions(app: FastifyInstance) {
     })),
     subscriptions: current,
     renewals: renewable.filter((item) => item.expiryDate !== '—').sort((a, b) => a.expiryDate.localeCompare(b.expiryDate, 'ru')).slice(0, 25),
-    events: [],
+    events,
     metrics: {
       mrr,
       arr: mrr * 12,
@@ -464,7 +497,7 @@ export async function getAdminSubscriptions(app: FastifyInstance) {
       atRisk: current.filter((item) => item.rating !== null && Number(item.rating) < 3.5).length,
       renewalRate: renewable.length ? Math.round((renewable.filter((item) => item.autoRenew).length / renewable.length) * 100) : null,
     },
-    paymentHistoryConfigured: false,
+    paymentHistoryConfigured: true,
   };
 }
 

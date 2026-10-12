@@ -246,7 +246,7 @@ export async function downloadPaymentReceipt(payment) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `receipt-${payment.id}.pdf`;
+    anchor.download = `business-shield-receipt-${payment.id}.txt`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
