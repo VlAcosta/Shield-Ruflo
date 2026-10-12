@@ -76,6 +76,16 @@ if (env.AI_REVIEW_INTELLIGENCE_ENABLED) {
 if (operationsConfig.OPERATIONS_METRICS_TOKEN.length < 32) {
   throw new Error('OPERATIONS_METRICS_TOKEN must be at least 32 characters');
 }
+if (env.REPORT_EMAIL_PROVIDER === 'disabled') {
+  console.warn('⚠ REPORT_EMAIL_PROVIDER=disabled: scheduled email reports remain disabled.');
+} else {
+  console.log(`✅ Email delivery provider configured (provider=${env.REPORT_EMAIL_PROVIDER})`);
+}
+if (env.REPORT_TELEGRAM_BOT_TOKEN) {
+  console.log('✅ Telegram Bot API delivery is configured');
+} else {
+  console.warn('⚠ REPORT_TELEGRAM_BOT_TOKEN is empty: Telegram report delivery remains disabled.');
+}
 if (env.PAYMENT_PROVIDER === 'yookassa') {
   console.log('✅ YooKassa online checkout is configured');
   console.log('✅ YooKassa webhook URL: https://bis-shield.ru/api/v1/billing/yookassa/webhook');
