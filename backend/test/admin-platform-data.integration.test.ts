@@ -29,6 +29,7 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
   const regularSessionToken = `regular-platform-data-${randomUUID()}`;
   const platformAdminCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(platformAdminSessionToken)}`;
   const regularCookie = `${env.AUTH_COOKIE_NAME}=${encodeURIComponent(regularSessionToken)}`;
+  let createdManagerId: string | null = null;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -126,7 +127,9 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
     await app.prisma.organizationMember.deleteMany({ where: { organizationId } });
     await app.prisma.organization.deleteMany({ where: { id: organizationId } });
     await app.prisma.session.deleteMany({ where: { userId: { in: [platformAdminId, regularUserId] } } });
-    await app.prisma.user.deleteMany({ where: { id: { in: [platformAdminId, regularUserId] } } });
+    await app.prisma.user.deleteMany({
+      where: { id: { in: [platformAdminId, regularUserId, ...(createdManagerId ? [createdManagerId] : [])] } },
+    });
     await app.close();
   });
 
@@ -158,6 +161,61 @@ describeWithPostgres('platform admin PostgreSQL data', () => {
     });
     expect(analytics.statusCode).toBe(200);
     expect(analytics.json()).toEqual(expect.objectContaining({ source: 'api' }));
+  });
+
+  test('platform admin can persist and clear a real client account manager', async () => {
+    const managerEmail = `account-manager-${randomUUID()}@example.test`;
+    const managerPhone = `+7${Date.now()}73`;
+    const createManager = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/managers',
+      headers: { cookie: platformAdminCookie },
+      payload: {
+        name: 'Account Manager Test',
+        email: managerEmail,
+        phone: managerPhone,
+        role: 'Персональный менеджер',
+        status: 'active',
+        capacity: 8,
+        rating: 4.8,
+      },
+    });
+    expect(createManager.statusCode).toBe(201);
+    createdManagerId = createManager.json().manager.id as string;
+
+    const assign = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/clients/${organizationId}`,
+      headers: { cookie: platformAdminCookie },
+      payload: {
+        managerId: createdManagerId,
+        city: 'Тула',
+        industry: 'Retail updated',
+      },
+    });
+    expect(assign.statusCode).toBe(200);
+    expect(assign.json().client).toMatchObject({
+      id: organizationId,
+      managerId: createdManagerId,
+      managerName: 'Account Manager Test',
+      city: 'Тула',
+      industry: 'Retail updated',
+    });
+
+    const persisted = await app.prisma.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+      select: { accountManagerId: true },
+    });
+    expect(persisted.accountManagerId).toBe(createdManagerId);
+
+    const clear = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/clients/${organizationId}`,
+      headers: { cookie: platformAdminCookie },
+      payload: { managerId: null },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json().client.managerId).toBeNull();
   });
 
   test('client support messages appear in the platform queue and admin replies return to the client', async () => {

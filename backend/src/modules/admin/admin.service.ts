@@ -211,6 +211,227 @@ function subscriptionStatus(status: SubscriptionStatus | undefined, organization
   return 'cancelled';
 }
 
+export async function updateAdminClient(
+  app: FastifyInstance,
+  clientId: string,
+  patch: {
+    name?: string | undefined;
+    legalName?: string | null | undefined;
+    inn?: string | undefined;
+    email?: string | undefined;
+    phone?: string | undefined;
+    city?: string | undefined;
+    industry?: string | null | undefined;
+    website?: string | null | undefined;
+    planId?: string | undefined;
+    managerId?: string | null | undefined;
+    status?: 'active' | 'trial' | 'expired' | 'cancelled' | 'suspended' | 'archived' | undefined;
+    expiryDate?: string | undefined;
+  },
+  actorUserId?: string,
+) {
+  const organization = await app.prisma.organization.findUnique({
+    where: { id: clientId },
+    include: {
+      members: {
+        where: { role: 'OWNER', status: 'ACTIVE' },
+        orderBy: { createdAt: 'asc' },
+        take: 1,
+      },
+      businesses: {
+        where: { status: 'ACTIVE' },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        take: 1,
+        include: {
+          locations: {
+            where: { status: 'ACTIVE' },
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            take: 1,
+          },
+        },
+      },
+      subscriptions: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
+    },
+  });
+  if (!organization) {
+    throw new AppError({ code: 'ADMIN_CLIENT_NOT_FOUND', message: 'Клиент не найден', statusCode: 404 });
+  }
+
+  const ownerMember = organization.members[0];
+  const ownerId = ownerMember?.userId;
+  const phone = patch.phone !== undefined ? normalizedPhone(patch.phone) : undefined;
+  if (patch.phone !== undefined && !phone) {
+    throw new AppError({ code: 'ADMIN_CLIENT_PHONE_REQUIRED', message: 'Некорректный телефон владельца', statusCode: 400 });
+  }
+
+  if (ownerId && (patch.email !== undefined || phone !== undefined)) {
+    const conflicts = await app.prisma.user.findFirst({
+      where: {
+        id: { not: ownerId },
+        OR: [
+          ...(patch.email !== undefined ? [{ email: { equals: patch.email, mode: 'insensitive' as const } }] : []),
+          ...(phone !== undefined ? [{ phone }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (conflicts) {
+      throw new AppError({
+        code: 'ADMIN_CLIENT_OWNER_ALREADY_EXISTS',
+        message: 'Другой пользователь уже использует такой email или телефон',
+        statusCode: 409,
+      });
+    }
+  }
+
+  const plan = patch.planId
+    ? await app.prisma.plan.findFirst({
+        where: { OR: [{ code: patch.planId.toUpperCase() }, { id: patch.planId }] },
+      })
+    : null;
+  if (patch.planId && !plan) {
+    throw new AppError({ code: 'PLAN_NOT_FOUND', message: 'Тариф не найден', statusCode: 404 });
+  }
+
+  let expiry: Date | null | undefined;
+  if (patch.expiryDate !== undefined) {
+    expiry = patch.expiryDate.trim() ? parseAdminExpiryDate(patch.expiryDate) : null;
+    if (patch.expiryDate.trim() && !expiry) {
+      throw new AppError({
+        code: 'ADMIN_CLIENT_EXPIRY_DATE_INVALID',
+        message: 'Дата окончания подписки должна быть в формате ДД.ММ.ГГГГ',
+        statusCode: 400,
+      });
+    }
+  }
+
+  const status = patch.status;
+  const organizationStatus = status === 'cancelled' || status === 'archived'
+    ? 'ARCHIVED'
+    : status === 'suspended'
+      ? 'SUSPENDED'
+      : status
+        ? 'ACTIVE'
+        : undefined;
+  const subscriptionStatus = status === 'active'
+    ? 'ACTIVE'
+    : status === 'trial'
+      ? 'TRIALING'
+      : status === 'expired'
+        ? 'EXPIRED'
+        : status === 'cancelled'
+          ? 'CANCELED'
+          : undefined;
+
+  await app.prisma.$transaction(async (tx) => {
+    const displayName = patch.name?.trim() || patch.legalName?.trim() || undefined;
+    await tx.organization.update({
+      where: { id: clientId },
+      data: {
+        ...(displayName !== undefined ? { name: displayName } : {}),
+        ...(patch.legalName !== undefined ? { legalName: patch.legalName } : patch.name !== undefined ? { legalName: patch.name.trim() } : {}),
+        ...(patch.inn !== undefined ? { inn: patch.inn } : {}),
+        ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
+        ...(patch.website !== undefined ? { website: patch.website } : {}),
+        ...(patch.managerId !== undefined ? { accountManagerId: patch.managerId } : {}),
+        ...(organizationStatus !== undefined ? { status: organizationStatus } : {}),
+      },
+    });
+
+    if (ownerId && (displayName !== undefined || patch.email !== undefined || phone !== undefined)) {
+      await tx.user.update({
+        where: { id: ownerId },
+        data: {
+          ...(displayName !== undefined ? { displayName } : {}),
+          ...(patch.email !== undefined ? { email: patch.email } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+        },
+      });
+    }
+
+    const business = organization.businesses[0];
+    if (business && (displayName !== undefined || patch.industry !== undefined)) {
+      await tx.business.update({
+        where: { id: business.id },
+        data: {
+          ...(displayName !== undefined ? { name: displayName } : {}),
+          ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
+        },
+      });
+    }
+
+    if (patch.city !== undefined && business) {
+      const location = business.locations[0];
+      if (location) {
+        await tx.location.update({
+          where: { id: location.id },
+          data: { city: patch.city || null, name: patch.city || location.name },
+        });
+      } else if (patch.city.trim()) {
+        await tx.location.create({
+          data: {
+            businessId: business.id,
+            name: patch.city.trim(),
+            city: patch.city.trim(),
+            isPrimary: true,
+          },
+        });
+      }
+    }
+
+    const currentSubscription = organization.subscriptions[0];
+    if (currentSubscription) {
+      await tx.subscription.update({
+        where: { id: currentSubscription.id },
+        data: {
+          ...(plan ? { planId: plan.id } : {}),
+          ...(subscriptionStatus !== undefined ? { status: subscriptionStatus } : {}),
+          ...(expiry !== undefined ? { currentPeriodEnd: expiry } : {}),
+          ...(status === 'active' ? { autoRenew: true }
+            : status && ['trial', 'expired', 'cancelled'].includes(status) ? { autoRenew: false } : {}),
+        },
+      });
+    } else if (plan) {
+      await tx.subscription.create({
+        data: {
+          organizationId: clientId,
+          planId: plan.id,
+          status: subscriptionStatus || 'INCOMPLETE',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: expiry ?? null,
+          autoRenew: status === 'active',
+        },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        organizationId: clientId,
+        actorUserId: actorUserId || null,
+        action: 'admin.client.updated',
+        entityType: 'Organization',
+        entityId: clientId,
+        metadata: {
+          fields: Object.keys(patch),
+          managerId: patch.managerId ?? undefined,
+          planId: patch.planId ?? undefined,
+          status: patch.status ?? undefined,
+        },
+      },
+    });
+  });
+
+  const clients = await listAdminClients(app);
+  const updated = clients.find((item) => item.id === clientId);
+  if (!updated) {
+    throw new AppError({ code: 'ADMIN_CLIENT_NOT_FOUND', message: 'Клиент не найден после обновления', statusCode: 404 });
+  }
+  return updated;
+}
+
 export async function listAdminClients(app: FastifyInstance) {
   const organizations = await app.prisma.organization.findMany({
     orderBy: { createdAt: 'desc' },
@@ -233,6 +454,9 @@ export async function listAdminClients(app: FastifyInstance) {
         orderBy: { createdAt: 'asc' },
         take: 1,
         include: { user: { select: { email: true, phone: true, firstName: true, lastName: true, displayName: true } } },
+      },
+      accountManager: {
+        select: { id: true, displayName: true, firstName: true, lastName: true, email: true },
       },
       subscriptions: {
         orderBy: { createdAt: 'desc' },
@@ -272,10 +496,25 @@ export async function listAdminClients(app: FastifyInstance) {
       plan: plan?.name || 'Без тарифа',
       status,
       statusLabel: STATUS_LABELS[status] || status,
-      managerId: null,
-      manager: '',
-      managerName: '',
-      managerInitials: '',
+      managerId: organization.accountManager?.id || null,
+      manager: organization.accountManager
+        ? (organization.accountManager.displayName
+          || organization.accountManager.firstName
+          || organization.accountManager.email
+          || '')
+        : '',
+      managerName: organization.accountManager
+        ? (organization.accountManager.displayName
+          || [organization.accountManager.firstName, organization.accountManager.lastName].filter(Boolean).join(' ')
+          || organization.accountManager.email
+          || '')
+        : '',
+      managerInitials: organization.accountManager
+        ? managerInitials(organization.accountManager.displayName
+          || [organization.accountManager.firstName, organization.accountManager.lastName].filter(Boolean).join(' ')
+          || organization.accountManager.email
+          || 'Менеджер')
+        : '',
       revenue: subscription?.status === 'ACTIVE' ? Number(((plan?.priceCents || 0) / 100).toFixed(2)) : 0,
       rating: rating === null || rating === undefined ? null : Number(rating.toFixed(2)),
       startDate: formatDate(subscription?.currentPeriodStart || organization.createdAt),
@@ -802,6 +1041,7 @@ export async function createAdminClient(
     city?: string | undefined;
     industry?: string | undefined;
     expiryDate?: string | undefined;
+    managerId?: string | undefined;
   },
 ) {
   const phone = normalizedPhone(input.phone);
@@ -839,6 +1079,7 @@ export async function createAdminClient(
         industry: input.industry || null,
         status: organizationStatus,
         onboardingStatus: 'NOT_STARTED',
+        accountManagerId: input.managerId || null,
       },
     });
     await tx.organizationMember.create({

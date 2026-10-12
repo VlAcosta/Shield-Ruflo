@@ -2,7 +2,7 @@ import React, { memo, useDeferredValue, useEffect, useMemo, useState } from 'rea
 import { useNavigate } from 'react-router-dom';
 import Badge from '../../../components/ui/Badge';
 import useAdminClients from './hooks/useAdminClients';
-import { ADMIN_CLIENT_MANAGERS, ADMIN_CLIENT_PLANS } from './model/adminClientsData';
+import { ADMIN_CLIENT_PLANS } from './model/adminClientsData';
 import './AdminClientsWorkspace.scss';
 
 const STATUS_OPTIONS = [
@@ -44,9 +44,9 @@ function Metric({ label, value, tone, index }) {
   );
 }
 
-function CreateClientModal({ open, saving, onClose, onCreate }) {
+function CreateClientModal({ open, saving, managers, onClose, onCreate }) {
   const [form, setForm] = useState({
-    name: '', inn: '', email: '', phone: '', planId: 'professional', managerId: 'alexey', status: 'active', city: '', industry: '', expiryDate: '17.03.2026',
+    name: '', inn: '', email: '', phone: '', planId: 'professional', managerId: '', status: 'active', city: '', industry: '', expiryDate: '',
   });
   const [error, setError] = useState('');
 
@@ -86,7 +86,7 @@ function CreateClientModal({ open, saving, onClose, onCreate }) {
           <label><span>Город</span><input value={form.city} onChange={setField('city')} placeholder="Москва" /></label>
           <label><span>Отрасль</span><input value={form.industry} onChange={setField('industry')} placeholder="Торговля" /></label>
           <label><span>Тариф</span><select value={form.planId} onChange={setField('planId')}>{ADMIN_CLIENT_PLANS.map((plan) => <option key={plan.id} value={plan.id}>{plan.label}</option>)}</select></label>
-          <label><span>Менеджер</span><select value={form.managerId} onChange={setField('managerId')}>{ADMIN_CLIENT_MANAGERS.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label>
+          <label><span>Менеджер</span><select value={form.managerId} onChange={setField('managerId')}><option value="">Не назначен</option>{managers.filter((manager) => manager.status !== 'paused').map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label>
           <label><span>Статус</span><select value={form.status} onChange={setField('status')}>{STATUS_OPTIONS.slice(1).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label><span>Подписка до</span><input value={form.expiryDate} onChange={setField('expiryDate')} placeholder="17.03.2026" /></label>
         </div>
@@ -103,7 +103,7 @@ function Skeleton() {
 
 function AdminClientsWorkspace({ onRefreshReady }) {
   const navigate = useNavigate();
-  const { clients, metrics, loading, saving, error, refresh, createClient } = useAdminClients();
+  const { clients, managers, metrics, loading, saving, error, refresh, createClient } = useAdminClients();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const [status, setStatus] = useState('all');
@@ -118,7 +118,7 @@ function AdminClientsWorkspace({ onRefreshReady }) {
     const normalized = deferredQuery.trim().toLowerCase();
     const next = (clients || []).filter((client) => {
       const matchesQuery = !normalized || `${client.name} ${client.inn} ${client.email} ${client.phone}`.toLowerCase().includes(normalized);
-      return matchesQuery && (status === 'all' || client.status === status) && (planId === 'all' || client.planId === planId) && (managerId === 'all' || client.managerId === managerId);
+      return matchesQuery && (status === 'all' || client.status === status) && (planId === 'all' || client.planId === planId) && (managerId === 'all' || (managerId === 'unassigned' ? !client.managerId : client.managerId === managerId));
     });
     const direction = sort.dir === 'asc' ? 1 : -1;
     return next.sort((a, b) => {
@@ -162,7 +162,7 @@ function AdminClientsWorkspace({ onRefreshReady }) {
         <label className="admin-clients-toolbar__search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по названию, ИНН, email…" /></label>
         <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Статус клиента">{STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
         <select value={planId} onChange={(event) => setPlanId(event.target.value)} aria-label="Тариф"><option value="all">Все тарифы</option>{ADMIN_CLIENT_PLANS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
-        <select value={managerId} onChange={(event) => setManagerId(event.target.value)} aria-label="Менеджер"><option value="all">Все менеджеры</option>{ADMIN_CLIENT_MANAGERS.map((item) => <option key={item.id} value={item.id}>{item.short}</option>)}</select>
+        <select value={managerId} onChange={(event) => setManagerId(event.target.value)} aria-label="Менеджер"><option value="all">Все менеджеры</option><option value="unassigned">Не назначен</option>{managers.map((item) => <option key={item.id} value={item.id}>{item.shortName || item.name}</option>)}</select>
         <button type="button" className="admin-clients-toolbar__add" onClick={() => setCreateOpen(true)}>+ Добавить</button>
       </section>
 
@@ -193,7 +193,7 @@ function AdminClientsWorkspace({ onRefreshReady }) {
         </div>
       </section>
 
-      <CreateClientModal open={createOpen} saving={saving} onClose={closeCreate} onCreate={createClient} />
+      <CreateClientModal open={createOpen} saving={saving} managers={managers} onClose={closeCreate} onCreate={createClient} />
     </div>
   );
 }

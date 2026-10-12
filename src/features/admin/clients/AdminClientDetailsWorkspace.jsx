@@ -2,7 +2,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Badge from '../../../components/ui/Badge';
 import useAdminClients from './hooks/useAdminClients';
-import { ADMIN_CLIENT_MANAGERS, ADMIN_CLIENT_PLANS, CLIENT_ACTIVITY, CLIENT_ACTIVITY_SERIES, CLIENT_TICKETS } from './model/adminClientsData';
+import { ADMIN_CLIENT_PLANS, CLIENT_ACTIVITY, CLIENT_ACTIVITY_SERIES, CLIENT_TICKETS } from './model/adminClientsData';
 import './AdminClientDetailsWorkspace.scss';
 
 const STATUS_TONES = { active: 'green', trial: 'violet', expired: 'orange', cancelled: 'neutral' };
@@ -30,7 +30,7 @@ function ActivityChart() {
   );
 }
 
-function EditClientModal({ client, saving, onClose, onSave }) {
+function EditClientModal({ client, saving, managers, onClose, onSave }) {
   const [form, setForm] = useState(() => ({
     name: client.name, inn: client.inn, email: client.email, phone: client.phone, city: client.city, industry: client.industry,
     planId: client.planId, managerId: client.managerId, status: client.status, expiryDate: client.expiryDate,
@@ -59,7 +59,7 @@ function EditClientModal({ client, saving, onClose, onSave }) {
           <label><span>Город</span><input value={form.city} onChange={setField('city')} /></label>
           <label><span>Отрасль</span><input value={form.industry} onChange={setField('industry')} /></label>
           <label><span>Тариф</span><select value={form.planId} onChange={setField('planId')}>{ADMIN_CLIENT_PLANS.map((plan) => <option key={plan.id} value={plan.id}>{plan.label}</option>)}</select></label>
-          <label><span>Менеджер</span><select value={form.managerId} onChange={setField('managerId')}>{ADMIN_CLIENT_MANAGERS.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label>
+          <label><span>Менеджер</span><select value={form.managerId || ''} onChange={setField('managerId')}><option value="">Не назначен</option>{managers.filter((manager) => manager.status !== 'paused' || manager.id === client.managerId).map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label>
           <label><span>Статус</span><select value={form.status} onChange={setField('status')}><option value="active">Активен</option><option value="trial">Пробный</option><option value="expired">Истёк</option><option value="cancelled">Отменён</option></select></label>
           <label><span>Подписка до</span><input value={form.expiryDate} onChange={setField('expiryDate')} /></label>
         </div>
@@ -73,7 +73,7 @@ function EditClientModal({ client, saving, onClose, onSave }) {
 function AdminClientDetailsWorkspace({ onRefreshReady }) {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { clients, loading, saving, error, refresh, updateClient } = useAdminClients();
+  const { clients, managers, loading, saving, error, refresh, updateClient } = useAdminClients();
   const [editOpen, setEditOpen] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -119,7 +119,7 @@ function AdminClientDetailsWorkspace({ onRefreshReady }) {
 
           <section className="admin-client-panel admin-client-subscription"><header><span>БИЛЛИНГ</span><h3>Подписка</h3></header><dl><div><dt>Тариф</dt><dd><Badge tone="violet">{client.plan}</Badge></dd></div><div><dt>Статус</dt><dd><Badge tone={STATUS_TONES[client.status]}>{client.statusLabel}</Badge></dd></div><div><dt>Начало</dt><dd>{client.startDate}</dd></div><div><dt>До</dt><dd>{client.expiryDate}</dd></div><div className="is-total"><dt>Выручка / мес.</dt><dd>{money(client.revenue)}</dd></div></dl><label><span>Изменить тариф</span><select value={client.planId} onChange={(event) => savePatch({ planId: event.target.value }, 'Тариф изменён')} disabled={saving}>{ADMIN_CLIENT_PLANS.map((plan) => <option key={plan.id} value={plan.id}>{plan.label} — {money(plan.price)}</option>)}</select></label></section>
 
-          <section className="admin-client-panel admin-client-manager"><header><span>КОМАНДА</span><h3>Менеджер</h3></header><div className="admin-client-manager__person"><span>{client.managerInitials}</span><div><strong>{client.managerName}</strong><small>Персональный менеджер</small></div></div><label><span>Переназначить</span><select value={client.managerId} onChange={(event) => savePatch({ managerId: event.target.value }, 'Менеджер переназначен')} disabled={saving}>{ADMIN_CLIENT_MANAGERS.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label></section>
+          <section className="admin-client-panel admin-client-manager"><header><span>КОМАНДА</span><h3>Менеджер</h3></header><div className="admin-client-manager__person"><span>{client.managerInitials || '—'}</span><div><strong>{client.managerName || 'Не назначен'}</strong><small>Персональный менеджер</small></div></div><label><span>Переназначить</span><select value={client.managerId || ''} onChange={(event) => savePatch({ managerId: event.target.value || null }, 'Менеджер переназначен')} disabled={saving}><option value="">Не назначен</option>{managers.filter((manager) => manager.status !== 'paused' || manager.id === client.managerId).map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label></section>
         </aside>
 
         <main className="admin-client-details__main">
@@ -131,7 +131,7 @@ function AdminClientDetailsWorkspace({ onRefreshReady }) {
         </main>
       </div>
 
-      {editOpen ? <EditClientModal client={client} saving={saving} onClose={() => setEditOpen(false)} onSave={(patch) => savePatch(patch)} /> : null}
+      {editOpen ? <EditClientModal client={client} saving={saving} managers={managers} onClose={() => setEditOpen(false)} onSave={(patch) => savePatch({ ...patch, managerId: patch.managerId || null })} /> : null}
       {toast ? <div className="admin-client-toast" role="status">✓ {toast}</div> : null}
     </div>
   );

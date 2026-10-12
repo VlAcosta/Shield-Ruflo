@@ -1,34 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createAdminClient, getAdminClients, updateAdminClient } from '../../../../services/admin/adminClientsService';
-import { ADMIN_CLIENT_MANAGERS, ADMIN_CLIENT_PLANS } from '../model/adminClientsData';
-
-const statusLabels = { active: 'Активен', trial: 'Пробный', expired: 'Истёк', cancelled: 'Отменён' };
-
-function normalizeNewClient(payload) {
-  const plan = ADMIN_CLIENT_PLANS.find((item) => item.id === payload.planId) || ADMIN_CLIENT_PLANS[0];
-  const manager = ADMIN_CLIENT_MANAGERS.find((item) => item.id === payload.managerId) || ADMIN_CLIENT_MANAGERS[0];
-  const clean = payload.name.replace(/[«»"']/g, '').replace(/^(ООО|ИП)\s+/u, '').trim();
-  return {
-    ...payload,
-    initials: clean.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'КЛ',
-    plan: plan.label,
-    statusLabel: statusLabels[payload.status] || statusLabels.active,
-    manager: manager.short,
-    managerName: manager.name,
-    managerInitials: manager.initials,
-    revenue: payload.status === 'active' ? plan.price : 0,
-    rating: 0,
-    tasks: 0,
-    reviews: 0,
-    tickets: 0,
-    startDate: payload.startDate || new Date().toLocaleDateString('ru-RU'),
-    expiryDate: payload.expiryDate || '',
-    autoRenew: payload.status === 'active',
-  };
-}
+import { getAdminManagers } from '../../../../services/admin/adminManagersService';
 
 export default function useAdminClients() {
   const [clients, setClients] = useState(null);
+  const [managers, setManagers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -37,8 +13,12 @@ export default function useAdminClients() {
     setLoading(true);
     setError('');
     try {
-      const result = await getAdminClients();
-      setClients(result.clients);
+      const [clientResult, managerResult] = await Promise.all([
+        getAdminClients(),
+        getAdminManagers(),
+      ]);
+      setClients(clientResult.clients);
+      setManagers(managerResult.managers);
     } catch (err) {
       setError(err?.message || 'Не удалось загрузить клиентов');
     } finally {
@@ -51,8 +31,10 @@ export default function useAdminClients() {
   const createClient = useCallback(async (payload) => {
     setSaving(true);
     try {
-      const normalized = normalizeNewClient(payload);
-      const created = await createAdminClient(normalized);
+      const created = await createAdminClient({
+        ...payload,
+        managerId: payload.managerId || undefined,
+      });
       setClients((current) => [created, ...(current || [])]);
       return created;
     } finally {
@@ -63,33 +45,13 @@ export default function useAdminClients() {
   const updateClient = useCallback(async (clientId, patch) => {
     setSaving(true);
     try {
-      const nextPatch = { ...patch };
-      if (patch.planId) {
-        const plan = ADMIN_CLIENT_PLANS.find((item) => item.id === patch.planId);
-        if (plan) {
-          nextPatch.plan = plan.label;
-          if ((patch.status || clients?.find((item) => item.id === clientId)?.status) === 'active') nextPatch.revenue = plan.price;
-        }
-      }
-      if (patch.managerId) {
-        const manager = ADMIN_CLIENT_MANAGERS.find((item) => item.id === patch.managerId);
-        if (manager) Object.assign(nextPatch, { manager: manager.short, managerName: manager.name, managerInitials: manager.initials });
-      }
-      if (patch.status) {
-        nextPatch.statusLabel = statusLabels[patch.status] || patch.status;
-        const current = clients?.find((item) => item.id === clientId);
-        const effectivePlanId = patch.planId || current?.planId;
-        const effectivePlan = ADMIN_CLIENT_PLANS.find((item) => item.id === effectivePlanId);
-        nextPatch.revenue = patch.status === 'active' ? (effectivePlan?.price || current?.revenue || 0) : 0;
-        nextPatch.autoRenew = patch.status === 'active';
-      }
-      const updated = await updateAdminClient(clientId, nextPatch);
+      const updated = await updateAdminClient(clientId, patch);
       setClients((current) => (current || []).map((item) => item.id === clientId ? updated : item));
       return updated;
     } finally {
       setSaving(false);
     }
-  }, [clients]);
+  }, []);
 
   const metrics = useMemo(() => {
     const list = clients || [];
@@ -101,5 +63,15 @@ export default function useAdminClients() {
     };
   }, [clients]);
 
-  return { clients, metrics, loading, saving, error, refresh: load, createClient, updateClient };
+  return {
+    clients,
+    managers,
+    metrics,
+    loading,
+    saving,
+    error,
+    refresh: load,
+    createClient,
+    updateClient,
+  };
 }

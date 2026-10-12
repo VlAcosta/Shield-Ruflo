@@ -23,7 +23,9 @@ export async function getAdminClientDetails(clientId, { signal } = {}) {
 }
 
 export async function createAdminClient(payload) {
-  return request('', { method: 'POST', body: payload });
+  const data = await request('', { method: 'POST', body: payload });
+  if (!data?.client) throw new Error('Сервер не вернул созданного клиента');
+  return data.client;
 }
 
 export async function updateAdminClient(clientId, patch) {
