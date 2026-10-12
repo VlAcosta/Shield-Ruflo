@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../../core/errors/app-error.js';
 import {
   addClientSupportMessage,
+  getSupportAttachment,
   getSupportSnapshot,
   saveSupportPreference,
 } from './support.service.js';
@@ -15,10 +16,19 @@ const preferenceSchema = z.object({
   activeChannel: z.enum(['manager', 'technical']),
 }).strict();
 
-const messageSchema = z.object({
-  text: z.string().trim().min(1).max(10_000),
-  attachments: z.array(z.unknown()).max(5).optional(),
+const attachmentSchema = z.object({
+  name: z.string().trim().min(1).max(180),
+  size: z.number().int().positive().max(2 * 1024 * 1024),
+  type: z.string().trim().max(120).default(''),
+  dataBase64: z.string().min(1).max(2_800_000),
 }).strict();
+
+const messageSchema = z.object({
+  text: z.string().trim().max(10_000).default(''),
+  attachments: z.array(attachmentSchema).max(5).optional(),
+}).strict().refine((value) => Boolean(value.text || value.attachments?.length), {
+  message: 'Введите сообщение или прикрепите файл',
+});
 
 function actor(request: FastifyRequest) {
   const organizationId = request.auth?.organizationId;
@@ -56,7 +66,21 @@ export const supportRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  app.get('/support/attachments/:attachmentId', {
+    preHandler: [app.authenticate, app.authorize('support.view')],
+  }, async (request, reply) => {
+    const { attachmentId } = z.object({ attachmentId: z.string().uuid() }).parse(request.params);
+    const file = await getSupportAttachment(app, attachmentId, actor(request).organizationId);
+    reply.header('content-type', file.mimeType);
+    reply.header('content-length', String(file.sizeBytes));
+    reply.header('cache-control', 'private, no-store');
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('content-disposition', `attachment; filename="attachment"; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    return reply.send(Buffer.from(file.content));
+  });
+
   app.post('/support/channels/:channelId/messages', {
+    bodyLimit: 12 * 1024 * 1024,
     preHandler: [app.authenticate, app.authorize('support.write')],
   }, async (request, reply) => {
     const { channelId } = channelParams.parse(request.params);
