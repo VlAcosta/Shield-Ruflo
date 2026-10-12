@@ -26,6 +26,7 @@ import {
 } from './admin.service.js';
 import {
   addAdminSupportMessage,
+  getSupportAttachment,
   listAdminSupportTickets,
   updateAdminSupportTicket,
 } from '../support/support.service.js';
@@ -269,6 +270,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       idempotencyKey: requestIdempotencyKey(request),
     });
     return reply.code(201).send({ ticket });
+  });
+
+  app.get('/admin/support/attachments/:attachmentId', async (request, reply) => {
+    const { attachmentId } = z.object({ attachmentId: z.string().uuid() }).parse(request.params);
+    const file = await getSupportAttachment(app, attachmentId);
+    reply.header('content-type', file.mimeType);
+    reply.header('content-length', String(file.sizeBytes));
+    reply.header('cache-control', 'private, no-store');
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('content-disposition', `attachment; filename="attachment"; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    return reply.send(Buffer.from(file.content));
   });
 
   app.get('/admin/subscriptions', async () => ({ ...(await getAdminSubscriptions(app)), source: 'api' }));
