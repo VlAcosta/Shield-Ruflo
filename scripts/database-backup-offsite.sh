@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 BACKUP_ROOT="${BACKUP_ROOT:-}"
-ENV_FILE="${BACKUP_OFFSITE_ENV_FILE:-/etc/business-shield/backup-offsite.env}"
+ENV_FILE="${BACKUP_OFFSITE_ENV_FILE:-/home/acosta/.config/business-shield/backup-offsite.env}"
 
 [[ -d "$BACKUP_ROOT" ]] || { echo "❌ BACKUP_ROOT is required" >&2; exit 1; }
 
