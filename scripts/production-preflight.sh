@@ -85,18 +85,7 @@ if [[ -n "${OPERATIONS_METRICS_TOKEN:-}" ]]; then
   AI_HEALTH="$(curl -fsS -H "x-operations-token: $OPERATIONS_METRICS_TOKEN" "$API_URL/internal/ai/health")" \
     || fail "AI readiness endpoint failed"
   AI_AVAILABLE="$(printf '%s' "$AI_HEALTH" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const v=JSON.parse(s);process.stdout.write(v.available ? "true" : "false")})')"
-  if grep -q '^AI_REVIEW_INTELLIGENCE_ENABLED=true
-    [[ "$AI_AVAILABLE" == "true" ]] || fail "AI is enabled in .env but /internal/ai/health reports unavailable"
-    ok "AI provider readiness reports available"
-  else
-    ok "AI readiness endpoint reachable (provider intentionally disabled)"
-  fi
-else
-  echo "⚠ OPERATIONS_METRICS_TOKEN shell variable not supplied; skipping protected AI readiness HTTP probe."
-fi
-
-printf '\nBusiness Shield production preflight passed.\n'
- "$BACKEND/.env"; then
+  if grep -q '^AI_REVIEW_INTELLIGENCE_ENABLED=true$' "$BACKEND/.env"; then
     [[ "$AI_AVAILABLE" == "true" ]] || fail "AI is enabled in .env but /internal/ai/health reports unavailable"
     ok "AI provider readiness reports available"
   else
