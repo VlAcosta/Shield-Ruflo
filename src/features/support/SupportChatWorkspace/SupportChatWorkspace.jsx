@@ -195,7 +195,11 @@ function SupportChatWorkspace() {
                 {message.attachments?.length ? (
                   <div className="support-chat__messageFiles">
                     {message.attachments.map((file) => (
-                      <div key={file.id}><FileIcon /><span><strong>{file.name}</strong><small>{formatFileSize(file.size)}</small></span></div>
+                      <div key={file.id}>
+                        <FileIcon />
+                        <span><strong>{file.name}</strong><small>{formatFileSize(file.size)}</small></span>
+                        {file.downloadUrl ? <a href={file.downloadUrl}>Скачать</a> : null}
+                      </div>
                     ))}
                   </div>
                 ) : null}
@@ -218,6 +222,7 @@ function SupportChatWorkspace() {
 
         <footer className="support-chat__composer">
           {!canWrite ? <div className="support-chat__access-note">Только просмотр · ваша роль не разрешает отправлять сообщения</div> : null}
+          {chat.attachmentError ? <div className="support-chat__access-note">{chat.attachmentError}</div> : null}
           {chat.attachments.length ? (
             <div className="support-chat__attachments">
               {chat.attachments.map((file) => (
