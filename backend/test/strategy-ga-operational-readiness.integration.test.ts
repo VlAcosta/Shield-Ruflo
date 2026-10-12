@@ -113,12 +113,44 @@ describeWithPostgres('Strategy GA operational readiness', () => {
     expect(authorized.headers['cache-control']).toBe('no-store');
     expect(authorized.headers['content-type']).toContain('text/plain');
     expect(authorized.body).toContain('business_shield_process_uptime_seconds');
+    expect(authorized.body).toContain('business_shield_ai_provider_enabled');
+    expect(authorized.body).toContain('business_shield_ai_provider_configured');
+    expect(authorized.body).toContain('business_shield_ai_provider_available');
     expect(authorized.body).toContain('business_shield_ai_estimated_cost_micros_total');
     expect(authorized.body).toContain('business_shield_operational_rate_limit_buckets');
     expect(authorized.body).toContain('business_shield_http_requests_total');
     expect(authorized.body).not.toContain(organizationId);
     expect(authorized.body).not.toContain(userId);
     expect(authorized.body).not.toContain(secondUserId);
+  });
+
+
+  it('protects and reports AI provider readiness without exposing secrets', async () => {
+    const unauthorized = await app.inject({ method: 'GET', url: '/internal/ai/health' });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(unauthorized.json()).toMatchObject({ error: { code: 'OPERATIONS_METRICS_UNAUTHORIZED' } });
+
+    const authorized = await app.inject({
+      method: 'GET',
+      url: '/internal/ai/health',
+      headers: { 'x-operations-token': operationsConfig.OPERATIONS_METRICS_TOKEN },
+    });
+    expect(authorized.statusCode).toBe(200);
+    expect(authorized.headers['cache-control']).toBe('no-store');
+    expect(authorized.json()).toMatchObject({
+      enabled: expect.any(Boolean),
+      provider: 'openai',
+      configured: expect.any(Boolean),
+      available: expect.any(Boolean),
+      domains: {
+        reviewIntelligence: true,
+        replyCopilot: true,
+        askShield: true,
+        aiVisibility: true,
+      },
+    });
+    expect(authorized.body).not.toContain('AI_OPENAI_API_KEY');
+    expect(authorized.body).not.toContain('Bearer ');
   });
 
   it('preserves hardened security headers on public health traffic', async () => {
