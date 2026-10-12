@@ -76,6 +76,12 @@ if (env.AI_REVIEW_INTELLIGENCE_ENABLED) {
 if (operationsConfig.OPERATIONS_METRICS_TOKEN.length < 32) {
   throw new Error('OPERATIONS_METRICS_TOKEN must be at least 32 characters');
 }
+if (env.PAYMENT_PROVIDER === 'yookassa') {
+  console.log('✅ YooKassa online checkout is configured');
+  console.log('✅ YooKassa webhook URL: https://bis-shield.ru/api/v1/billing/yookassa/webhook');
+} else {
+  console.warn('⚠ PAYMENT_PROVIDER=disabled: billing remains in sales-assisted mode.');
+}
 if (env.GOOGLE_BUSINESS_ENABLED) {
   console.log('✅ Google Business Profile OAuth is enabled');
 } else {
