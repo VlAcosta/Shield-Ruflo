@@ -36,6 +36,14 @@ function authHeaders(): Record<string, string> {
     : {};
 }
 
+function estimatedCostMicros(inputTokens: number | null, outputTokens: number | null): number | null {
+  if (inputTokens === null || outputTokens === null) return null;
+  const inputRate = env.AI_MISTRAL_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+  const outputRate = env.AI_MISTRAL_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+  if (inputRate <= 0 && outputRate <= 0) return null;
+  return Math.round((inputTokens * inputRate + outputTokens * outputRate) / 1_000_000);
+}
+
 function extractContent(payload: any): string {
   const value = payload?.choices?.[0]?.message?.content;
   if (typeof value === 'string') return value;
@@ -116,7 +124,7 @@ export class MistralReviewIntelligenceProvider implements AiReviewIntelligencePr
     if (env.AI_PROVIDER !== 'mistral') {
       return { configured: false, available: false, reasonCode: 'AI_PROVIDER_NOT_ACTIVE', reasonMessage: 'Mistral provider не выбран.' };
     }
-    if (!env.AI_MISTRAL_BASE_URL || !env.AI_MISTRAL_MODEL) {
+    if (!env.AI_MISTRAL_API_KEY || !env.AI_MISTRAL_BASE_URL || !env.AI_MISTRAL_MODEL) {
       return { configured: false, available: false, reasonCode: 'AI_MISTRAL_NOT_CONFIGURED', reasonMessage: 'Mistral AI provider не настроен.' };
     }
     return { configured: true, available: true };
@@ -166,7 +174,7 @@ export class MistralReviewIntelligenceProvider implements AiReviewIntelligencePr
       promptVersion: this.promptVersion,
       inputTokens: response.inputTokens,
       outputTokens: response.outputTokens,
-      estimatedCostMicros: null,
+      estimatedCostMicros: estimatedCostMicros(response.inputTokens, response.outputTokens),
       moderationResult: { piiRedactions: redacted.redactions },
     };
   }
@@ -193,7 +201,7 @@ export class MistralReviewIntelligenceProvider implements AiReviewIntelligencePr
       promptVersion: AI_REPLY_PROMPT_VERSION,
       inputTokens: response.inputTokens,
       outputTokens: response.outputTokens,
-      estimatedCostMicros: null,
+      estimatedCostMicros: estimatedCostMicros(response.inputTokens, response.outputTokens),
     };
   }
 
@@ -216,7 +224,7 @@ export class MistralReviewIntelligenceProvider implements AiReviewIntelligencePr
       promptVersion: ASK_SHIELD_PROMPT_VERSION,
       inputTokens: response.inputTokens,
       outputTokens: response.outputTokens,
-      estimatedCostMicros: null,
+      estimatedCostMicros: estimatedCostMicros(response.inputTokens, response.outputTokens),
     };
   }
 }
