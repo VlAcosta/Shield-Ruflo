@@ -144,7 +144,7 @@ function NotificationsTab({ data, saveSection, testSmtp, saving, run }) {
 }
 
 function TemplatesTab({ data, saveTemplate, deleteTemplate, saving, run }) {
-  const templates = Array.isArray(data.templates) ? data.templates : [];
+  const templates = useMemo(() => (Array.isArray(data.templates) ? data.templates : []), [data.templates]);
   const [selectedId, setSelectedId] = useState(templates[0]?.id || 'new');
   const selected = templates.find((item) => item.id === selectedId) || null;
   const [draft, setDraft] = useState({ name: '', body: '', tone: '', enabled: true });
