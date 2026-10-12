@@ -7,6 +7,11 @@ import {
   createSalesAssistedPurchaseRequest,
   listSalesAssistedPurchaseRequests,
 } from './billing.purchase.service.js';
+import {
+  createYooKassaCheckout,
+  processYooKassaNotification,
+  yooKassaConfigured,
+} from './yookassa.service.js';
 
 function orgId(request: FastifyRequest): string {
   if (!request.auth?.organizationId) {
@@ -48,6 +53,16 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
   // Safe public catalog: prices and product limits only, never subscription or tenant data.
   app.get('/billing/catalog', async () => ({ plans: await getPublicBillingCatalog(app) }));
   app.get('/billing/purchase-options', async () => billingPurchaseOptions());
+
+  app.post('/billing/yookassa/webhook', async (request, reply) => {
+    const body = z.object({
+      type: z.string().optional(),
+      event: z.string().optional(),
+      object: z.object({ id: z.string().min(1) }).passthrough().optional(),
+    }).passthrough().parse(request.body);
+    await processYooKassaNotification(app, body);
+    return reply.code(200).send({ ok: true });
+  });
 
   app.get('/billing/plans', { preHandler: [app.authenticate, app.authorize('billing.view')] }, async () => ({
     plans: await getPublicBillingCatalog(app),
@@ -104,7 +119,7 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     preHandler: [app.authenticate, app.authorize('billing.manage')],
   }, async (request, reply) => {
     const input = checkoutSchema.parse(request.body);
-    const result = await createSalesAssistedPurchaseRequest(app, {
+    const common = {
       organizationId: orgId(request),
       userId: userId(request),
       planCode: input.planId,
@@ -113,10 +128,14 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
       ...(input.returnUrl ? { returnUrl: input.returnUrl } : {}),
       ipAddress: request.ip,
       userAgent: String(request.headers['user-agent'] ?? '').slice(0, 2048),
-    });
+    };
 
-    // 202 is deliberate: the commercial request is accepted, but there is no
-    // payment transaction and no subscription activation at this boundary.
+    if (yooKassaConfigured()) {
+      const result = await createYooKassaCheckout(app, common);
+      return reply.code(201).send(result);
+    }
+
+    const result = await createSalesAssistedPurchaseRequest(app, common);
     return reply.code(202).send(result);
   });
 };
