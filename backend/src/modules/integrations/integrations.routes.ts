@@ -59,6 +59,10 @@ function providerConfiguration(providerId: string, body: z.infer<typeof provider
     const match = link.match(/(?:firm\/)?(\d{6,})/);
     configuration.placeId = match?.[1] || link;
   }
+  if (providerId === 'yandex-market' && !configuration.businessId && link) {
+    const match = link.match(/^(\d+)$/) || link.match(/business(?:es)?\/(\d+)/);
+    if (match?.[1]) configuration.businessId = match[1];
+  }
   if (providerId === 'wb' && !configuration.nmId && link) {
     const match = link.match(/catalog\/(\d+)/) || link.match(/^(\d+)$/);
     if (match?.[1]) configuration.nmId = match[1];

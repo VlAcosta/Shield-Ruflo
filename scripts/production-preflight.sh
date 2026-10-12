@@ -87,7 +87,7 @@ if (bridgeHosts.length) {
 } else {
   console.warn('⚠ REVIEW_BRIDGE_ALLOWED_HOSTS is empty: Yandex Business and Otzovik verified bridge connections remain disabled.');
 }
-console.log('✅ WB/Ozon/2GIS adapters are installed; tenant credentials are supplied through the Integrations UI.');
+console.log('✅ WB/Ozon/Yandex Market/2GIS adapters are installed; tenant credentials are supplied through the Integrations UI.');
 console.log('✅ Backend production environment passed schema, security, and operational validation');
 NODE
 
