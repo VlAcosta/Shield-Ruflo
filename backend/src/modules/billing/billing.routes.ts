@@ -60,7 +60,10 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
       event: z.string().optional(),
       object: z.object({ id: z.string().min(1) }).passthrough().optional(),
     }).passthrough().parse(request.body);
-    await processYooKassaNotification(app, body);
+    await processYooKassaNotification(app, {
+      ...(body.event === undefined ? {} : { event: body.event }),
+      ...(body.object === undefined ? {} : { object: { id: body.object.id } }),
+    });
     return reply.code(200).send({ ok: true });
   });
 
