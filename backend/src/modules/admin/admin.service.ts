@@ -531,8 +531,171 @@ export async function listAdminClients(app: FastifyInstance) {
   });
 }
 
+type AdminHistoryPeriod = 'month' | 'quarter' | 'year';
+
+type AdminHistoryBucket = {
+  key: string;
+  label: string;
+  start: Date;
+  end: Date;
+};
+
+function startOfAdminPeriod(date: Date, period: AdminHistoryPeriod): Date {
+  if (period === 'year') return new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  if (period === 'quarter') {
+    const quarterMonth = Math.floor(date.getUTCMonth() / 3) * 3;
+    return new Date(Date.UTC(date.getUTCFullYear(), quarterMonth, 1));
+  }
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function addAdminPeriods(date: Date, period: AdminHistoryPeriod, amount: number): Date {
+  if (period === 'year') return new Date(Date.UTC(date.getUTCFullYear() + amount, 0, 1));
+  if (period === 'quarter') return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + amount * 3, 1));
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + amount, 1));
+}
+
+function adminPeriodLabel(date: Date, period: AdminHistoryPeriod): string {
+  if (period === 'year') return String(date.getUTCFullYear());
+  if (period === 'quarter') return `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}`;
+  const month = new Intl.DateTimeFormat('ru-RU', { month: 'short', timeZone: 'UTC' })
+    .format(date)
+    .replace('.', '');
+  return month.charAt(0).toUpperCase() + month.slice(1);
+}
+
+function buildAdminHistoryBuckets(period: AdminHistoryPeriod, count = 6, now = new Date()): AdminHistoryBucket[] {
+  const current = startOfAdminPeriod(now, period);
+  const first = addAdminPeriods(current, period, -(count - 1));
+  return Array.from({ length: count }, (_, index) => {
+    const start = addAdminPeriods(first, period, index);
+    const end = addAdminPeriods(start, period, 1);
+    return {
+      key: start.toISOString(),
+      label: adminPeriodLabel(start, period),
+      start,
+      end,
+    };
+  });
+}
+
+function bucketIndexForDate(buckets: AdminHistoryBucket[], value: Date | null | undefined): number {
+  if (!value) return -1;
+  const time = value.getTime();
+  return buckets.findIndex((bucket) => time >= bucket.start.getTime() && time < bucket.end.getTime());
+}
+
+async function getAdminMeasuredHistory(
+  app: FastifyInstance,
+  period: AdminHistoryPeriod,
+) {
+  const buckets = buildAdminHistoryBuckets(period);
+  const rangeStart = buckets[0]!.start;
+  const rangeEnd = buckets[buckets.length - 1]!.end;
+
+  const [payments, organizations, churnRows, planStarts] = await Promise.all([
+    app.prisma.billingPurchaseRequest.findMany({
+      where: {
+        status: 'COMPLETED',
+        currency: 'RUB',
+        OR: [
+          { paidAt: { gte: rangeStart, lt: rangeEnd } },
+          { paidAt: null, completedAt: { gte: rangeStart, lt: rangeEnd } },
+        ],
+      },
+      select: {
+        quotedAmountCents: true,
+        paidAt: true,
+        completedAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+    app.prisma.organization.findMany({
+      where: { createdAt: { lt: rangeEnd } },
+      select: { id: true, createdAt: true },
+    }),
+    app.prisma.subscription.findMany({
+      where: {
+        status: { in: ['CANCELED', 'EXPIRED'] },
+        updatedAt: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { organizationId: true, updatedAt: true },
+    }),
+    app.prisma.subscription.findMany({
+      where: { createdAt: { gte: rangeStart, lt: rangeEnd } },
+      select: {
+        createdAt: true,
+        plan: { select: { code: true } },
+      },
+    }),
+  ]);
+
+  const revenueRub = buckets.map(() => 0);
+  const newClients = buckets.map(() => 0);
+  const churnSets = buckets.map(() => new Set<string>());
+  const plans: Record<string, number[]> = {
+    starter: buckets.map(() => 0),
+    professional: buckets.map(() => 0),
+    business: buckets.map(() => 0),
+  };
+
+  for (const payment of payments) {
+    const at = payment.paidAt || payment.completedAt;
+    const index = bucketIndexForDate(buckets, at);
+    if (index >= 0) revenueRub[index]! += payment.quotedAmountCents / 100;
+  }
+
+  for (const organization of organizations) {
+    const index = bucketIndexForDate(buckets, organization.createdAt);
+    if (index >= 0) newClients[index]! += 1;
+  }
+
+  for (const row of churnRows) {
+    const index = bucketIndexForDate(buckets, row.updatedAt);
+    if (index >= 0) churnSets[index]!.add(row.organizationId);
+  }
+
+  for (const row of planStarts) {
+    const index = bucketIndexForDate(buckets, row.createdAt);
+    if (index < 0) continue;
+    const code = row.plan.code.toLowerCase();
+    if (!plans[code]) plans[code] = buckets.map(() => 0);
+    plans[code]![index]! += 1;
+  }
+
+  const churnClients = churnSets.map((set) => set.size);
+  const churnRate = buckets.map((bucket, index) => {
+    const base = organizations.filter((organization) => organization.createdAt < bucket.end).length;
+    return base ? Number(((churnClients[index]! / base) * 100).toFixed(1)) : 0;
+  });
+
+  const latest = revenueRub[revenueRub.length - 1] || 0;
+  const previous = revenueRub[revenueRub.length - 2] || 0;
+  const revenueDeltaPercent = previous
+    ? Number((((latest - previous) / previous) * 100).toFixed(1))
+    : latest > 0 ? 100 : 0;
+
+  return {
+    months: buckets.map((bucket) => bucket.label),
+    revenueRub: revenueRub.map((value) => Number(value.toFixed(2))),
+    revenueThousands: revenueRub.map((value) => Number((value / 1000).toFixed(2))),
+    newClients,
+    churnClients,
+    churnRate,
+    plans,
+    latestRevenueRub: Number(latest.toFixed(2)),
+    previousRevenueRub: Number(previous.toFixed(2)),
+    revenueDeltaPercent,
+    measured: true,
+  };
+}
+
 export async function getAdminDashboard(app: FastifyInstance) {
-  const clients = await listAdminClients(app);
+  const [clients, history, managers] = await Promise.all([
+    listAdminClients(app),
+    getAdminMeasuredHistory(app, 'month'),
+    listPlatformManagers(app),
+  ]);
   const active = clients.filter((item) => item.status === 'active');
   const trial = clients.filter((item) => item.status === 'trial');
   const mrr = active.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
@@ -547,8 +710,29 @@ export async function getAdminDashboard(app: FastifyInstance) {
   const supportTickets = await listAdminSupportTickets(app);
   const openSupportTickets = supportTickets.filter((ticket) => ticket.status !== 'closed');
 
+  const managerRows = managers.map((manager, index) => {
+    const assigned = clients.filter((client) => client.managerId === manager.id);
+    const revenue = assigned
+      .filter((client) => client.status === 'active')
+      .reduce((sum, client) => sum + Number(client.revenue || 0), 0);
+    return {
+      id: manager.id,
+      initials: manager.initials,
+      name: manager.name,
+      clients: assigned.length,
+      rating: manager.rating,
+      revenue,
+      tone: ['violet', 'cyan', 'orange', 'green'][index % 4],
+    };
+  });
+
   return {
     measured: true,
+    systemHealth: {
+      status: 'ready',
+      label: 'API + база данных готовы',
+      measuredAt: new Date().toISOString(),
+    },
     metrics: [
       { id: 'revenue', label: 'MRR по активным тарифам', value: `${mrr.toLocaleString('ru-RU')} ₽`, delta: 'текущий срез', tone: 'violet', direction: 'flat' },
       { id: 'clients', label: 'Активных клиентов', value: String(active.length), delta: `${clients.length} всего`, tone: 'purple', direction: 'flat' },
@@ -557,7 +741,17 @@ export async function getAdminDashboard(app: FastifyInstance) {
       { id: 'newClients', label: 'Новых за месяц', value: String(newClients), delta: 'по дате регистрации', tone: 'orange', direction: 'flat' },
       { id: 'renewals', label: 'Автопродление', value: renewalRate === null ? '—' : `${renewalRate}%`, delta: renewalRate === null ? 'нет данных' : `${autoRenewCount} из ${renewable.length}`, tone: 'green', direction: 'flat' },
     ],
-    revenue: { months: [], values: [], measured: false, reason: 'История платежей не подключена' },
+    revenue: {
+      months: history.months,
+      values: history.revenueThousands,
+      rawValues: history.revenueRub,
+      currentValue: history.latestRevenueRub,
+      previousValue: history.previousRevenueRub,
+      deltaPercent: history.revenueDeltaPercent,
+      currency: 'RUB',
+      measured: true,
+      source: 'completed_billing_purchase_requests',
+    },
     tariffs: plans.map((plan) => ({
       id: plan.code.toLowerCase(),
       label: plan.name,
@@ -574,7 +768,7 @@ export async function getAdminDashboard(app: FastifyInstance) {
       tone: client.status === 'active' ? 'green' : client.status === 'trial' ? 'violet' : 'gray',
     })),
     tickets: supportTickets.slice(0, 8),
-    managers: [],
+    managers: managerRows,
     supportConfigured: true,
   };
 }
