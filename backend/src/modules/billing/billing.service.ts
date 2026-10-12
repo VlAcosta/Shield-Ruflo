@@ -171,11 +171,78 @@ export async function getPublicBillingCatalog(app: FastifyInstance) {
     .map(publicPlanDto);
 }
 
+function paymentTitle(planCode: string, billingInterval: string): string {
+  const period = billingInterval === 'annual' ? 'год' : 'месяц';
+  return `Тариф ${planCode} · ${period}`;
+}
+
+function paymentDate(value: Date): string {
+  return new Intl.DateTimeFormat('ru-RU').format(value);
+}
+
+export async function getBillingPayments(app: FastifyInstance, organizationId: string) {
+  const rows = await app.prisma.billingPurchaseRequest.findMany({
+    where: {
+      organizationId,
+      status: 'COMPLETED',
+      paidAt: { not: null },
+    },
+    orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+    take: 100,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    externalPaymentId: row.externalPaymentId,
+    provider: row.provider,
+    providerStatus: row.providerStatus,
+    date: paymentDate(row.paidAt || row.completedAt || row.createdAt),
+    paidAt: (row.paidAt || row.completedAt || row.createdAt).toISOString(),
+    title: paymentTitle(row.planCode, row.billingInterval),
+    planCode: row.planCode,
+    billingInterval: row.billingInterval,
+    amount: Number((row.quotedAmountCents / 100).toFixed(2)),
+    amountCents: row.quotedAmountCents,
+    currency: row.currency,
+    status: 'paid' as const,
+  }));
+}
+
+export async function getBillingPaymentReceipt(app: FastifyInstance, organizationId: string, paymentId: string) {
+  const row = await app.prisma.billingPurchaseRequest.findFirst({
+    where: {
+      id: paymentId,
+      organizationId,
+      status: 'COMPLETED',
+      paidAt: { not: null },
+    },
+  });
+  if (!row) {
+    throw new AppError({ code: 'PAYMENT_RECEIPT_NOT_FOUND', message: 'Квитанция не найдена', statusCode: 404 });
+  }
+
+  return [
+    'БИЗНЕС ЩИТ',
+    'Подтверждение оплаты',
+    '',
+    `Дата: ${paymentDate(row.paidAt || row.completedAt || row.createdAt)}`,
+    `Описание: ${paymentTitle(row.planCode, row.billingInterval)}`,
+    `Сумма: ${(row.quotedAmountCents / 100).toFixed(2)} ${row.currency}`,
+    `Провайдер: ${row.provider || 'manual'}`,
+    `Статус провайдера: ${row.providerStatus || 'completed'}`,
+    `ID Business Shield: ${row.id}`,
+    ...(row.externalPaymentId ? [`ID платежа провайдера: ${row.externalPaymentId}`] : []),
+    '',
+    'Документ сформирован Business Shield на основании подтверждённой записи оплаты.',
+  ].join('\n');
+}
+
 export async function getBillingSnapshot(app: FastifyInstance, organizationId: string) {
   const subscription = await ensureFreeSubscription(app, organizationId);
-  const [plans, priorPro] = await Promise.all([
+  const [plans, priorPro, payments] = await Promise.all([
     getPublicBillingCatalog(app),
     app.prisma.subscription.findFirst({ where: { organizationId, plan: { code: 'PRO' } }, select: { id: true } }),
+    getBillingPayments(app, organizationId),
   ]);
   const entitlements = entitlementMap(subscription);
   const usage = await getUsageSnapshot(app, organizationId, entitlements);
@@ -207,7 +274,7 @@ export async function getBillingSnapshot(app: FastifyInstance, organizationId: s
       .map(([key, value]) => ({ key, value })),
     usage,
     packages: [],
-    payments: [],
+    payments,
     paymentProviderConfigured: env.PAYMENT_PROVIDER === 'yookassa'
       && Boolean(env.YOOKASSA_SHOP_ID)
       && Boolean(env.YOOKASSA_SECRET_KEY)
