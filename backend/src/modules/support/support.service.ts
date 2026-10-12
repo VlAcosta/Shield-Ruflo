@@ -441,8 +441,7 @@ export async function getSupportAttachment(
   const attachment = await app.prisma.supportAttachment.findFirst({
     where: {
       id: attachmentId,
-      ...(organizationId ? { organizationId } : {}),
-      message: organizationId ? { internal: false } : undefined,
+      ...(organizationId ? { organizationId, message: { internal: false } } : {}),
     },
     select: {
       id: true,
