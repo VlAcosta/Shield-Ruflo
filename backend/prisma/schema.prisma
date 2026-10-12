@@ -422,6 +422,7 @@ model User {
   supportTicketsAssigned     SupportTicket[]         @relation("SupportTicketAssignee")
   supportMessages            SupportMessage[]        @relation("SupportMessageAuthor")
   askShieldQueries           AskShieldQuery[]        @relation("AskShieldQueryCreator")
+  managedOrganizations       Organization[]          @relation("OrganizationAccountManager")
 
   @@index([status], map: "users_status_idx")
   @@map("users")
@@ -454,7 +455,9 @@ model Organization {
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
   archivedAt            DateTime?          @map("archived_at")
+  accountManagerId      String?            @map("account_manager_id") @db.Uuid
 
+  accountManager         User?               @relation("OrganizationAccountManager", fields: [accountManagerId], references: [id], onDelete: SetNull)
   members                OrganizationMember[]
   teamInvitations        TeamInvitation[]
   businesses             Business[]
@@ -504,6 +507,7 @@ model Organization {
 
   @@index([status], map: "organizations_status_idx")
   @@index([inn], map: "organizations_inn_idx")
+  @@index([accountManagerId], map: "organizations_account_manager_idx")
   @@map("organizations")
   listingSources           ListingSource[]
   listingSnapshots         ListingSnapshot[]
