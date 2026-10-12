@@ -87,7 +87,6 @@ ok "Frontend staging build completed"
   npm run prisma:generate
   npm run typecheck
   npm run build
-  npm run db:status
   npm run db:deploy
   npm run db:status
 )
