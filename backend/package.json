@@ -22,7 +22,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "ai:export-training": "tsx src/scripts/export-ai-training-dataset.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.0",
